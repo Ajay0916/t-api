@@ -1,3 +1,4 @@
+from helper.result_cleaner import clean_results
 from fastapi import APIRouter, status
 from typing import Optional
 from helper.is_site_available import check_if_site_available
@@ -44,7 +45,7 @@ async def get_search_combo(query: str, limit: Optional[int] = 0):
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    return COMBO
+    return clean_results(COMBO)
 
 
 @router.get("/trending")
@@ -88,7 +89,7 @@ async def get_all_trending(limit: Optional[int] = 0):
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    return COMBO
+    return clean_results(COMBO)
 
 
 @router.get("/recent")
@@ -130,4 +131,4 @@ async def get_all_recent(limit: Optional[int] = 0):
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    return COMBO
+    return clean_results(COMBO)

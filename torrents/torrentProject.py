@@ -1,7 +1,9 @@
 import asyncio
+import re
 import time
+from urllib.parse import parse_qs, unquote, urlparse
+
 import aiohttp
-import requests
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -26,15 +28,30 @@ class TorrentProject:
                     html = await res.text(encoding="ISO-8859-1")
                     soup = BeautifulSoup(html, "html.parser")
                     try:
-                        magnet = soup.select_one(
-                            "#download > div:nth-child(2) > div > a"
-                        )["href"]
-                        index_of_magnet = magnet.index("magnet")
-                        magnet = requests.utils.unquote(magnet[index_of_magnet:])
-                        obj["magnet"] = magnet
-                    except:
+                        for a in soup.find_all("a", href=True):
+                            href = a["href"]
+                            if "magnet:?xt=" in unquote(href):
+                                if "mylink.cloud" in href:
+                                    magnet = parse_qs(
+                                        urlparse(href).query
+                                    ).get("url", [None])[0]
+                                else:
+                                    m = re.search(
+                                        r"magnet:\?xt=[^\"'\s<]+",
+                                        unquote(href),
+                                    )
+                                    magnet = m.group(0) if m else None
+                                if magnet:
+                                    obj["magnet"] = magnet
+                                    m = re.search(
+                                        r"([a-fA-F0-9]{32,40})\b", magnet
+                                    )
+                                    if m:
+                                        obj["hash"] = m.group(1)
+                                break
+                    except Exception:
                         ...
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):

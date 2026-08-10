@@ -1,3 +1,4 @@
+from helper.result_cleaner import clean_results
 from fastapi import APIRouter
 from fastapi import status
 from typing import Optional
@@ -55,7 +56,7 @@ async def get_recent(
                 )
 
             elif len(resp["data"]) > 0:
-                return resp
+                return clean_results(resp)
             else:
                 return error_handler(
                     status_code=status.HTTP_404_NOT_FOUND,

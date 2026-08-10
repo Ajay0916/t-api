@@ -1,3 +1,4 @@
+from helper.result_cleaner import clean_results
 from fastapi import APIRouter
 from typing import Optional
 from helper.is_site_available import check_if_site_available
@@ -29,7 +30,7 @@ async def search_for_torrents(
                 json_message={"error": "Website Blocked Change IP or Website Domain."},
             )
         elif len(resp["data"]) > 0:
-            return resp
+            return clean_results(resp)
         else:
             return error_handler(
                 status_code=status.HTTP_404_NOT_FOUND,

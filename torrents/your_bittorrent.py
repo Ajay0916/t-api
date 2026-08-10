@@ -77,18 +77,29 @@ class YourBittorrent:
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj):
         try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
+            html = None
+            for attempt in range(3):
                 try:
-                    torrent_a = soup.find(
-                        "a", href=lambda h: h and h.lower().endswith(".torrent")
-                    )
-                    if torrent_a:
-                        torrent = torrent_a["href"]
-                        if torrent.startswith("/"):
-                            torrent = self.BASE_URL + torrent
-                        obj["torrent"] = torrent
+                    async with session.get(url, headers=HEADER_AIO) as res:
+                        html = await res.text(encoding="ISO-8859-1")
+                    break
+                except Exception:
+                    if attempt == 2:
+                        return None
+                    await asyncio.sleep(1)
+            if html is None:
+                return None
+            soup = BeautifulSoup(html, "html.parser")
+            try:
+                torrent_a = soup.find(
+                    "a", href=lambda h: h and h.lower().endswith(".torrent")
+                )
+                if torrent_a:
+                    torrent = torrent_a["href"]
+                    if torrent.startswith("/"):
+                        torrent = self.BASE_URL + torrent
+                    obj["torrent"] = torrent
+                    for attempt in range(3):
                         try:
                             async with session.get(
                                 torrent, headers=HEADER_AIO
@@ -100,16 +111,19 @@ class YourBittorrent:
                                 obj["magnet"] = build_magnet(
                                     info_hash, obj.get("name") or ""
                                 )
+                            break
                         except Exception:
-                            pass
-                    try:
-                        poster = soup.find("img", class_="img-fluid")
-                        if poster:
-                            obj["poster"] = poster["src"]
-                    except Exception:
-                        pass
+                            if attempt == 2:
+                                pass
+                            await asyncio.sleep(1)
+                try:
+                    poster = soup.find("img", class_="img-fluid")
+                    if poster:
+                        obj["poster"] = poster["src"]
                 except Exception:
-                    ...
+                    pass
+            except Exception:
+                ...
         except Exception:
             return None
 
