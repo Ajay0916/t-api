@@ -70,32 +70,30 @@ class Magnetdl:
             return None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj, sem):
-        async with sem:
-            try:
-                html = await Scraper().get_all_results(session, url)
-                if not html or not html[0]:
-                    return
-                soup = BeautifulSoup(html[0], "html.parser")
-                dt = soup.find("dt", string=re.compile(r"Info Hash", re.I))
-                if not dt:
-                    return
-                dd = dt.find_next_sibling("dd")
-                info_hash = dd.get_text(strip=True) if dd else None
-                if info_hash:
-                    obj["hash"] = info_hash
-                    obj["magnet"] = self._magnet(info_hash, obj["name"])
-            except:
-                return None
+    async def _individual_scrap(self, session, url, obj):
+        try:
+            html = await Scraper().get_all_results(session, url)
+            if not html or not html[0]:
+                return
+            soup = BeautifulSoup(html[0], "html.parser")
+            dt = soup.find("dt", string=re.compile(r"Info Hash", re.I))
+            if not dt:
+                return
+            dd = dt.find_next_sibling("dd")
+            info_hash = dd.get_text(strip=True) if dd else None
+            if info_hash:
+                obj["hash"] = info_hash
+                obj["magnet"] = self._magnet(info_hash, obj["name"])
+        except:
+            return None
 
     async def _get_torrent(self, result, session, urls):
-        sem = asyncio.Semaphore(5)
         tasks = []
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx], sem)
+                        self._individual_scrap(session, url, result["data"][idx])
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)

@@ -76,7 +76,6 @@ class Yts:
                 async with session.get(
                     url,
                     headers=HEADER_AIO,
-                    timeout=aiohttp.ClientTimeout(total=20),
                 ) as res:
                     if res.status >= 400:
                         continue

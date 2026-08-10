@@ -80,60 +80,58 @@ class ExtraTorrent:
             return None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj, sem):
-        async with sem:
-            try:
-                async with session.get(url, headers=HEADER_AIO) as res:
-                    html = await res.text()
-                tid_match = re.search(r"-(\d+)/?$", url)
-                if not tid_match:
-                    tid_match = re.search(r'data-id="(\d+)"', html)
-                page_token = re.search(r"window\.pageToken\s*=\s*'([^']+)'", html)
-                csrf = re.search(r"window\.csrfToken\s*=\s*'([^']+)'", html)
-                if not (tid_match and page_token and csrf):
-                    return
-                timestamp = int(time.time())
-                hmac = hashlib.sha256(
-                    "{}|{}|{}".format(
-                        tid_match.group(1), timestamp, page_token.group(1)
-                    ).encode()
-                ).hexdigest()
-                data = {
-                    "torrent_id": tid_match.group(1),
-                    "download_type": "magnet",
-                    "timestamp": timestamp,
-                    "hmac": hmac,
-                    "sessid": csrf.group(1),
-                }
-                headers = {
-                    "User-Agent": HEADER_AIO["User-Agent"],
-                    "Referer": url,
-                    "X-Requested-With": "XMLHttpRequest",
-                }
-                async with session.post(
-                    self.BASE_URL + "/ajax/getTorrentMagnet.php",
-                    data=data,
-                    headers=headers,
-                ) as res:
-                    body = await res.text()
-                resp = json.loads(body)
-                if resp.get("success") and resp.get("url"):
-                    magnet = resp["url"]
-                    obj["magnet"] = magnet
-                    hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
-                    if hash_match:
-                        obj["hash"] = hash_match.group(1)
-            except:
-                return None
+    async def _individual_scrap(self, session, url, obj):
+        try:
+            async with session.get(url, headers=HEADER_AIO) as res:
+                html = await res.text()
+            tid_match = re.search(r"-(\d+)/?$", url)
+            if not tid_match:
+                tid_match = re.search(r'data-id="(\d+)"', html)
+            page_token = re.search(r"window\.pageToken\s*=\s*'([^']+)'", html)
+            csrf = re.search(r"window\.csrfToken\s*=\s*'([^']+)'", html)
+            if not (tid_match and page_token and csrf):
+                return
+            timestamp = int(time.time())
+            hmac = hashlib.sha256(
+                "{}|{}|{}".format(
+                    tid_match.group(1), timestamp, page_token.group(1)
+                ).encode()
+            ).hexdigest()
+            data = {
+                "torrent_id": tid_match.group(1),
+                "download_type": "magnet",
+                "timestamp": timestamp,
+                "hmac": hmac,
+                "sessid": csrf.group(1),
+            }
+            headers = {
+                "User-Agent": HEADER_AIO["User-Agent"],
+                "Referer": url,
+                "X-Requested-With": "XMLHttpRequest",
+            }
+            async with session.post(
+                self.BASE_URL + "/ajax/getTorrentMagnet.php",
+                data=data,
+                headers=headers,
+            ) as res:
+                body = await res.text()
+            resp = json.loads(body)
+            if resp.get("success") and resp.get("url"):
+                magnet = resp["url"]
+                obj["magnet"] = magnet
+                hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                if hash_match:
+                    obj["hash"] = hash_match.group(1)
+        except:
+            return None
 
     async def _get_torrent(self, result, session, urls):
-        sem = asyncio.Semaphore(5)
         tasks = []
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx], sem)
+                        self._individual_scrap(session, url, result["data"][idx])
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)

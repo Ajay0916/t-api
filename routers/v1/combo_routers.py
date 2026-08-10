@@ -20,14 +20,12 @@ async def get_search_combo(query: str, limit: Optional[int] = 0):
     COMBO = {"data": []}
     total_torrents_overall = 0
     for site in sites_list:
-        limit = (
-            all_sites[site]["limit"]
-            if limit == 0 or limit > all_sites[site]["limit"]
-            else limit
-        )
+        site_limit = all_sites[site]["limit"]
+        if limit > 0 and limit < site_limit:
+            site_limit = limit
         tasks.append(
             asyncio.create_task(
-                all_sites[site]["website"]().search(query, page=1, limit=limit)
+                all_sites[site]["website"]().search(query, page=1, limit=site_limit)
             )
         )
     results = await asyncio.gather(*tasks, return_exceptions=True)

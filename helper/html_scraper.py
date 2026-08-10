@@ -16,7 +16,6 @@ class Scraper:
                     url,
                     headers=HEADER_AIO,
                     proxy=HTTP_PROXY,
-                    timeout=aiohttp.ClientTimeout(total=15),
                 ) as r:
                     if r.status >= 400:
                         continue

@@ -34,12 +34,13 @@ def extract_info_hash(raw):
     try:
         idx = raw.find(b"4:info")
         if idx == -1:
-            return None
+            return None, None
         start = idx + 6
         if raw[start : start + 1] != b"d":
-            return None
+            return None, None
         depth = 0
         pos = start
+        info_end = None
         while pos < len(raw):
             c = raw[pos : pos + 1]
             if c in (b"d", b"l"):
@@ -49,11 +50,12 @@ def extract_info_hash(raw):
                 depth -= 1
                 pos += 1
                 if depth == 0:
-                    return hashlib.sha1(raw[start:pos]).hexdigest().upper()
+                    info_end = pos
+                    break
             elif c == b"i":
                 end = raw.find(b"e", pos)
                 if end == -1:
-                    return None
+                    return None, None
                 pos = end + 1
             elif c in b"0123456789":
                 end = pos
@@ -63,9 +65,14 @@ def extract_info_hash(raw):
                 pos = end + 1 + length
             else:
                 pos += 1
-        return None
+        if info_end is None:
+            return None, None
+        info = raw[start:info_end]
+        info_hash = hashlib.sha1(info).hexdigest().upper()
+        total = sum(int(x) for x in re.findall(rb"6:lengthi(\d+)e", info))
+        return info_hash, total or None
     except Exception:
-        return None
+        return None, None
 
 
 class Zooqle:
@@ -89,15 +96,28 @@ class Zooqle:
         except Exception:
             pass
 
+    @staticmethod
+    def _readable_size(num):
+        size = float(num)
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if size < 1024 or unit == "TB":
+                if unit == "B":
+                    return "{} B".format(int(size))
+                return "{:.2f} {}".format(size, unit)
+            size /= 1024
+        return ""
+
     @decorator_asyncio_fix
     async def _magnet(self, session, torrent_url, obj):
         try:
             async with session.get(torrent_url, headers=HEADER_AIO) as res:
                 raw = await res.read()
-            info_hash = extract_info_hash(raw)
+            info_hash, total_size = extract_info_hash(raw)
             if info_hash:
                 obj["hash"] = info_hash
                 obj["magnet"] = build_magnet(info_hash, obj["name"])
+            if total_size:
+                obj["size"] = self._readable_size(total_size)
         except Exception:
             pass
 
