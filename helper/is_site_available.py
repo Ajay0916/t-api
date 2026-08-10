@@ -1,5 +1,8 @@
+from torrents.audiobookbay import AudiobookBay
 from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
+from torrents.magnetz import Magnetz
+from torrents.torrentdownload import TorrentDownloads
 from torrents.glodls import Glodls
 from torrents.kickass import Kickass
 from torrents.libgen import Libgen
@@ -19,6 +22,37 @@ from torrents.zooqle import Zooqle
 all_sites = {
     "ext": {
         "website": ExtraTorrent,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 50,
+    },
+    "torrentdownload": {
+        "website": TorrentDownloads,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 50,
+    },
+    "audiobookbay": {
+        "website": AudiobookBay,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 30,
+    },
+    "magnetz": {
+        "website": Magnetz,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,

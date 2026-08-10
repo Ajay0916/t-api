@@ -6,7 +6,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import YTS
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 TRACKERS = [
     "udp://open.demonii.com:1337/announce",
@@ -76,6 +76,7 @@ class Yts:
                 async with session.get(
                     url,
                     headers=HEADER_AIO,
+                timeout=AIO_TIMEOUT,
                 ) as res:
                     if res.status >= 400:
                         continue

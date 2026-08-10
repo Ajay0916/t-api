@@ -15,7 +15,11 @@ async def get_search_combo(query: str, limit: Optional[int] = 0):
     start_time = time.time()
     query = query.lower()
     all_sites = check_if_site_available("1337x")
-    sites_list = list(all_sites.keys())
+    sites_list = [
+        site
+        for site in all_sites.keys()
+        if all_sites[site].get("combo_available", True)
+    ]
     tasks = []
     COMBO = {"data": []}
     total_torrents_overall = 0

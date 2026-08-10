@@ -1,14 +1,11 @@
-import asyncio
 import re
 import time
 from urllib.parse import quote
 
 import aiohttp
 from bs4 import BeautifulSoup
-from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTFUNK
-from constants.headers import HEADER_AIO
 
 TRACKERS = [
     "udp://tracker.opentrackr.org:1337/announce",
@@ -35,42 +32,6 @@ class TorrentFunk:
         self.BASE_URL = TORRENTFUNK
         self.LIMIT = None
 
-    @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
-                try:
-                    torrent_a = soup.find(
-                        "a", href=lambda h: h and h.lower().endswith(".torrent")
-                    )
-                    if torrent_a:
-                        torrent = torrent_a["href"]
-                        if torrent.startswith("/"):
-                            torrent = self.BASE_URL + torrent
-                        obj["torrent"] = torrent
-                    m = re.search(r"([a-fA-F0-9]{40})\b", html)
-                    if m:
-                        obj["hash"] = m.group(1)
-                        obj["magnet"] = build_magnet(m.group(1), obj.get("name") or "")
-                except Exception:
-                    ...
-        except:
-            return None
-
-    async def _get_torrent(self, result, session, urls):
-        tasks = []
-        for idx, url in enumerate(urls):
-            for obj in result["data"]:
-                if obj["url"] == url:
-                    task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
-                    )
-                    tasks.append(task)
-        await asyncio.gather(*tasks)
-        return result
-
     def _parser(self, htmls, idx=1):
         try:
             for html in htmls:
@@ -94,6 +55,7 @@ class TorrentFunk:
                     url = name_link["href"]
                     if not url.startswith("http"):
                         url = self.BASE_URL + url
+                    m = re.search(r"/torrent/(\d+)/", url)
                     date = td[1].text
                     size = td[2].text
                     seeders = td[3].text
@@ -108,6 +70,11 @@ class TorrentFunk:
                             "seeders": seeders,
                             "leechers": leechers,
                             "uploader": uploader if uploader else None,
+                            "torrent": (
+                                "https://ft.t0r.space/tor/{}.torrent".format(m.group(1))
+                                if m
+                                else None
+                            ),
                             "url": url,
                         }
                     )
@@ -142,7 +109,7 @@ class TorrentFunk:
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls, idx)
         if result:
-            results = await self._get_torrent(result, session, urls)
+            results = result
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
             if query is not None:
@@ -154,6 +121,8 @@ class TorrentFunk:
                         break
                     if page >= total_pages:
                         break
+                    if page >= 25:
+                        break
                     page += 1
                     url = self.BASE_URL + "/all/torrents/{}/{}.html".format(
                         query, page
@@ -162,12 +131,11 @@ class TorrentFunk:
                     result, urls = self._parser(htmls, idx)
                     if result is None or len(result["data"]) == 0:
                         break
-                    res = await self._get_torrent(result, session, urls)
-                    for obj in res["data"]:
+                    for obj in result["data"]:
                         results["data"].append(obj)
                     results["current_page"] = page
-                    if res.get("total_pages"):
-                        results["total_pages"] = res["total_pages"]
+                    if result.get("total_pages"):
+                        results["total_pages"] = result["total_pages"]
                     results["time"] = time.time() - start_time
                     results["total"] = len(results["data"])
                 results["data"] = results["data"][0 : self.LIMIT]

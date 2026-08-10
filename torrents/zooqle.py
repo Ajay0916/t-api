@@ -8,7 +8,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from constants.base_url import ZOOQLE
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 
 TRACKERS = [
@@ -83,18 +83,19 @@ class Zooqle:
         self.LIMIT = None
 
     @decorator_asyncio_fix
-    async def _individual(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text()
-            soup = BeautifulSoup(html, "html.parser")
-            for a in soup.find_all("a", href=True):
-                href = a["href"]
-                if "wp-content/uploads" in href and href.lower().endswith(".torrent"):
-                    obj["torrent"] = href
-                    break
-        except Exception:
-            pass
+    async def _individual(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    html = await res.text()
+                soup = BeautifulSoup(html, "html.parser")
+                for a in soup.find_all("a", href=True):
+                    href = a["href"]
+                    if "wp-content/uploads" in href and href.lower().endswith(".torrent"):
+                        obj["torrent"] = href
+                        break
+            except Exception:
+                pass
 
     @staticmethod
     def _readable_size(num):
@@ -108,18 +109,19 @@ class Zooqle:
         return ""
 
     @decorator_asyncio_fix
-    async def _magnet(self, session, torrent_url, obj):
-        try:
-            async with session.get(torrent_url, headers=HEADER_AIO) as res:
-                raw = await res.read()
-            info_hash, total_size = extract_info_hash(raw)
-            if info_hash:
-                obj["hash"] = info_hash
-                obj["magnet"] = build_magnet(info_hash, obj["name"])
-            if total_size:
-                obj["size"] = self._readable_size(total_size)
-        except Exception:
-            pass
+    async def _magnet(self, session, torrent_url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(torrent_url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    raw = await res.read()
+                info_hash, total_size = extract_info_hash(raw)
+                if info_hash:
+                    obj["hash"] = info_hash
+                    obj["magnet"] = build_magnet(info_hash, obj["name"])
+                if total_size:
+                    obj["size"] = self._readable_size(total_size)
+            except Exception:
+                pass
 
     def _parser(self, html, page, start_time):
         try:
@@ -175,7 +177,7 @@ class Zooqle:
             start_time = time.time()
             url = "{}?s={}&paged={}".format(self.BASE_URL, quote(query), page)
             try:
-                async with session.get(url, headers=HEADER_AIO) as res:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                     html = await res.text()
             except Exception:
                 return None
@@ -183,15 +185,16 @@ class Zooqle:
             if result is None:
                 return None
             data = result["data"]
+            sem = asyncio.Semaphore(10)
             await asyncio.gather(
                 *[
-                    self._individual(session, item["url"], item)
+                    self._individual(session, item["url"], item, sem)
                     for item in data
                 ]
             )
             await asyncio.gather(
                 *[
-                    self._magnet(session, item["torrent"], item)
+                    self._magnet(session, item["torrent"], item, sem)
                     for item in data
                     if item.get("torrent")
                 ]

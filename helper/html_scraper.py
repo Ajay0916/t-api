@@ -2,23 +2,24 @@ import os
 import asyncio
 import aiohttp
 from .asyncioPoliciesFix import decorator_asyncio_fix
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 HTTP_PROXY = os.environ.get("HTTP_PROXY", None)
 
 
 class Scraper:
     @decorator_asyncio_fix
-    async def _get_html(self, session, url, retries=5):
+    async def _get_html(self, session, url, retries=2):
         for attempt in range(retries):
             try:
                 async with session.get(
                     url,
                     headers=HEADER_AIO,
+                    timeout=AIO_TIMEOUT,
                     proxy=HTTP_PROXY,
                 ) as r:
                     if r.status >= 400:
-                        continue
+                        return None
                     return await r.text()
             except:
                 if attempt == retries - 1:

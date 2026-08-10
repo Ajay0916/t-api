@@ -5,7 +5,7 @@ from urllib.parse import quote
 import aiohttp
 
 from constants.base_url import GLODLS
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 
 TRACKERS = [
@@ -52,7 +52,7 @@ class Glodls:
     @decorator_asyncio_fix
     async def _fetch(self, url):
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=HEADER_AIO) as res:
+            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                 return await res.text(encoding="ISO-8859-1")
 
     def _parser(self, xml_text, page, start_time):

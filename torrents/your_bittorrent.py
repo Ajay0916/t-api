@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import YOURBITTORRENT
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 TRACKERS = [
     "udp://tracker.opentrackr.org:1337/announce",
@@ -80,7 +80,7 @@ class YourBittorrent:
             html = None
             for attempt in range(3):
                 try:
-                    async with session.get(url, headers=HEADER_AIO) as res:
+                    async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                         html = await res.text(encoding="ISO-8859-1")
                     break
                 except Exception:

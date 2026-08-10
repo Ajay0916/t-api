@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import LIBGEN
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
 class Libgen:
@@ -18,7 +18,7 @@ class Libgen:
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                async with session.get(url, headers=HEADER_AIO) as res:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                     html = await res.text(encoding="ISO-8859-1")
                     soup = BeautifulSoup(html, "html.parser")
                     try:

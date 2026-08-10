@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import LIMETORRENT
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
 class Limetorrent:
@@ -16,30 +16,32 @@ class Limetorrent:
         self.LIMIT = None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
-                try:
-                    a_tag = soup.find_all("a", class_="csprite_dltorrent")
-                    obj["torrent"] = a_tag[0]["href"]
-                    obj["magnet"] = a_tag[-1]["href"]
-                    obj["hash"] = re.search(
-                        r"([{a-f\d,A-F\d}]{32,40})\b", obj["magnet"]
-                    ).group(0)
-                except:
-                    ...
-        except:
-            return None
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    html = await res.text(encoding="ISO-8859-1")
+                    soup = BeautifulSoup(html, "html.parser")
+                    try:
+                        a_tag = soup.find_all("a", class_="csprite_dltorrent")
+                        obj["torrent"] = a_tag[0]["href"]
+                        obj["magnet"] = a_tag[-1]["href"]
+                        obj["hash"] = re.search(
+                            r"([{a-f\d,A-F\d}]{32,40})\b", obj["magnet"]
+                        ).group(0)
+                    except:
+                        ...
+            except:
+                return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(session, url, result["data"][idx], sem)
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -116,6 +118,8 @@ class Limetorrent:
                     except:
                         break
                     if page >= total_pages:
+                        break
+                    if page >= 25:
                         break
                     page += 1
                     url = self.BASE_URL + "/search/all/{}//{}".format(query, page)

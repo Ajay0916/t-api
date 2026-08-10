@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import X1337
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
 class x1337:
@@ -17,53 +17,55 @@ class x1337:
         self.LIMIT = None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
-                try:
-                    magnet = soup.select_one(".no-top-radius > div > ul > li > a")[
-                        "href"
-                    ]
-                    obj["magnet"] = magnet
-                    obj["hash"] = re.search(
-                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                    ).group(0)
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    html = await res.text(encoding="ISO-8859-1")
+                    soup = BeautifulSoup(html, "html.parser")
                     try:
-                        uls = soup.find_all("ul", class_="list")[1]
-                        lis = uls.find_all("li")[0]
-                        imgs = [
-                            img["data-original"]
-                            for img in (soup.find("div", id="description")).find_all("img")
-                            if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
-                        ]
-                        files = [
-                            f.text for f in soup.find("div", id="files").find_all("li")
-                        ]
-                        if len(imgs) > 0:
-                            obj["screenshot"] = imgs
-                        obj["category"] = lis.find("span").text
-                        obj["files"] = files
-                        poster = soup.select_one("div.torrent-image img")["src"]
-                        if str(poster).startswith("//"):
-                            obj["poster"] = "https:" + poster
-                        elif str(poster).startswith("/"):
-                            obj["poster"] = self.BASE_URL + poster
+                        magnet = soup.select_one(
+                            ".no-top-radius > div > ul > li > a"
+                        )["href"]
+                        obj["magnet"] = magnet
+                        obj["hash"] = re.search(
+                            r"([{a-f\d,A-F\d}]{32,40})\b", magnet
+                        ).group(0)
+                        try:
+                            uls = soup.find_all("ul", class_="list")[1]
+                            lis = uls.find_all("li")[0]
+                            imgs = [
+                                img["data-original"]
+                                for img in (soup.find("div", id="description")).find_all("img")
+                                if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
+                            ]
+                            files = [
+                                f.text for f in soup.find("div", id="files").find_all("li")
+                            ]
+                            if len(imgs) > 0:
+                                obj["screenshot"] = imgs
+                            obj["category"] = lis.find("span").text
+                            obj["files"] = files
+                            poster = soup.select_one("div.torrent-image img")["src"]
+                            if str(poster).startswith("//"):
+                                obj["poster"] = "https:" + poster
+                            elif str(poster).startswith("/"):
+                                obj["poster"] = self.BASE_URL + poster
+                        except (IndexError, AttributeError, TypeError):
+                            ...
                     except (IndexError, AttributeError, TypeError):
                         ...
-                except (IndexError, AttributeError, TypeError):
-                    ...
-        except:
-            return None
+            except:
+                return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(session, url, result["data"][idx], sem)
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -140,6 +142,8 @@ class x1337:
                     results["data"] = results["data"][0 : self.LIMIT]
                     results["total"] = len(results["data"])
                     return results
+                if page >= 25:
+                    break
                 page = page + 1
                 url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
                 htmls = await Scraper().get_all_results(session, url)

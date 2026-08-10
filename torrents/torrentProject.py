@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTPROJECT
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
 class TorrentProject:
@@ -24,6 +24,7 @@ class TorrentProject:
                 async with session.get(
                     url,
                     headers=HEADER_AIO,
+                timeout=AIO_TIMEOUT,
                 ) as res:
                     html = await res.text(encoding="ISO-8859-1")
                     soup = BeautifulSoup(html, "html.parser")

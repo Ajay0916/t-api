@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORLOCK
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
 class Torlock:
@@ -18,7 +18,7 @@ class Torlock:
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj):
         try:
-            async with session.get(url, headers=HEADER_AIO) as res:
+            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                 html = await res.text(encoding="ISO-8859-1")
                 soup = BeautifulSoup(html, "html.parser")
                 try:

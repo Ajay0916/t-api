@@ -89,6 +89,8 @@ class PirateBay:
                         break
                     if page >= total_pages:
                         break
+                    if page >= 25:
+                        break
                     page += 1
                     url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
                     html = await Scraper().get_all_results(session, url)
