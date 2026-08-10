@@ -97,12 +97,6 @@ class AudiobookBay:
                         m = re.search(r"Posted:\s*([^\n]+)", text)
                         if m:
                             date = m.group(1).strip()
-                    dload = post.select_one(".postComments a[href*='dload']")
-                    code = None
-                    if dload:
-                        m = re.search(r"ll=(.+)$", dload["href"])
-                        if m:
-                            code = m.group(1)
                     my_dict["data"].append(
                         {
                             "name": name,
@@ -111,14 +105,6 @@ class AudiobookBay:
                             "date": date,
                             "uploader": "",
                             "url": url,
-                            "download": (
-                                self.BASE_URL + dload["href"] if dload else None
-                            ),
-                            "torrent": (
-                                self.BASE_URL + "/downld0?downfs=" + code
-                                if code
-                                else None
-                            ),
                             "hash": None,
                             "magnet": None,
                         }

@@ -57,9 +57,6 @@ class TorrentDownloads:
                             "leechers": td[4].get_text(strip=True),
                             "hash": info_hash,
                             "magnet": self._magnet(info_hash, name),
-                            "torrent": "https://itorrents.net/torrent/{}.torrent?title={}".format(
-                                info_hash, requests_quote(name)
-                            ),
                             "url": self.BASE_URL + link["href"],
                         }
                     )
