@@ -15,4 +15,4 @@ GLODLS = "https://www.torrentdownloads.pro"
 TORRENTPROJECT = "https://torrentproject.cc"
 YOURBITTORRENT = "https://yourbittorrent.com"
 
-EXTRATORRENT = "https://extratorrent.st"
+EXTO = "https://extto.com"
