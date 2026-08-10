@@ -154,8 +154,11 @@ class Zooqle:
         async with aiohttp.ClientSession() as session:
             start_time = time.time()
             url = "{}?s={}&paged={}".format(self.BASE_URL, quote(query), page)
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text()
+            try:
+                async with session.get(url, headers=HEADER_AIO) as res:
+                    html = await res.text()
+            except Exception:
+                return None
             result = self._parser(html, page, start_time)
             if result is None:
                 return None

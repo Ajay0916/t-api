@@ -29,9 +29,11 @@ async def get_search_combo(query: str, limit: Optional[int] = 0):
                 all_sites[site]["website"]().search(query, page=1, limit=limit)
             )
         )
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     for res in results:
-        if res is not None and len(res["data"]) > 0:
+        if isinstance(res, Exception) or res is None:
+            continue
+        if len(res["data"]) > 0:
             for torrent in res["data"]:
                 COMBO["data"].append(torrent)
             total_torrents_overall = total_torrents_overall + res["total"]
@@ -71,9 +73,11 @@ async def get_all_trending(limit: Optional[int] = 0):
                 )
             )
         )
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     for res in results:
-        if res is not None and len(res["data"]) > 0:
+        if isinstance(res, Exception) or res is None:
+            continue
+        if len(res["data"]) > 0:
             for torrent in res["data"]:
                 COMBO["data"].append(torrent)
             total_torrents_overall = total_torrents_overall + res["total"]
@@ -111,9 +115,11 @@ async def get_all_recent(limit: Optional[int] = 0):
                 all_sites[site]["website"]().recent(category=None, page=1, limit=limit)
             )
         )
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
     for res in results:
-        if res is not None and len(res["data"]) > 0:
+        if isinstance(res, Exception) or res is None:
+            continue
+        if len(res["data"]) > 0:
             for torrent in res["data"]:
                 COMBO["data"].append(torrent)
             total_torrents_overall = total_torrents_overall + res["total"]
