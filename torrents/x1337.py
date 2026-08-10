@@ -26,53 +26,57 @@ class x1337:
         return all(token in name for token in tokens)
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
-                try:
-                    magnet = soup.select_one(".no-top-radius > div > ul > li > a")[
-                        "href"
-                    ]
-                    obj["magnet"] = magnet
-                    obj["hash"] = re.search(
-                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                    ).group(0)
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO) as res:
+                    html = await res.text(encoding="ISO-8859-1")
+                    soup = BeautifulSoup(html, "html.parser")
                     try:
-                        uls = soup.find_all("ul", class_="list")[1]
-                        lis = uls.find_all("li")[0]
-                        imgs = [
-                            img["data-original"]
-                            for img in (soup.find("div", id="description")).find_all("img")
-                            if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
+                        magnet = soup.select_one(".no-top-radius > div > ul > li > a")[
+                            "href"
                         ]
-                        files = [
-                            f.text for f in soup.find("div", id="files").find_all("li")
-                        ]
-                        if len(imgs) > 0:
-                            obj["screenshot"] = imgs
-                        obj["category"] = lis.find("span").text
-                        obj["files"] = files
-                        poster = soup.select_one("div.torrent-image img")["src"]
-                        if str(poster).startswith("//"):
-                            obj["poster"] = "https:" + poster
-                        elif str(poster).startswith("/"):
-                            obj["poster"] = self.BASE_URL + poster
+                        obj["magnet"] = magnet
+                        obj["hash"] = re.search(
+                            r"([{a-f\d,A-F\d}]{32,40})\b", magnet
+                        ).group(0)
+                        try:
+                            uls = soup.find_all("ul", class_="list")[1]
+                            lis = uls.find_all("li")[0]
+                            imgs = [
+                                img["data-original"]
+                                for img in (soup.find("div", id="description")).find_all("img")
+                                if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
+                            ]
+                            files = [
+                                f.text for f in soup.find("div", id="files").find_all("li")
+                            ]
+                            if len(imgs) > 0:
+                                obj["screenshot"] = imgs
+                            obj["category"] = lis.find("span").text
+                            obj["files"] = files
+                            poster = soup.select_one("div.torrent-image img")["src"]
+                            if str(poster).startswith("//"):
+                                obj["poster"] = "https:" + poster
+                            elif str(poster).startswith("/"):
+                                obj["poster"] = self.BASE_URL + poster
+                        except (IndexError, AttributeError, TypeError):
+                            ...
                     except (IndexError, AttributeError, TypeError):
                         ...
-                except (IndexError, AttributeError, TypeError):
-                    ...
-        except:
-            return None
+            except:
+                return None
 
     async def _get_torrent(self, result, session, urls):
+        sem = asyncio.Semaphore(5)
         tasks = []
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(
+                            session, url, result["data"][idx], sem
+                        )
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -112,8 +116,6 @@ class x1337:
                                 "uploader": uploader,
                             }
                         )
-                    if len(my_dict["data"]) == self.LIMIT:
-                        break
                 try:
                     pages = soup.select(".pagination li a")
                     my_dict["current_page"] = int(pages[0].text)
@@ -138,6 +140,9 @@ class x1337:
                     kept_urls.append(url)
             result["data"] = kept_data
             urls = kept_urls
+        if self.LIMIT and len(result["data"]) > self.LIMIT:
+            result["data"] = result["data"][0 : self.LIMIT]
+            urls = urls[0 : self.LIMIT]
         return await self._get_torrent(result, session, urls)
 
     async def search(self, query, page, limit):
@@ -151,6 +156,7 @@ class x1337:
             if results is not None and len(results["data"]) == 0:
                 tokens = self._tokens(query)
                 if len(tokens) > 1:
+                    self.LIMIT = min(limit, 20)
                     url = self.BASE_URL + "/search/{}/{}/".format(
                         requests_quote(tokens[-1]), page
                     )
@@ -173,6 +179,9 @@ class x1337:
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
             if query is None:
+                if self.LIMIT:
+                    results["data"] = results["data"][0 : self.LIMIT]
+                    results["total"] = len(results["data"])
                 return results
             while True:
                 if len(results["data"]) >= self.LIMIT:
@@ -180,7 +189,7 @@ class x1337:
                     results["total"] = len(results["data"])
                     return results
                 page = page + 1
-                if page > 5:
+                if page > 3:
                     break
                 url = self.BASE_URL + "/search/{}/{}/".format(
                     requests_quote(query), page
