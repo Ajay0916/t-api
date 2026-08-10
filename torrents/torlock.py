@@ -78,7 +78,8 @@ class Torlock:
                         url = td[0].find("a")["href"]
                         if url == "":
                             break
-                        url = self.BASE_URL + url
+                        if not url.startswith("http"):
+                            url = self.BASE_URL + url
                         list_of_urls.append(url)
                         size = td[2].get_text(strip=True)
                         date = td[1].get_text(strip=True)

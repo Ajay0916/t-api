@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 import aiohttp
 from bs4 import BeautifulSoup
@@ -56,20 +57,24 @@ class YourBittorrent:
                 list_of_urls = []
                 my_dict = {"data": []}
 
-                for tr in soup.find_all("tr")[idx:]:
-                    td = tr.find_all("td")
-                    name = td[1].find("a").get_text(strip=True)
-                    url = self.BASE_URL + td[1].find("a")["href"]
+                for card in soup.select("a.yb-gcard")[idx:]:
+                    name_el = card.select_one(".yb-gcard-name")
+                    if not name_el:
+                        continue
+                    name = name_el.get_text(" ", strip=True)
+                    url = self.BASE_URL + card["href"]
                     list_of_urls.append(url)
-                    size = td[2].text
-                    date = td[3].text
-                    seeders = td[4].text
-                    leechers = td[5].text
+                    meta = card.select_one(".yb-gcard-meta")
+                    size = meta.select_one(".z").get_text(strip=True) if meta and meta.select_one(".z") else None
+                    seeders = meta.select_one(".s").get_text(strip=True) if meta and meta.select_one(".s") else None
+                    leechers = meta.select_one(".p").get_text(strip=True) if meta and meta.select_one(".p") else None
+                    seeders = re.sub(r"\D", "", seeders) if seeders else None
+                    leechers = re.sub(r"\D", "", leechers) if leechers else None
                     my_dict["data"].append(
                         {
                             "name": name,
                             "size": size,
-                            "date": date,
+                            "date": None,
                             "seeders": seeders,
                             "leechers": leechers,
                             "url": url,
@@ -86,7 +91,7 @@ class YourBittorrent:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/?v=&c=&q={}".format(query)
-            return await self.parser_result(start_time, url, session, idx=6)
+            return await self.parser_result(start_time, url, session, idx=0)
 
     async def parser_result(self, start_time, url, session, idx=1):
         htmls = await Scraper().get_all_results(session, url)

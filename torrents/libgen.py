@@ -55,40 +55,42 @@ class Libgen:
                 soup = BeautifulSoup(html, "html.parser")
                 list_of_urls = []
                 my_dict = {"data": []}
-                trs = soup.select("[valign=top]")
-                for tr in trs[1:]:
+                for tr in soup.find_all("tr"):
                     td = tr.find_all("td")
-                    id = td[0].text
-                    authors = []
-                    author = td[1].find_all("a")
-                    for a in author:
-                        authors.append(a.text.strip())
-                    name_and_url = td[2].find("a")
-                    name = name_and_url.text
-                    url = self.BASE_URL + "/" + name_and_url["href"]
+                    if len(td) < 9:
+                        continue
+                    name_link = td[0].find("a", href=True)
+                    if not name_link:
+                        continue
+                    name = td[0].get_text(" ", strip=True)
+                    edition = td[0].find("a", href=lambda h: h and "edition.php" in h)
+                    file_link = td[0].find("a", href=lambda h: h and "file.php" in h)
+                    href = (
+                        edition["href"]
+                        if edition
+                        else file_link["href"]
+                        if file_link
+                        else name_link["href"]
+                    )
+                    url = self.BASE_URL + "/" + href
                     list_of_urls.append(url)
-                    publisher = td[3].text
-                    year = td[4].text
-                    pages = None
-                    try:
-                        pages = td[5].text
-                    except:
-                        ...
-                    language = td[6].text
-                    size = td[7].text
-                    extension = td[8].text
-
+                    authors = [a.text.strip() for a in td[1].find_all("a")]
+                    if not authors and td[1].get_text(strip=True):
+                        authors = [td[1].get_text(strip=True)]
+                    md5a = td[8].find("a", href=lambda h: h and "get.php" in h)
+                    download = self.BASE_URL + md5a["href"] if md5a else None
                     my_dict["data"].append(
                         {
-                            "id": id,
+                            "id": md5a["href"].split("md5=")[-1] if md5a else None,
                             "authors": authors,
                             "name": name,
-                            "publisher": publisher,
-                            "year": year,
-                            "pages": pages,
-                            "language": language,
-                            "size": size,
-                            "extension": extension,
+                            "publisher": td[2].get_text(strip=True),
+                            "year": td[3].get_text(strip=True),
+                            "pages": td[5].get_text(strip=True),
+                            "language": td[4].get_text(strip=True),
+                            "size": td[6].get_text(strip=True),
+                            "extension": td[7].get_text(strip=True),
+                            "download": download,
                             "url": url,
                         }
                     )
@@ -102,12 +104,7 @@ class Libgen:
         async with aiohttp.ClientSession() as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = (
-                self.BASE_URL
-                + "/search.php?req={}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def".format(
-                    query
-                )
-            )
+            url = self.BASE_URL + "/index.php?req={}&res=100".format(query)
             return await self.parser_result(start_time, url, session)
 
     async def parser_result(self, start_time, url, session):

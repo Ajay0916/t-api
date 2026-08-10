@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -30,11 +31,22 @@ class Kickass:
                     if imgs and len(imgs) > 0:
                         obj["screenshot"] = [img["src"] for img in imgs]
                     magnet_and_torrent = soup.find_all("a", class_="kaGiantButton")
-                    magnet = magnet_and_torrent[0]["href"]
-                    obj["hash"] = re.search(
-                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                    ).group(0)
-                    obj["magnet"] = magnet
+                    magnet = None
+                    for a in magnet_and_torrent:
+                        href = a.get("href", "")
+                        if "magnet:?xt=" in unquote(href):
+                            if "mylink.cloud" in href:
+                                magnet = parse_qs(urlparse(href).query).get(
+                                    "url", [None]
+                                )[0]
+                            else:
+                                magnet = unquote(href)
+                            break
+                    if magnet:
+                        hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                        if hash_match:
+                            obj["hash"] = hash_match.group(1)
+                        obj["magnet"] = magnet
                 except:
                     ...
         except:
@@ -60,15 +72,22 @@ class Kickass:
                 my_dict = {"data": []}
                 for tr in soup.select("tr.odd,tr.even"):
                     td = tr.find_all("td")
-                    name = tr.find("a", class_="cellMainLink").text.strip()
-                    url = self.BASE_URL + tr.find("a", class_="cellMainLink")["href"]
+                    name_link = tr.find("a", class_="cellMainLink")
+                    if name_link is None or len(td) < 4:
+                        continue
+                    name = name_link.text.strip()
+                    url = self.BASE_URL + name_link["href"]
                     list_of_urls.append(url)
                     if name:
                         size = td[1].text.strip()
-                        seeders = td[4].text.strip()
-                        leechers = td[5].text.strip()
-                        uploader = td[2].text.strip()
-                        date = td[3].text.strip()
+                        if len(td) >= 6:
+                            uploader = td[2].text.strip()
+                            date = td[3].text.strip()
+                        else:
+                            uploader = ""
+                            date = td[2].text.strip()
+                        seeders = td[-2].text.strip()
+                        leechers = td[-1].text.strip()
 
                         my_dict["data"].append(
                             {
@@ -120,13 +139,11 @@ class Kickass:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
-                url = self.BASE_URL + "/top-100"
+                url = self.BASE_URL + "/top100/"
             else:
-                if category == "tv":
-                    category == "television"
-                elif category == "apps":
+                if category == "apps":
                     category = "applications"
-                url = self.BASE_URL + "/top-100-{}/".format(category)
+                url = self.BASE_URL + "/top100-{}/".format(category)
             return await self.parser_result(start_time, url, session)
 
     async def recent(self, category, page, limit):

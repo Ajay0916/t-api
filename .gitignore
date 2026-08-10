@@ -7,3 +7,6 @@ function.*
 test.py
 *.log
 test.json
+
+# virtualenv
+venv/

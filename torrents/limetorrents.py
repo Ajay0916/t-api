@@ -54,7 +54,7 @@ class Limetorrent:
 
                 for tr in soup.find_all("tr")[idx:]:
                     td = tr.find_all("td")
-                    if len(td) == 0:
+                    if len(td) != 6 or not td[0].select_one(".tt-name"):
                         continue
                     name = td[0].get_text(strip=True)
                     url = self.BASE_URL + td[0].find_all("a")[-1]["href"]
@@ -97,7 +97,7 @@ class Limetorrent:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/all/{}//{}".format(query, page)
-            return await self.parser_result(start_time, url, session, idx=5)
+            return await self.parser_result(start_time, url, session, idx=0)
 
     async def parser_result(self, start_time, url, session, idx=0):
         htmls = await Scraper().get_all_results(session, url)

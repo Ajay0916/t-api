@@ -18,40 +18,60 @@ class Bitsearch:
                 soup = BeautifulSoup(html, "html.parser")
 
                 my_dict = {"data": []}
-                for divs in soup.find_all("li", class_="search-result"):
-                    info = divs.find("div", class_="info")
-                    name = info.find("h5", class_="title").find("a").text
-                    url = info.find("h5", class_="title").find("a")["href"]
-                    category = info.find("div").find("a", class_="category").text
-                    if not category:
+                for link in soup.select('a[href^="/torrent/"]'):
+                    card = link
+                    for _ in range(6):
+                        if card.parent is None:
+                            break
+                        card = card.parent
+                        if "rounded-lg" in (card.get("class") or []):
+                            break
+                    if "rounded-lg" not in (card.get("class") or []):
                         continue
-                    stats = info.find("div", class_="stats").find_all("div")
-                    if stats:
-                        downloads = stats[0].text
-                        size = stats[1].text
-                        seeders = stats[2].text.strip()
-                        leechers = stats[3].text.strip()
-                        date = stats[4].text
-                        links = divs.find("div", class_="links").find_all("a")
-                        magnet = links[1]["href"]
-                        torrent = links[0]["href"]
-                        my_dict["data"].append(
-                            {
-                                "name": name,
-                                "size": size,
-                                "seeders": seeders,
-                                "leechers": leechers,
-                                "category": category,
-                                "hash": re.search(
-                                    r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                                ).group(0),
-                                "magnet": magnet,
-                                "torrent": torrent,
-                                "url": self.BASE_URL + url,
-                                "date": date,
-                                "downloads": downloads,
-                            }
-                        )
+                    name = link.get_text(strip=True)
+                    url = self.BASE_URL + link["href"]
+                    magnet_el = card.select_one('a[href^="magnet:"]')
+                    torrent_el = card.select_one('a[href^="/download/torrent/"]')
+                    if not magnet_el or not torrent_el:
+                        continue
+                    magnet = magnet_el["href"]
+                    torrent = self.BASE_URL + torrent_el["href"]
+                    stat_groups = card.select(".flex.flex-wrap.items-center.gap-4")
+                    category = size = date = downloads = None
+                    if stat_groups:
+                        outer = [
+                            s for s in stat_groups[0].find_all("span", recursive=False)
+                        ]
+                        if len(outer) >= 3:
+                            category = outer[0].get_text(strip=True)
+                            size = outer[1].get_text(strip=True)
+                            date = outer[2].get_text(strip=True)
+                    seeders_el = card.select_one(".text-green-600 span.font-medium")
+                    leechers_el = card.select_one(".text-red-600 span.font-medium")
+                    downloads_el = card.select_one(".text-blue-600 span.font-medium")
+                    seeders = seeders_el.get_text(strip=True) if seeders_el else None
+                    leechers = leechers_el.get_text(strip=True) if leechers_el else None
+                    downloads = (
+                        downloads_el.get_text(strip=True) if downloads_el else None
+                    )
+                    hash_match = re.search(
+                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
+                    )
+                    my_dict["data"].append(
+                        {
+                            "name": name,
+                            "size": size,
+                            "seeders": seeders,
+                            "leechers": leechers,
+                            "category": category,
+                            "hash": hash_match.group(0) if hash_match else None,
+                            "magnet": magnet,
+                            "torrent": torrent,
+                            "url": url,
+                            "date": date,
+                            "downloads": downloads,
+                        }
+                    )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 try:

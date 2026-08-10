@@ -25,34 +25,33 @@ class x1337:
                     magnet = soup.select_one(".no-top-radius > div > ul > li > a")[
                         "href"
                     ]
-                    uls = soup.find_all("ul", class_="list")[1]
-                    lis = uls.find_all("li")[0]
-                    imgs = [
-                        img["data-original"]
-                        for img in (soup.find("div", id="description")).find_all("img")
-                        if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
-                    ]
-                    files = [
-                        f.text for f in soup.find("div", id="files").find_all("li")
-                    ]
-                    if len(imgs) > 0:
-                        obj["screenshot"] = imgs
-                    obj["category"] = lis.find("span").text
-                    obj["files"] = files
+                    obj["magnet"] = magnet
+                    obj["hash"] = re.search(
+                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
+                    ).group(0)
                     try:
+                        uls = soup.find_all("ul", class_="list")[1]
+                        lis = uls.find_all("li")[0]
+                        imgs = [
+                            img["data-original"]
+                            for img in (soup.find("div", id="description")).find_all("img")
+                            if img["data-original"].endswith((".png", ".jpg", ".jpeg"))
+                        ]
+                        files = [
+                            f.text for f in soup.find("div", id="files").find_all("li")
+                        ]
+                        if len(imgs) > 0:
+                            obj["screenshot"] = imgs
+                        obj["category"] = lis.find("span").text
+                        obj["files"] = files
                         poster = soup.select_one("div.torrent-image img")["src"]
                         if str(poster).startswith("//"):
                             obj["poster"] = "https:" + poster
                         elif str(poster).startswith("/"):
                             obj["poster"] = self.BASE_URL + poster
-                    except:
+                    except (IndexError, AttributeError, TypeError):
                         ...
-                    obj["magnet"] = magnet
-
-                    obj["hash"] = re.search(
-                        r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                    ).group(0)
-                except IndexError:
+                except (IndexError, AttributeError, TypeError):
                     ...
         except:
             return None
@@ -80,7 +79,11 @@ class x1337:
                     td = tr.find_all("td")
                     name = td[0].find_all("a")[-1].text
                     if name:
-                        url = self.BASE_URL + td[0].find_all("a")[-1]["href"]
+                        href = td[0].find_all("a")[-1]["href"]
+                        if href.startswith("http"):
+                            url = self.BASE_URL + "/" + href.split("/", 3)[-1]
+                        else:
+                            url = self.BASE_URL + href
                         list_of_urls.append(url)
                         seeders = td[1].text
                         leechers = td[2].text

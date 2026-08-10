@@ -56,15 +56,20 @@ class TorrentFunk:
 
                 for tr in soup.select(".tmain tr")[idx:]:
                     td = tr.find_all("td")
-                    if len(td) == 0:
+                    if len(td) < 6:
                         continue
-                    name = td[0].find("a").text
+                    name_link = td[0].find("a")
+                    if name_link is None:
+                        continue
+                    name = name_link.text
                     date = td[1].text
                     size = td[2].text
                     seeders = td[3].text
                     leechers = td[4].text
                     uploader = td[5].text
-                    url = self.BASE_URL + td[0].find("a")["href"]
+                    url = td[0].find("a")["href"]
+                    if not url.startswith("http"):
+                        url = self.BASE_URL + url
                     list_of_urls.append(url)
                     my_dict["data"].append(
                         {
@@ -88,7 +93,7 @@ class TorrentFunk:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/all/torrents/{}/{}.html".format(query, page)
-            return await self.parser_result(start_time, url, session, idx=6)
+            return await self.parser_result(start_time, url, session, idx=1)
 
     async def parser_result(self, start_time, url, session, idx=1):
         htmls = await Scraper().get_all_results(session, url)
