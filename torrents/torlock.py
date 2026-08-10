@@ -22,30 +22,29 @@ class Torlock:
                 html = await res.text(encoding="ISO-8859-1")
                 soup = BeautifulSoup(html, "html.parser")
                 try:
-                    tm = soup.find_all("a")
-                    magnet = tm[20]["href"]
-                    torrent = tm[23]["href"]
+                    magnet_a = soup.find(
+                        "a", href=lambda h: h and h.startswith("magnet:")
+                    )
+                    torrent_a = soup.find(
+                        "a", href=lambda h: h and h.lower().endswith(".torrent")
+                    )
+                    if magnet_a:
+                        obj["magnet"] = magnet_a["href"]
+                        m = re.search(r"([a-fA-F0-9]{32,40})\b", obj["magnet"])
+                        if m:
+                            obj["hash"] = m.group(1)
+                    if torrent_a:
+                        obj["torrent"] = torrent_a["href"]
                     try:
-                        obj["poster"] = soup.find_all("img", class_="img-responsive")[
-                            0
-                        ]["src"]
+                        poster = soup.find("img", class_="img-responsive")
+                        if poster:
+                            obj["poster"] = poster["src"]
                     except:
                         ...
-                    if str(magnet).startswith("magnet") and str(torrent).endswith(
-                        "torrent"
-                    ):
-                        obj["torrent"] = torrent
-                        obj["magnet"] = magnet
-                        obj["hash"] = re.search(
-                            r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                        ).group(0)
-                        obj["category"] = tm[25].text
-                        imgs = soup.select(".tab-content img.img-fluid")
-                        if imgs and len(imgs) > 0:
-                            obj["screenshot"] = [img["src"] for img in imgs]
-                    else:
-                        del obj
-                except IndexError:
+                    imgs = soup.select(".tab-content img.img-fluid")
+                    if imgs and len(imgs) > 0:
+                        obj["screenshot"] = [img["src"] for img in imgs]
+                except Exception:
                     ...
         except:
             return None

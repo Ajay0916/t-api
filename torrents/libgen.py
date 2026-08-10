@@ -22,16 +22,24 @@ class Libgen:
                     html = await res.text(encoding="ISO-8859-1")
                     soup = BeautifulSoup(html, "html.parser")
                     try:
-                        x = soup.find_all("a")
-                        for a in x:
-                            if a.text == "One-filetorrent":
+                        for a in soup.find_all("a", href=True):
+                            if a.get_text(strip=True) == "One-filetorrent":
                                 if a["href"] != "#":
                                     obj["torrent"] = self.BASE_URL + a["href"]
-                        poster = soup.find_all("img")[0]
-
-                        if poster:
-                            obj["poster"] = "http://library.lol" + poster["src"]
-                    except:
+                                break
+                        if not obj.get("torrent"):
+                            md5a = soup.find("a", href=lambda h: h and "get.php" in h)
+                            if md5a:
+                                href = md5a["href"]
+                                if href.startswith("/"):
+                                    href = self.BASE_URL + href
+                                obj["torrent"] = href
+                        poster = soup.find("img")
+                        if poster and poster.get("src", "").startswith("/"):
+                            obj["poster"] = self.BASE_URL + poster["src"]
+                        elif poster:
+                            obj["poster"] = poster["src"]
+                    except Exception:
                         ...
             except:
                 return None
@@ -79,9 +87,13 @@ class Libgen:
                         authors = [td[1].get_text(strip=True)]
                     md5a = td[8].find("a", href=lambda h: h and "get.php" in h)
                     download = self.BASE_URL + md5a["href"] if md5a else None
+                    md5 = md5a["href"].split("md5=")[-1] if md5a else None
                     my_dict["data"].append(
                         {
-                            "id": md5a["href"].split("md5=")[-1] if md5a else None,
+                            "id": md5,
+                            "hash": md5,
+                            "magnet": None,
+                            "torrent": download,
                             "authors": authors,
                             "name": name,
                             "publisher": td[2].get_text(strip=True),

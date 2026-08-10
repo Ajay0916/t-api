@@ -1,11 +1,32 @@
 import asyncio
+import re
 import time
+from urllib.parse import quote
+
 import aiohttp
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTFUNK
 from constants.headers import HEADER_AIO
+
+TRACKERS = [
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://tracker.openbittorrent.com:80/announce",
+    "udp://9.rarbg.to:2710/announce",
+    "udp://tracker.leechers-paradise.org:6969/announce",
+    "udp://tracker.coppersurfer.tk:6969/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.qu.ax:6969/announce",
+]
+
+
+def build_magnet(info_hash, name):
+    dn = quote(name)
+    tr = "".join("&tr={}".format(quote(t)) for t in TRACKERS)
+    return "magnet:?xt=urn:btih:{}&dn={}{}".format(info_hash, dn, tr)
 
 
 class TorrentFunk:
@@ -21,16 +42,19 @@ class TorrentFunk:
                 html = await res.text(encoding="ISO-8859-1")
                 soup = BeautifulSoup(html, "html.parser")
                 try:
-                    obj["torrent"] = soup.select_one(
-                        "#right > main > div.content > table:nth-child(3) > tr > td:nth-child(2) > a"
-                    )["href"]
-                    obj["category"] = soup.select_one(
-                        "#right > main > div.content > table:nth-child(7) > tr> td:nth-child(2) > a"
-                    ).text
-                    obj["hash"] = soup.select_one(
-                        "#right > main > div.content > table:nth-child(7) > tr:nth-child(3) > td:nth-child(2)"
-                    ).text
-                except:
+                    torrent_a = soup.find(
+                        "a", href=lambda h: h and h.lower().endswith(".torrent")
+                    )
+                    if torrent_a:
+                        torrent = torrent_a["href"]
+                        if torrent.startswith("/"):
+                            torrent = self.BASE_URL + torrent
+                        obj["torrent"] = torrent
+                    m = re.search(r"([a-fA-F0-9]{40})\b", html)
+                    if m:
+                        obj["hash"] = m.group(1)
+                        obj["magnet"] = build_magnet(m.group(1), obj.get("name") or "")
+                except Exception:
                     ...
         except:
             return None
@@ -54,34 +78,40 @@ class TorrentFunk:
                 list_of_urls = []
                 my_dict = {"data": []}
 
-                for tr in soup.select(".tmain tr")[idx:]:
-                    td = tr.find_all("td")
-                    if len(td) < 6:
+                for table in soup.select("table.tmain.tf-torrentlist"):
+                    if "z3" in (table.get("class") or []):
                         continue
-                    name_link = td[0].find("a")
-                    if name_link is None:
-                        continue
-                    name = name_link.text
-                    date = td[1].text
-                    size = td[2].text
-                    seeders = td[3].text
-                    leechers = td[4].text
-                    uploader = td[5].text
-                    url = td[0].find("a")["href"]
-                    if not url.startswith("http"):
-                        url = self.BASE_URL + url
-                    list_of_urls.append(url)
-                    my_dict["data"].append(
-                        {
-                            "name": name,
-                            "size": size,
-                            "date": date,
-                            "seeders": seeders,
-                            "leechers": leechers,
-                            "uploader": uploader if uploader else None,
-                            "url": url,
-                        }
-                    )
+                    for tr in table.select("tr")[idx:]:
+                        td = tr.find_all("td")
+                        name_link = td[0].find("a") if td else None
+                        if name_link is None:
+                            continue
+                        name = name_link.text
+                        url = name_link["href"]
+                        if not url.startswith("http"):
+                            url = self.BASE_URL + url
+                        if len(td) >= 6:
+                            date = td[1].text
+                            size = td[2].text
+                            seeders = td[3].text
+                            leechers = td[4].text
+                            uploader = td[5].text
+                        else:
+                            date = size = seeders = leechers = uploader = None
+                        list_of_urls.append(url)
+                        my_dict["data"].append(
+                            {
+                                "name": name,
+                                "size": size,
+                                "date": date,
+                                "seeders": seeders,
+                                "leechers": leechers,
+                                "uploader": uploader if uploader else None,
+                                "url": url,
+                            }
+                        )
+                        if len(my_dict["data"]) == self.LIMIT:
+                            break
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 return my_dict, list_of_urls
