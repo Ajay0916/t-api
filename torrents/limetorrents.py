@@ -97,15 +97,42 @@ class Limetorrent:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/all/{}//{}".format(query, page)
-            return await self.parser_result(start_time, url, session, idx=0)
+            return await self.parser_result(
+                start_time, url, session, idx=0, page=page, query=query
+            )
 
-    async def parser_result(self, start_time, url, session, idx=0):
+    async def parser_result(self, start_time, url, session, idx=0, page=1, query=None):
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls, idx)
         if result is not None:
             results = await self._get_torrent(result, session, urls)
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
+            if query is not None:
+                results["current_page"] = page
+                while len(results["data"]) < self.LIMIT:
+                    try:
+                        total_pages = results.get("total_pages", page)
+                    except:
+                        break
+                    if page >= total_pages:
+                        break
+                    page += 1
+                    url = self.BASE_URL + "/search/all/{}//{}".format(query, page)
+                    htmls = await Scraper().get_all_results(session, url)
+                    result, urls = self._parser(htmls, idx)
+                    if result is None or len(result["data"]) == 0:
+                        break
+                    res = await self._get_torrent(result, session, urls)
+                    for obj in res["data"]:
+                        results["data"].append(obj)
+                    results["current_page"] = page
+                    if res.get("total_pages"):
+                        results["total_pages"] = res["total_pages"]
+                    results["time"] = time.time() - start_time
+                    results["total"] = len(results["data"])
+                results["data"] = results["data"][0 : self.LIMIT]
+                results["total"] = len(results["data"])
             return results
         return result
 

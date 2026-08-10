@@ -99,7 +99,7 @@ class Magnetdl:
         await asyncio.gather(*tasks)
         return result
 
-    async def parser_result(self, start_time, url, session):
+    async def parser_result(self, start_time, url, session, page=1, query=None):
         htmls = await Scraper().get_all_results(session, url)
         results = self._parser(htmls)
         if results is not None:
@@ -107,6 +107,28 @@ class Magnetdl:
             results = await self._get_torrent(results, session, urls)
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
+            if query is not None:
+                results["current_page"] = page
+                while len(results["data"]) < self.LIMIT:
+                    page += 1
+                    url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+                        query, page
+                    )
+                    htmls = await Scraper().get_all_results(session, url)
+                    res = self._parser(htmls)
+                    if res is None or len(res["data"]) == 0:
+                        break
+                    urls = [item["url"] for item in res["data"]]
+                    res = await self._get_torrent(res, session, urls)
+                    for obj in res["data"]:
+                        results["data"].append(obj)
+                    results["current_page"] = page
+                    results["time"] = time.time() - start_time
+                    results["total"] = len(results["data"])
+                    if len(res["data"]) < 10:
+                        break
+                results["data"] = results["data"][0 : self.LIMIT]
+                results["total"] = len(results["data"])
             return results
         return results
 
@@ -114,10 +136,12 @@ class Magnetdl:
         async with aiohttp.ClientSession() as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders".format(
-                query
+            url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+                query, page
             )
-            return await self.parser_result(start_time, url, session)
+            return await self.parser_result(
+                start_time, url, session, page=page, query=query
+            )
 
     async def recent(self, category, page, limit):
         async with aiohttp.ClientSession() as session:

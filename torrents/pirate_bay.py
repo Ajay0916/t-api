@@ -53,7 +53,7 @@ class PirateBay:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 last_tr = soup.find_all("tr")[-1]
-                potential_page_link = last_tr.find("td").find("a").href
+                potential_page_link = last_tr.find("td").find("a")["href"]
                 check_if_pagination_available = potential_page_link is not None and potential_page_link[:len("/search/")] == "/search/"
                 if check_if_pagination_available:
                     current_page = last_tr.find("td").find("b").text
@@ -70,14 +70,40 @@ class PirateBay:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
-            return await self.parser_result(start_time, url, session)
+            return await self.parser_result(
+                start_time, url, session, page=page, query=query
+            )
 
-    async def parser_result(self, start_time, url, session):
+    async def parser_result(self, start_time, url, session, page=1, query=None):
         html = await Scraper().get_all_results(session, url)
         results = self._parser(html)
         if results is not None:
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
+            if query is not None:
+                results["current_page"] = page
+                while len(results["data"]) < self.LIMIT:
+                    try:
+                        total_pages = results.get("total_pages", page)
+                    except:
+                        break
+                    if page >= total_pages:
+                        break
+                    page += 1
+                    url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
+                    html = await Scraper().get_all_results(session, url)
+                    res = self._parser(html)
+                    if res is None or len(res["data"]) == 0:
+                        break
+                    for obj in res["data"]:
+                        results["data"].append(obj)
+                    results["current_page"] = page
+                    if res.get("total_pages"):
+                        results["total_pages"] = res["total_pages"]
+                    results["time"] = time.time() - start_time
+                    results["total"] = len(results["data"])
+                results["data"] = results["data"][0 : self.LIMIT]
+                results["total"] = len(results["data"])
             return results
         return results
 

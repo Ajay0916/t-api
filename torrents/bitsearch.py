@@ -75,29 +75,13 @@ class Bitsearch:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 try:
-                    total_pages = (
-                        int(
-                            soup.select(
-                                "body > main > div.container.mt-2 > div > div:nth-child(1) > div > span > b"
-                            )[0].text
-                        )
-                        / 20
-                    )  # !20 search result available on each page
-                    total_pages = (
-                        total_pages + 1
-                        if type(total_pages) == float
-                        else total_pages
-                        if int(total_pages) > 0
-                        else total_pages + 1
-                    )
-
-                    current_page = int(
-                        soup.find("div", class_="pagination")
-                        .find("a", class_="active")
-                        .text
-                    )
-                    my_dict["current_page"] = current_page
-                    my_dict["total_pages"] = int(total_pages)
+                    page_nums = []
+                    for a in soup.select('a[href*="page="]'):
+                        m = re.search(r"page=(\d+)", a["href"])
+                        if m:
+                            page_nums.append(int(m.group(1)))
+                    if page_nums:
+                        my_dict["total_pages"] = max(page_nums)
                 except:
                     ...
                 return my_dict
@@ -109,14 +93,40 @@ class Bitsearch:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search?q={}&page={}".format(query, page)
-            return await self.parser_result(start_time, url, session)
+            return await self.parser_result(
+                start_time, url, session, page=page, query=query
+            )
 
-    async def parser_result(self, start_time, url, session):
+    async def parser_result(self, start_time, url, session, page=1, query=None):
         html = await Scraper().get_all_results(session, url)
         results = self._parser(html)
         if results is not None:
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
+            if query is not None:
+                results["current_page"] = page
+                while len(results["data"]) < self.LIMIT:
+                    try:
+                        total_pages = results.get("total_pages", page)
+                    except:
+                        break
+                    if page >= total_pages:
+                        break
+                    page += 1
+                    url = self.BASE_URL + "/search?q={}&page={}".format(query, page)
+                    html = await Scraper().get_all_results(session, url)
+                    res = self._parser(html)
+                    if res is None or len(res["data"]) == 0:
+                        break
+                    for obj in res["data"]:
+                        results["data"].append(obj)
+                    results["current_page"] = page
+                    if res.get("total_pages"):
+                        results["total_pages"] = res["total_pages"]
+                    results["time"] = time.time() - start_time
+                    results["total"] = len(results["data"])
+                results["data"] = results["data"][0 : self.LIMIT]
+                results["total"] = len(results["data"])
             return results
         return results
 
