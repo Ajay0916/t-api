@@ -1,4 +1,5 @@
 from torrents.bitsearch import Bitsearch
+from torrents.extratorrent import ExtraTorrent
 from torrents.glodls import Glodls
 from torrents.kickass import Kickass
 from torrents.libgen import Libgen
@@ -16,6 +17,16 @@ from torrents.yts import Yts
 from torrents.zooqle import Zooqle
 
 all_sites = {
+    "ext": {
+        "website": ExtraTorrent,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 50,
+    },
     "1337x": {
         "website": x1337,
         "trending_available": True,

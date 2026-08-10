@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from urllib.parse import quote as requests_quote
 import aiohttp
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -14,6 +15,15 @@ class x1337:
     def __init__(self):
         self.BASE_URL = X1337
         self.LIMIT = None
+
+    def _tokens(self, query):
+        return [token for token in query.lower().split() if len(token) > 2]
+
+    def _matches(self, name, tokens):
+        if not tokens:
+            return True
+        name = name.lower()
+        return all(token in name for token in tokens)
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj):
@@ -118,20 +128,48 @@ class x1337:
         except:
             return None, None
 
+    async def _collect(self, result, urls, session, tokens):
+        if tokens:
+            kept_data = []
+            kept_urls = []
+            for obj, url in zip(result["data"], urls):
+                if self._matches(obj["name"], tokens):
+                    kept_data.append(obj)
+                    kept_urls.append(url)
+            result["data"] = kept_data
+            urls = kept_urls
+        return await self._get_torrent(result, session, urls)
+
     async def search(self, query, page, limit):
         async with aiohttp.ClientSession() as session:
             self.LIMIT = limit
             start_time = time.time()
-            url = self.BASE_URL + "/search/{}/{}/".format(query, page)
-            return await self.parser_result(
-                start_time, url, session, query=query, page=page
+            url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
+            results = await self.parser_result(
+                start_time, url, session, page=page, query=query
             )
+            if results is not None and len(results["data"]) == 0:
+                tokens = self._tokens(query)
+                if len(tokens) > 1:
+                    url = self.BASE_URL + "/search/{}/{}/".format(
+                        requests_quote(tokens[-1]), page
+                    )
+                    fallback = await self.parser_result(
+                        start_time, url, session, page=page, query=tokens[-1]
+                    )
+                    if fallback is not None and len(fallback["data"]) > 0:
+                        fallback["data"].sort(
+                            key=lambda obj: not self._matches(obj["name"], tokens)
+                        )
+                        results = fallback
+            return results
 
     async def parser_result(self, start_time, url, session, page, query=None):
+        tokens = self._tokens(query) if query is not None else None
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls)
         if result is not None:
-            results = await self._get_torrent(result, session, urls)
+            results = await self._collect(result, urls, session, tokens)
             results["time"] = time.time() - start_time
             results["total"] = len(results["data"])
             if query is None:
@@ -142,24 +180,26 @@ class x1337:
                     results["total"] = len(results["data"])
                     return results
                 page = page + 1
-                url = self.BASE_URL + "/search/{}/{}/".format(query, page)
+                if page > 5:
+                    break
+                url = self.BASE_URL + "/search/{}/{}/".format(
+                    requests_quote(query), page
+                )
                 htmls = await Scraper().get_all_results(session, url)
                 result, urls = self._parser(htmls)
-                if result is not None:
-                    if len(result["data"]) > 0:
-                        res = await self._get_torrent(result, session, urls)
-                        for obj in res["data"]:
-                            results["data"].append(obj)
-                        try:
-                            results["current_page"] = res["current_page"]
-                        except:
-                            ...
-                        results["time"] = time.time() - start_time
-                        results["total"] = len(results["data"])
-                    else:
-                        break
-                else:
+                if result is None:
                     break
+                if len(result["data"]) == 0:
+                    break
+                res = await self._collect(result, urls, session, tokens)
+                for obj in res["data"]:
+                    results["data"].append(obj)
+                try:
+                    results["current_page"] = res["current_page"]
+                except:
+                    ...
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
             return results
         return result
 
@@ -190,6 +230,6 @@ class x1337:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/category-search/{}/{}/{}/".format(
-                query, category.capitalize(), page
+                requests_quote(query), category.capitalize(), page
             )
             return await self.parser_result(start_time, url, session, page, query)

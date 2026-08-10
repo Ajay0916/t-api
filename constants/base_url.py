@@ -14,3 +14,5 @@ TORRENTFUNK = "https://www.torrentfunk.com"
 GLODLS = "https://www.torrentdownloads.pro"
 TORRENTPROJECT = "https://torrentproject.cc"
 YOURBITTORRENT = "https://yourbittorrent.com"
+
+EXTRATORRENT = "https://extratorrent.st"
