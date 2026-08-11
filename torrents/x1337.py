@@ -11,6 +11,49 @@ from constants.base_url import X1337
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 
+STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "in", "on", "for", "with", "to",
+    "at", "by", "vs", "feat", "ft", "hd", "web", "x264", "x265", "h264",
+}
+
+
+def _tidy(tok):
+    return re.sub(r"(?<=[a-z])0+(\d)", r"\1", tok)
+
+
+def _tok_match(q, t):
+    if q == t:
+        return True
+    q2, t2 = _tidy(q), _tidy(t)
+    if q2 == t2:
+        return True
+    shorter = q if len(q) <= len(t) else t
+    if len(shorter) >= 3 and (t.startswith(q) or q.startswith(t)):
+        return True
+    if re.search(r"\d", shorter) and (t2.startswith(q2) or q2.startswith(t2)):
+        return True
+    return False
+
+
+def _query_relevant(name, query, threshold=0.6):
+    qtoks = [
+        t
+        for t in re.sub(r"[^a-z0-9]+", " ", (query or "").lower()).split()
+        if t not in STOPWORDS and not (len(t) < 2 and t.isalpha())
+    ]
+    if not qtoks:
+        return True
+    norm_name = re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).split()
+    if not norm_name:
+        return False
+    joined = re.sub(r"[^a-z0-9]+", "", (name or "").lower())
+    hits = 0
+    for q in qtoks:
+        if any(_tok_match(q, t) for t in norm_name) or q in joined:
+            hits += 1
+    return hits / len(qtoks) >= threshold
+
+
 class x1337:
     _name = "1337x"
     def __init__(self):
@@ -82,7 +125,7 @@ class x1337:
                 for tr in trs:
                     td = tr.find_all("td")
                     name = td[0].find_all("a")[-1].text
-                    if name:
+                    if name and _query_relevant(name, getattr(self, "_query", None)):
                         href = td[0].find_all("a")[-1]["href"]
                         if href.startswith("http"):
                             url = self.BASE_URL + "/" + href.split("/", 3)[-1]
@@ -130,6 +173,7 @@ class x1337:
             return await self.parser_result(start_time, url, session, page=page, query=query)
 
     async def parser_result(self, start_time, url, session, page, query=None):
+        self._query = query
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls)
         if result is not None:
