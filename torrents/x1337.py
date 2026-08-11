@@ -170,7 +170,26 @@ class x1337:
             self.LIMIT = limit
             start_time = time.time()
             url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
-            return await self.parser_result(start_time, url, session, page=page, query=query)
+            result = await self.parser_result(start_time, url, session, page=page, query=query)
+            if result is None or len(result["data"]) > 0:
+                return result
+            # 1337x search only surfaces matches for the first word of
+            # multi-word queries, so fall back to searching the distinctive
+            # tokens (e.g. "bob proctor" -> search "proctor") and keep only
+            # results relevant to the full query.
+            tokens = [
+                t
+                for t in re.sub(r"[^a-z0-9]+", " ", (query or "").lower()).split()
+                if t not in STOPWORDS and not (len(t) < 2 and t.isalpha())
+            ]
+            if len(tokens) < 2:
+                return result
+            for tok in tokens:
+                url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(tok), page)
+                res = await self.parser_result(start_time, url, session, page=page, query=query)
+                if res is not None and len(res["data"]) > 0:
+                    return res
+            return result
 
     async def parser_result(self, start_time, url, session, page, query=None):
         self._query = query
