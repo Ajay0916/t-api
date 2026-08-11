@@ -12,7 +12,7 @@ from helper.site_health import site_health
 
 router = APIRouter(tags=["Combo Routes"])
 
-SITE_DEADLINE = 12.0
+SITE_DEADLINE = 18.0
 
 
 async def _search_site(website, query, limit):

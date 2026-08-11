@@ -55,7 +55,7 @@ class Torlock:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(15)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:

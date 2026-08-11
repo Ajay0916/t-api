@@ -28,12 +28,12 @@
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
-- **Faster detail scraping** — ExtraTorrent & MagnetDL concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results.
+- **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo respects `limit`** — `/all/search` now returns exactly what you ask for (before it could return up to 750+ items even with `limit=5`).
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
-- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with per-site deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
+- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with a per-site 18s deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.
 - **Query encoding fixes** — multi-word queries (`bob proctor`) work on every site.
 - **Cleaner output** — seeders/leechers/downloads normalized to int.
