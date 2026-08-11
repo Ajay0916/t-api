@@ -1,7 +1,7 @@
 import asyncio
 import re
 import time
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import aiohttp
 from helper.session import get_connector
@@ -58,7 +58,7 @@ class TorrentProject:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
@@ -69,21 +69,28 @@ class TorrentProject:
         await asyncio.gather(*tasks)
         return result
 
-    def _parser(self, htmls):
+    def _parser(self, htmls, page=1):
         try:
             for html in htmls:
                 soup = BeautifulSoup(html, "html.parser")
                 list_of_urls = []
                 my_dict = {"data": []}
-                for div in soup.select("div#similarfiles div")[2:]:
-                    span = div.find_all("span")
-                    name = span[0].find("a").text
-                    url = self.BASE_URL + span[0].find("a")["href"]
+                similar = soup.select_one("div#similarfiles")
+                rows = similar.find_all("div", recursive=False) if similar else []
+                for div in rows:
+                    spans = div.find_all("span")
+                    if not spans or not spans[0]:
+                        continue
+                    a = spans[0].find("a")
+                    if not a or not a.get("href", "").startswith("/t3-"):
+                        continue
+                    name = a.get_text(strip=True)
+                    url = self.BASE_URL + a["href"]
                     list_of_urls.append(url)
-                    seeders = span[2].text
-                    leechers = span[3].text
-                    date = span[4].text
-                    size = span[5].text
+                    seeders = spans[2].get_text(strip=True) if len(spans) > 2 else ""
+                    leechers = spans[3].get_text(strip=True) if len(spans) > 3 else ""
+                    date = spans[4].get_text(strip=True) if len(spans) > 4 else ""
+                    size = spans[5].get_text(strip=True) if len(spans) > 5 else ""
 
                     my_dict["data"].append(
                         {
@@ -97,6 +104,8 @@ class TorrentProject:
                     )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
+                my_dict["current_page"] = page
+                my_dict["total_pages"] = None
                 return my_dict, list_of_urls
         except:
             return None, None
@@ -105,12 +114,36 @@ class TorrentProject:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/?t={}&p={}".format(query, page - 1)
-            return await self.parser_result(start_time, url, session)
+            url = self.BASE_URL + "/?t={}&p={}".format(quote(query), page - 1)
+            results = await self.parser_result(start_time, url, session, page)
+            if results is None:
+                return None
+            results["current_page"] = page
+            while len(results["data"]) < self.LIMIT:
+                if page >= 25:
+                    break
+                page += 1
+                url = self.BASE_URL + "/?t={}&p={}".format(quote(query), page - 1)
+                res = await self.parser_result(
+                    time.time() - start_time, url, session, page
+                )
+                if res is None or len(res["data"]) == 0:
+                    break
+                seen = {obj["url"] for obj in results["data"]}
+                for obj in res["data"]:
+                    if obj["url"] not in seen:
+                        results["data"].append(obj)
+                        seen.add(obj["url"])
+                results["current_page"] = page
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+            results["data"] = results["data"][0 : self.LIMIT]
+            results["total"] = len(results["data"])
+            return results
 
-    async def parser_result(self, start_time, url, session):
+    async def parser_result(self, start_time, url, session, page=1):
         htmls = await Scraper().get_all_results(session, url)
-        result, urls = self._parser(htmls)
+        result, urls = self._parser(htmls, page)
         if result is not None:
             results = await self._get_torrent(result, session, urls)
             results["time"] = time.time() - start_time

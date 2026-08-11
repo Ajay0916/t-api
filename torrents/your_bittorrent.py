@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import re
 import time
+from urllib.parse import quote
 
 import aiohttp
 from helper.session import get_connector
@@ -58,65 +59,69 @@ class YourBittorrent:
         self.LIMIT = None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            html = None
-            for attempt in range(3):
-                try:
-                    async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                        html = await res.text(encoding="ISO-8859-1")
-                    break
-                except Exception:
-                    if attempt == 2:
-                        return None
-                    await asyncio.sleep(1)
-            if html is None:
-                return None
-            soup = BeautifulSoup(html, "html.parser")
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
             try:
-                torrent_a = soup.find(
-                    "a", href=lambda h: h and h.lower().endswith(".torrent")
-                )
-                if torrent_a:
-                    torrent = torrent_a["href"]
-                    if torrent.startswith("/"):
-                        torrent = self.BASE_URL + torrent
-                    obj["torrent"] = torrent
-                    for attempt in range(3):
-                        try:
-                            async with session.get(
-                                torrent, headers=HEADER_AIO
-                            ) as tr:
-                                raw = await tr.read()
-                            info_hash = extract_info_hash(raw)
-                            if info_hash:
-                                obj["hash"] = info_hash
-                                obj["magnet"] = build_magnet(
-                                    info_hash, obj.get("name") or ""
-                                )
-                            break
-                        except Exception:
-                            if attempt == 2:
-                                pass
-                            await asyncio.sleep(1)
+                html = None
+                for attempt in range(3):
+                    try:
+                        async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                            html = await res.text(encoding="ISO-8859-1")
+                        break
+                    except Exception:
+                        if attempt == 2:
+                            return None
+                        await asyncio.sleep(1)
+                if html is None:
+                    return None
+                soup = BeautifulSoup(html, "html.parser")
                 try:
-                    poster = soup.find("img", class_="img-fluid")
-                    if poster:
-                        obj["poster"] = poster["src"]
+                    torrent_a = soup.find(
+                        "a", href=lambda h: h and h.lower().endswith(".torrent")
+                    )
+                    if torrent_a:
+                        torrent = torrent_a["href"]
+                        if torrent.startswith("/"):
+                            torrent = self.BASE_URL + torrent
+                        obj["torrent"] = torrent
+                        for attempt in range(3):
+                            try:
+                                async with session.get(
+                                    torrent, headers=HEADER_AIO
+                                ) as tr:
+                                    raw = await tr.read()
+                                info_hash = extract_info_hash(raw)
+                                if info_hash:
+                                    obj["hash"] = info_hash
+                                    obj["magnet"] = build_magnet(
+                                        info_hash, obj.get("name") or ""
+                                    )
+                                break
+                            except Exception:
+                                if attempt == 2:
+                                    pass
+                                await asyncio.sleep(1)
+                    try:
+                        poster = soup.find("img", class_="img-fluid")
+                        if poster:
+                            obj["poster"] = poster["src"]
+                    except Exception:
+                        pass
                 except Exception:
-                    pass
+                    ...
             except Exception:
-                ...
-        except Exception:
-            return None
+                return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(
+                            session, url, result["data"][idx], sem
+                        )
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -154,6 +159,17 @@ class YourBittorrent:
                     )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
+                try:
+                    ul = soup.find("ul", class_="pagination")
+                    pages = []
+                    if ul:
+                        for a in ul.find_all("a", href=True):
+                            m = re.search(r"page=(\d+)", a["href"])
+                            if m:
+                                pages.append(int(m.group(1)))
+                    my_dict["total_pages"] = max(pages) if pages else None
+                except:
+                    my_dict["total_pages"] = None
                 return my_dict, list_of_urls
         except:
             return None, None
@@ -162,8 +178,35 @@ class YourBittorrent:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/?v=&c=&q={}".format(query)
-            return await self.parser_result(start_time, url, session, idx=0)
+            url = self.BASE_URL + "/?v=&c=&q={}".format(quote(query))
+            results = await self.parser_result(start_time, url, session, idx=0)
+            if results is None:
+                return None
+            results["current_page"] = page
+            while len(results["data"]) < self.LIMIT:
+                try:
+                    total_pages = results.get("total_pages") or page
+                except:
+                    break
+                if page >= total_pages or page >= 25:
+                    break
+                page += 1
+                url = self.BASE_URL + "/?q={}&page={}".format(quote(query), page)
+                res = await self.parser_result(
+                    time.time() - start_time, url, session, idx=0
+                )
+                if res is None or len(res["data"]) == 0:
+                    break
+                for obj in res["data"]:
+                    results["data"].append(obj)
+                results["current_page"] = page
+                if res.get("total_pages"):
+                    results["total_pages"] = res["total_pages"]
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+            results["data"] = results["data"][0 : self.LIMIT]
+            results["total"] = len(results["data"])
+            return results
 
     async def parser_result(self, start_time, url, session, idx=1):
         htmls = await Scraper().get_all_results(session, url)
