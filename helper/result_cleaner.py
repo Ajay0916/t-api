@@ -55,6 +55,10 @@ def clean_results(resp, sort=True):
     for item in data:
         if isinstance(item, dict):
             item = {k: v for k, v in item.items() if v is not None}
+            # WZML-X renders a button from magnet/torrent; results with
+            # neither are useless, so drop them.
+            if not (item.get("magnet") or item.get("torrent")):
+                continue
             for key in ("seeders", "leechers", "downloads"):
                 if item.get(key) is not None:
                     item[key] = _to_int(item[key])
