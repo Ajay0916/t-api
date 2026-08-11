@@ -131,7 +131,7 @@ class AnnasArchive:
         start_time = time.time()
         self.LIMIT = limit
         timeout = aiohttp.ClientTimeout(total=20)
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, timeout=timeout) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True, timeout=timeout) as session:
             posts = []
             mirrors = [self.BASE_URL] + [
                 m for m in self.MIRRORS if m != self.BASE_URL

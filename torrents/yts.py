@@ -58,7 +58,7 @@ class Yts:
 
     @decorator_asyncio_fix
     async def _fetch_json(self, url, retries=2):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             for attempt in range(retries):
                 try:
                     async with session.get(

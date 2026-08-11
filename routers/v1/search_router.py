@@ -55,7 +55,7 @@ async def search_for_torrents(
         resp = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
     except asyncio.TimeoutError:
         task.cancel()
-        site_health.mark_failure(site)
+        # Slow but alive: don't blacklist, retry next time (results matter).
         return error_handler(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             json_message={"error": "Site took too long to respond, try again."},

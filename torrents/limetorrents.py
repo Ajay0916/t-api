@@ -114,7 +114,7 @@ class Limetorrent:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             path = "/search/all/{}//{}".format(quote(query), page)
@@ -164,14 +164,14 @@ class Limetorrent:
         return result
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             path = "/top100"
             return await self.parser_result(start_time, path, session)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

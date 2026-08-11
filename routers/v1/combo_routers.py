@@ -95,11 +95,22 @@ async def get_search_combo(
 
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
-    COMBO = {"data": main_data + last_data}
+    # Dedup by infohash BEFORE the limit cap so duplicate torrents from
+    # different sites never waste WZML result slots (best seeder wins).
+    seen_hashes = set()
+    unique_data = []
+    for item in main_data + last_data:
+        h = str(item.get("hash") or "").strip().lower()
+        if h and h in seen_hashes:
+            continue
+        if h:
+            seen_hashes.add(h)
+        unique_data.append(item)
+    COMBO = {"data": unique_data}
     if limit > 0:
         COMBO["data"] = COMBO["data"][:limit]
     COMBO["time"] = time.time() - start_time
-    COMBO["total"] = total_torrents_overall
+    COMBO["total"] = len(COMBO["data"])
     if total_torrents_overall == 0:
         return error_handler(
             status_code=status.HTTP_404_NOT_FOUND,

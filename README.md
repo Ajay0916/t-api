@@ -24,12 +24,15 @@
 
 - **25 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
+- **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo respects `limit`** — `/all/search` now returns exactly what you ask for (before it could return up to 750+ items even with `limit=5`).
+- **Combo de-duplicates by infohash** — same torrent from multiple sites takes only the best-seeder row (before the limit cap), so WZML result slots never fill with repeats.
+- **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, combo availability & per-site limit.
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
@@ -72,6 +75,13 @@ python main.py                  # → http://localhost:8009
 VPS par 24×7 chalane ke liye:
 
 ```sh
+nohup ./venv/bin/python main.py > server.log 2>&1 &
+```
+
+IP block hote par proxy/Tor se chalane ke liye (sab sites support karti hain):
+
+```sh
+export HTTP_PROXY="http://proxy-host:port"
 nohup ./venv/bin/python main.py > server.log 2>&1 &
 ```
 

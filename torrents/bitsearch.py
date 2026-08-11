@@ -102,7 +102,7 @@ class Bitsearch:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             path = "/search?q={}&page={}".format(quote(query), page)
@@ -150,7 +150,7 @@ class Bitsearch:
         return results
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/trending"

@@ -115,7 +115,7 @@ class NyaaSi:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             rss_url = self.BASE_URL + "/?page=rss&q={}&c=0_0&f=0".format(
@@ -146,7 +146,7 @@ class NyaaSi:
         return results
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             rss_url = self.BASE_URL + "/?page=rss&c=0_0&f=0"

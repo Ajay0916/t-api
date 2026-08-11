@@ -159,7 +159,7 @@ class Libgen:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
             htmls = None

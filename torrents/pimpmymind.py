@@ -157,7 +157,7 @@ class PimpMyMind:
     @decorator_asyncio_fix
     async def search(self, query, page, limit):
         self.LIMIT = limit
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             return await self._paginate(
                 session,
@@ -171,7 +171,7 @@ class PimpMyMind:
     @decorator_asyncio_fix
     async def recent(self, category, page, limit):
         self.LIMIT = limit
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             return await self._paginate(
                 session,

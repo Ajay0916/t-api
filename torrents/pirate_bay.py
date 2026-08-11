@@ -63,7 +63,7 @@ class PirateBay:
         }
 
     async def _fetch(self, url):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                 return json.loads(await res.text())
 

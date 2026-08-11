@@ -69,6 +69,7 @@ class TorrentGalaxy:
                     async with aiohttp.ClientSession(
                         connector=aiohttp.TCPConnector(ssl=True),
                         connector_owner=False,
+                        trust_env=True,
                     ) as session:
                         async with session.get(
                             url,
