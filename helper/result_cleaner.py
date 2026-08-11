@@ -1,5 +1,7 @@
 import re
 
+from helper.trackers import build_magnet, build_torrent_url
+
 
 def _norm(text):
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
@@ -56,7 +58,19 @@ def clean_results(resp, sort=True):
         if isinstance(item, dict):
             item = {k: v for k, v in item.items() if v is not None}
             # WZML-X renders a button from magnet/torrent; results with
-            # neither are useless, so drop them.
+            # neither are useless, so drop them. Before dropping, build any
+            # missing link from the infohash so hash-bearing results always
+            # give WZML a Direct Link (.torrent) AND a magnet.
+            info_hash = str(item.get("hash") or "").strip()
+            if info_hash:
+                if not item.get("torrent"):
+                    item["torrent"] = build_torrent_url(
+                        info_hash, item.get("name") or ""
+                    )
+                if not item.get("magnet"):
+                    item["magnet"] = build_magnet(
+                        info_hash, item.get("name") or ""
+                    )
             if not (item.get("magnet") or item.get("torrent")):
                 continue
             for key in ("seeders", "leechers", "downloads"):
