@@ -10,6 +10,7 @@ from routers.v1.combo_routers import router as combo_router
 from routers.v1.sites_list_router import router as site_list_router
 from routers.home_router import router as home_router
 from routers.v1.search_url_router import router as search_url_router
+from routers.v1.download_router import router as download_router
 from helper.uptime import getUptime
 from helper.dependencies import authenticate_request
 from mangum import Mangum
@@ -64,6 +65,7 @@ app.include_router(recent_router, prefix="/api/v1/recent", dependencies=[Depends
 app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(authenticate_request)])
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
+app.include_router(download_router, prefix="/api/v1/download")
 app.include_router(home_router, prefix="")
 
 handler = Mangum(app)
