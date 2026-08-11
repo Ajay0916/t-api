@@ -1,7 +1,7 @@
 services:
   # A Docker web service
   - type: web
-    name: torrent-api-py
+    name: t-api
     runtime: python
     plan: free
     autoDeploy: true
