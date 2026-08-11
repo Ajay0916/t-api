@@ -81,58 +81,62 @@ class ExtraTorrent:
             return None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                html = await res.text()
-            tid_match = re.search(r"-(\d+)/?$", url)
-            if not tid_match:
-                tid_match = re.search(r'data-id="(\d+)"', html)
-            page_token = re.search(r"window\.pageToken\s*=\s*'([^']+)'", html)
-            csrf = re.search(r"window\.csrfToken\s*=\s*'([^']+)'", html)
-            if not (tid_match and page_token and csrf):
-                return
-            timestamp = int(time.time())
-            hmac = hashlib.sha256(
-                "{}|{}|{}".format(
-                    tid_match.group(1), timestamp, page_token.group(1)
-                ).encode()
-            ).hexdigest()
-            data = {
-                "torrent_id": tid_match.group(1),
-                "download_type": "magnet",
-                "timestamp": timestamp,
-                "hmac": hmac,
-                "sessid": csrf.group(1),
-            }
-            headers = {
-                "User-Agent": HEADER_AIO["User-Agent"],
-                "Referer": url,
-                "X-Requested-With": "XMLHttpRequest",
-            }
-            async with session.post(
-                self.BASE_URL + "/ajax/getTorrentMagnet.php",
-                data=data,
-                headers=headers,
-            ) as res:
-                body = await res.text()
-            resp = json.loads(body)
-            if resp.get("success") and resp.get("url"):
-                magnet = resp["url"]
-                obj["magnet"] = magnet
-                hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
-                if hash_match:
-                    obj["hash"] = hash_match.group(1)
-        except:
-            return None
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    html = await res.text()
+                tid_match = re.search(r"-(\d+)/?$", url)
+                if not tid_match:
+                    tid_match = re.search(r'data-id="(\d+)"', html)
+                page_token = re.search(r"window\.pageToken\s*=\s*'([^']+)'", html)
+                csrf = re.search(r"window\.csrfToken\s*=\s*'([^']+)'", html)
+                if not (tid_match and page_token and csrf):
+                    return
+                timestamp = int(time.time())
+                hmac = hashlib.sha256(
+                    "{}|{}|{}".format(
+                        tid_match.group(1), timestamp, page_token.group(1)
+                    ).encode()
+                ).hexdigest()
+                data = {
+                    "torrent_id": tid_match.group(1),
+                    "download_type": "magnet",
+                    "timestamp": timestamp,
+                    "hmac": hmac,
+                    "sessid": csrf.group(1),
+                }
+                headers = {
+                    "User-Agent": HEADER_AIO["User-Agent"],
+                    "Referer": url,
+                    "X-Requested-With": "XMLHttpRequest",
+                }
+                async with session.post(
+                    self.BASE_URL + "/ajax/getTorrentMagnet.php",
+                    data=data,
+                    headers=headers,
+                ) as res:
+                    body = await res.text()
+                resp = json.loads(body)
+                if resp.get("success") and resp.get("url"):
+                    magnet = resp["url"]
+                    obj["magnet"] = magnet
+                    hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                    if hash_match:
+                        obj["hash"] = hash_match.group(1)
+            except:
+                return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(
+                            session, url, result["data"][idx], sem
+                        )
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -156,4 +160,33 @@ class ExtraTorrent:
             url = self.BASE_URL + "/browse/?q={}".format(requests_quote(query))
             if page > 1:
                 url += "&page={}".format(page)
-            return await self.parser_result(start_time, url, session)
+            results = await self.parser_result(start_time, url, session)
+            if results is None:
+                return None
+            results["current_page"] = page
+            while len(results["data"]) < self.LIMIT:
+                try:
+                    total_pages = results.get("total_pages", page)
+                except:
+                    break
+                if page >= total_pages or page >= 25:
+                    break
+                page += 1
+                url = self.BASE_URL + "/browse/?q={}&page={}".format(
+                    requests_quote(query), page
+                )
+                res = await self.parser_result(
+                    time.time() - start_time, url, session
+                )
+                if res is None or len(res["data"]) == 0:
+                    break
+                for obj in res["data"]:
+                    results["data"].append(obj)
+                results["current_page"] = page
+                if res.get("total_pages"):
+                    results["total_pages"] = res["total_pages"]
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+            results["data"] = results["data"][0 : self.LIMIT]
+            results["total"] = len(results["data"])
+            return results

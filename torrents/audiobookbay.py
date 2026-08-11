@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from urllib.parse import quote
 
 import aiohttp
 from helper.session import get_connector
@@ -115,7 +116,7 @@ class AudiobookBay:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/?s={}".format(query)
+            url = self.BASE_URL + "/?s={}".format(quote(query))
             return await self.parser_result(
                 start_time, url, session, page=page, query=query
             )
@@ -140,7 +141,9 @@ class AudiobookBay:
                     if page >= 25:
                         break
                     page += 1
-                    url = self.BASE_URL + "/page/{}/?s={}".format(page, query)
+                    url = self.BASE_URL + "/page/{}/?s={}".format(
+                        page, quote(query)
+                    )
                     html = await Scraper().get_all_results(session, url)
                     res = self._parser(html)
                     if res is None or len(res["data"]) == 0:
