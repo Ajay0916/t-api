@@ -9,7 +9,7 @@ router = APIRouter(tags=["Torrent By Url"])
 @router.get("/")
 @router.get("")
 async def get_torrent_from_url(site: str, url: str):
-    site = site.lower()
+    site = site.lower().strip()
     all_sites = check_if_site_available(site)
     if not all_sites:
         return error_handler(

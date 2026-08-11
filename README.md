@@ -38,6 +38,7 @@
 - **Query encoding fixes** — multi-word queries (`bob proctor`) work on every site.
 - **Cleaner output** — seeders/leechers/downloads normalized to int.
 - **No empty WZML buttons** — results with neither a magnet nor a `.torrent`/direct link are dropped from every response, so every rendered row has a working download button.
+- **Lenient params** — `site`/`query` are trimmed, so trailing spaces (WZML sends `query=kgf `) no longer break or skew results.
 - **Caching** — repeated queries served from cache (`fresh=1` to bypass).
 - **API key auth** — optional `PYTORRENTS_API_KEY` via `x-api-key` header.
 

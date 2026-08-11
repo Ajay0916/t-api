@@ -17,7 +17,7 @@ async def get_recent(
     page: Optional[int] = 1,
 ):
     all_sites = check_if_site_available(site)
-    site = site.lower()
+    site = site.lower().strip()
     category = category.lower() if category is not None else None
     if all_sites:
         limit = (

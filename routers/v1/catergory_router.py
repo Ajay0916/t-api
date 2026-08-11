@@ -18,9 +18,9 @@ async def get_category(
     page: Optional[int] = 1,
 ):
     all_sites = check_if_site_available(site)
-    site = site.lower()
-    query = query.lower()
-    category = category.lower()
+    site = site.lower().strip()
+    query = query.lower().strip()
+    category = category.lower().strip()
     if all_sites:
         limit = (
             all_sites[site]["limit"]

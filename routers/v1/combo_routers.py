@@ -24,7 +24,7 @@ async def get_search_combo(
     query: str, limit: Optional[int] = 0, fresh: Optional[int] = 0
 ):
     start_time = time.time()
-    query = query.lower()
+    query = query.lower().strip()
 
     cache_key = f"combo:{query}:{limit}"
     if not fresh:

@@ -27,8 +27,8 @@ async def search_for_torrents(
     page: Optional[int] = 1,
     fresh: Optional[int] = 0,
 ):
-    site = site.lower()
-    query = query.lower()
+    site = site.lower().strip()
+    query = query.lower().strip()
     all_sites = check_if_site_available(site)
     if not all_sites:
         return error_handler(

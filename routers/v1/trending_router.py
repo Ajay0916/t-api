@@ -16,7 +16,7 @@ async def get_trending(
     category: Optional[str] = None,
     page: Optional[int] = 1,
 ):
-    site = site.lower()
+    site = site.lower().strip()
     all_sites = check_if_site_available(site)
     category = category.lower() if category is not None else None
     if all_sites:
