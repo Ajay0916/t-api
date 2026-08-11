@@ -21,6 +21,3 @@ AUDIOBOOKBAY = "http://theaudiobookbay.se"
 MAGNETZ = "https://magnetz.eu"
 
 FREECOURSEWEB = "https://freecourseweb.com"
-BOLLY4U = "https://bolly4u.mov"
-WORLDFREE4U = "https://worldfree4u.frl"
-NINEXMOVIES = "https://9xmovies.schule"
