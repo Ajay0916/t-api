@@ -1,7 +1,7 @@
 import asyncio
 import re
 import time
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
@@ -18,48 +18,52 @@ class Kickass:
         self.LIMIT = None
 
     @decorator_asyncio_fix
-    async def _individual_scrap(self, session, url, obj):
-        try:
-            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                html = await res.text(encoding="ISO-8859-1")
-                soup = BeautifulSoup(html, "html.parser")
-                try:
-                    poster = soup.find("a", class_="movieCover")
-                    if poster:
-                        poster = poster.find("img")["src"]
-                        obj["poster"] = self.BASE_URL + poster
-                    imgs = (soup.find("div", class_="data")).find_all("img")
-                    if imgs and len(imgs) > 0:
-                        obj["screenshot"] = [img["src"] for img in imgs]
-                    magnet_and_torrent = soup.find_all("a", class_="kaGiantButton")
-                    magnet = None
-                    for a in magnet_and_torrent:
-                        href = a.get("href", "")
-                        if "magnet:?xt=" in unquote(href):
-                            if "mylink.cloud" in href:
-                                magnet = parse_qs(urlparse(href).query).get(
-                                    "url", [None]
-                                )[0]
-                            else:
-                                magnet = unquote(href)
-                            break
-                    if magnet:
-                        hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
-                        if hash_match:
-                            obj["hash"] = hash_match.group(1)
-                        obj["magnet"] = magnet
-                except:
-                    ...
-        except:
-            return None
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                    html = await res.text(encoding="ISO-8859-1")
+                    soup = BeautifulSoup(html, "html.parser")
+                    try:
+                        poster = soup.find("a", class_="movieCover")
+                        if poster:
+                            poster = poster.find("img")["src"]
+                            obj["poster"] = self.BASE_URL + poster
+                        imgs = (soup.find("div", class_="data")).find_all("img")
+                        if imgs and len(imgs) > 0:
+                            obj["screenshot"] = [img["src"] for img in imgs]
+                        magnet_and_torrent = soup.find_all("a", class_="kaGiantButton")
+                        magnet = None
+                        for a in magnet_and_torrent:
+                            href = a.get("href", "")
+                            if "magnet:?xt=" in unquote(href):
+                                if "mylink.cloud" in href:
+                                    magnet = parse_qs(urlparse(href).query).get(
+                                        "url", [None]
+                                    )[0]
+                                else:
+                                    magnet = unquote(href)
+                                break
+                        if magnet:
+                            hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                            if hash_match:
+                                obj["hash"] = hash_match.group(1)
+                            obj["magnet"] = magnet
+                    except:
+                        ...
+            except:
+                return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
+        sem = asyncio.Semaphore(10)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx])
+                        self._individual_scrap(
+                            session, url, result["data"][idx], sem
+                        )
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -122,8 +126,39 @@ class Kickass:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/usearch/{}/{}/".format(query, page)
-            return await self.parser_result(start_time, url, session)
+            url = self.BASE_URL + "/usearch/{}/{}/".format(
+                quote(query), page
+            )
+            results = await self.parser_result(start_time, url, session)
+            if results is None:
+                return None
+            results["current_page"] = page
+            while len(results["data"]) < self.LIMIT:
+                try:
+                    total_pages = results.get("total_pages") or page
+                except:
+                    break
+                if page >= total_pages or page >= 25:
+                    break
+                page += 1
+                url = self.BASE_URL + "/usearch/{}/{}/".format(
+                    quote(query), page
+                )
+                res = await self.parser_result(
+                    time.time() - start_time, url, session
+                )
+                if res is None or len(res["data"]) == 0:
+                    break
+                for obj in res["data"]:
+                    results["data"].append(obj)
+                results["current_page"] = page
+                if res.get("total_pages"):
+                    results["total_pages"] = res["total_pages"]
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+            results["data"] = results["data"][0 : self.LIMIT]
+            results["total"] = len(results["data"])
+            return results
 
     async def parser_result(self, start_time, url, session):
         htmls = await Scraper().get_all_results(session, url)

@@ -1,5 +1,7 @@
 import asyncio
 import time
+from urllib.parse import quote
+
 import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
@@ -117,7 +119,9 @@ class Libgen:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/index.php?req={}&res=100".format(query)
+            url = self.BASE_URL + "/index.php?req={}&res=100".format(
+                quote(query)
+            )
             return await self.parser_result(start_time, url, session)
 
     async def parser_result(self, start_time, url, session):

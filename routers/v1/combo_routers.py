@@ -108,23 +108,37 @@ async def get_all_trending(limit: Optional[int] = 0):
         if all_sites[site].get("trending_available")
         and all_sites[site].get("website")
     ]
-    tasks = []
     COMBO = {"data": []}
     total_torrents_overall = 0
+    tasks = []
     for site in sites_list:
         limit = (
             all_sites[site]["limit"]
             if limit == 0 or limit > all_sites[site]["limit"]
             else limit
         )
+        if site_health.is_blocked(site):
+            continue
         tasks.append(
-            asyncio.create_task(all_sites[site]["website"]().trending(category=None, page=1, limit=limit))
+            (
+                site,
+                asyncio.create_task(
+                    all_sites[site]["website"]().trending(
+                        category=None, page=1, limit=limit
+                    )
+                ),
+            )
         )
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    for res in results:
-        if isinstance(res, Exception) or res is None:
+    for site, task in tasks:
+        try:
+            res = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+        except Exception:
+            site_health.mark_failure(site)
+            continue
+        if res is None:
             continue
         if len(res["data"]) > 0:
+            site_health.mark_success(site)
             for torrent in res["data"]:
                 COMBO["data"].append(torrent)
             total_torrents_overall = total_torrents_overall + res["total"]
@@ -149,23 +163,37 @@ async def get_all_recent(limit: Optional[int] = 0):
         if all_sites[site].get("recent_available")
         and all_sites[site].get("website")
     ]
-    tasks = []
     COMBO = {"data": []}
     total_torrents_overall = 0
+    tasks = []
     for site in sites_list:
         limit = (
             all_sites[site]["limit"]
             if limit == 0 or limit > all_sites[site]["limit"]
             else limit
         )
+        if site_health.is_blocked(site):
+            continue
         tasks.append(
-            asyncio.create_task(all_sites[site]["website"]().recent(category=None, page=1, limit=limit))
+            (
+                site,
+                asyncio.create_task(
+                    all_sites[site]["website"]().recent(
+                        category=None, page=1, limit=limit
+                    )
+                ),
+            )
         )
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    for res in results:
-        if isinstance(res, Exception) or res is None:
+    for site, task in tasks:
+        try:
+            res = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+        except Exception:
+            site_health.mark_failure(site)
+            continue
+        if res is None:
             continue
         if len(res["data"]) > 0:
+            site_health.mark_success(site)
             for torrent in res["data"]:
                 COMBO["data"].append(torrent)
             total_torrents_overall = total_torrents_overall + res["total"]

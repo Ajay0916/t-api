@@ -159,28 +159,62 @@ class Zooqle:
         self.LIMIT = limit
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
-            url = "{}?s={}&paged={}".format(self.BASE_URL, quote(query), page)
-            try:
-                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                    html = await res.text()
-            except Exception:
+
+            async def _fetch_page(p):
+                url = "{}?s={}&paged={}".format(
+                    self.BASE_URL, quote(query), p
+                )
+                try:
+                    async with session.get(
+                        url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
+                    ) as res:
+                        return await res.text()
+                except Exception:
+                    return None
+
+            async def _enrich(items):
+                sem = asyncio.Semaphore(10)
+                await asyncio.gather(
+                    *[
+                        self._individual(session, item["url"], item, sem)
+                        for item in items
+                    ]
+                )
+                await asyncio.gather(
+                    *[
+                        self._magnet(session, item["torrent"], item, sem)
+                        for item in items
+                        if item.get("torrent")
+                    ]
+                )
+
+            html = await _fetch_page(page)
+            if html is None:
                 return None
             result = self._parser(html, page, start_time)
             if result is None:
                 return None
-            data = result["data"]
-            sem = asyncio.Semaphore(10)
-            await asyncio.gather(
-                *[
-                    self._individual(session, item["url"], item, sem)
-                    for item in data
-                ]
-            )
-            await asyncio.gather(
-                *[
-                    self._magnet(session, item["torrent"], item, sem)
-                    for item in data
-                    if item.get("torrent")
-                ]
-            )
+            await _enrich(result["data"])
+            while len(result["data"]) < self.LIMIT:
+                try:
+                    total_pages = result.get("total_pages") or page
+                except:
+                    break
+                if page >= total_pages or page >= 25:
+                    break
+                page += 1
+                html = await _fetch_page(page)
+                if html is None:
+                    break
+                nxt = self._parser(html, page, start_time)
+                if nxt is None or len(nxt["data"]) == 0:
+                    break
+                await _enrich(nxt["data"])
+                result["data"].extend(nxt["data"])
+                if nxt.get("total_pages"):
+                    result["total_pages"] = nxt["total_pages"]
+                result["time"] = time.time() - start_time
+                result["total"] = len(result["data"])
+            result["data"] = result["data"][0 : self.LIMIT]
+            result["total"] = len(result["data"])
             return result
