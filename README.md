@@ -89,14 +89,12 @@ nohup ./venv/bin/python main.py > server.log 2>&1 &
 | `GET /api/v1/all/search` | `query` ✅, `limit` (per-site results combined) |
 | `GET /api/v1/all/trending` | `limit` |
 | `GET /api/v1/all/recent` | `limit` |
-| `GET /api/v1/rss` | `query` ✅, `site` (default `all`), `limit` (max 100), `fresh` — RSS 2.0 feed |
 
 **Example**
 
 ```sh
 curl "http://localhost:8009/api/v1/search?site=1337x&query=eternals&limit=10"
 curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5"
-curl "http://localhost:8009/api/v1/rss?query=kgf&site=all&limit=20"   # RSS feed (RSS readers/bots)
 ```
 
 **Response**

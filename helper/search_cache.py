@@ -89,8 +89,6 @@ class TTLCache:
 
 search_cache = TTLCache(max_size=256, ttl=300, name="search")
 combo_cache = TTLCache(max_size=128, ttl=300, name="combo")
-rss_cache = TTLCache(max_size=64, ttl=300, name="rss")
 
 search_cache.load()
 combo_cache.load()
-rss_cache.load()
