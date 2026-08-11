@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from routers.v1.search_router import router as search_router
 from routers.v1.trending_router import router as trending_router
 from routers.v1.catergory_router import router as category_router
@@ -21,7 +22,7 @@ startTime = time.time()
 
 app = FastAPI(
     title="Torrents-Api",
-    version="1.2.0",
+    version="1.3.0",
     description="Unofficial Torrents / Books / Courses API — 25 sites, mirror rotation, combo search",
     docs_url="/docs",
     contact={
@@ -31,6 +32,8 @@ app = FastAPI(
 )
 
 origins = ["*"]
+
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,7 +53,7 @@ async def health_route(req: Request):
     return JSONResponse(
         {
             "app": "Torrents-Api",
-            "version": "v" + "1.2.0",
+            "version": "v" + "1.3.0",
             "ip": req.client.host,
             "uptime": ceil(getUptime(startTime)),
         }

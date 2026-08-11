@@ -1,6 +1,15 @@
-FROM python:3.8
-ADD requirements.txt requirements.txt
-ADD main.py main.py
-RUN pip install -r requirements.txt
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY . .
-CMD ["python" ,"main.py"]
+
+EXPOSE 8009
+
+CMD ["python", "main.py"]

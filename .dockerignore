@@ -1,7 +1,9 @@
-# created by virtualenv automatically
-__pycache__
-api-py
-.env
-function.*
-.vscode
-.github
+venv/
+__pycache__/
+cache_data/
+.git/
+*.log
+server.log
+nohup.out
+plugins/
+test.py

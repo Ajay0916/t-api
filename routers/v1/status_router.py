@@ -22,6 +22,7 @@ async def get_status():
             "blocked": st["blocked"],
             "cooldown_remaining": st["cooldown_remaining"],
             "fail_count": st["fail_count"],
+            "last_error": st.get("last_error", ""),
             "combo_available": bool(cfg.get("combo_available", True)),
             "limit": cfg.get("limit"),
         }

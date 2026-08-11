@@ -82,8 +82,8 @@ async def get_search_combo(
             res = task.result()
         except asyncio.CancelledError:
             continue
-        except Exception:
-            site_health.mark_failure(site)
+        except Exception as e:
+            site_health.mark_failure(site, e)
             continue
         if res is None:
             continue
@@ -164,8 +164,8 @@ async def get_all_trending(limit: Optional[int] = 0):
             res = task.result()
         except asyncio.CancelledError:
             continue
-        except Exception:
-            site_health.mark_failure(site)
+        except Exception as e:
+            site_health.mark_failure(site, e)
             continue
         if res is None:
             continue
@@ -230,8 +230,8 @@ async def get_all_recent(limit: Optional[int] = 0):
             res = task.result()
         except asyncio.CancelledError:
             continue
-        except Exception:
-            site_health.mark_failure(site)
+        except Exception as e:
+            site_health.mark_failure(site, e)
             continue
         if res is None:
             continue

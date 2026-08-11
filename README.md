@@ -33,7 +33,8 @@
 - **Combo respects `limit`** — `/all/search` now returns exactly what you ask for (before it could return up to 750+ items even with `limit=5`).
 - **Combo de-duplicates by infohash** — same torrent from multiple sites takes only the best-seeder row (before the limit cap), so WZML result slots never fill with repeats.
 - **Infohash link fallback** — every result carrying an infohash automatically gets both a magnet AND a `.torrent` Direct Link (itorrents.net), so WZML always has a working button even when a scraper only exposes the hash.
-- **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, combo availability & per-site limit.
+- **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
+- **GZip responses** — API responses are gzip-compressed automatically (big combo payloads reach WZML faster).
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
@@ -84,6 +85,12 @@ IP block hote par proxy/Tor se chalane ke liye (sab sites support karti hain):
 ```sh
 export HTTP_PROXY="http://proxy-host:port"
 nohup ./venv/bin/python main.py > server.log 2>&1 &
+```
+
+Docker se chalane ke liye (cache persistent, auto-restart):
+
+```sh
+docker compose up -d --build
 ```
 
 ---

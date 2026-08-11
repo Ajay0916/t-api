@@ -8,16 +8,20 @@ class SiteHealth:
         self.cooldown = cooldown
         self._cooldown_until = {}
         self._fail_count = {}
+        self._last_error = {}
 
     def mark_success(self, site):
         self._cooldown_until.pop(site, None)
         self._fail_count[site] = 0
+        self._last_error.pop(site, None)
 
-    def mark_failure(self, site):
+    def mark_failure(self, site, error=None):
         n = self._fail_count.get(site, 0) + 1
         self._fail_count[site] = n
         backoff = min(self.cooldown * n, 3600)
         self._cooldown_until[site] = time.monotonic() + backoff
+        if error:
+            self._last_error[site] = str(error)[:120]
 
     def is_blocked(self, site):
         until = self._cooldown_until.get(site)

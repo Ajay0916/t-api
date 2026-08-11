@@ -1,6 +1,16 @@
-version: '3.9'
 services:
-  api-py:
+  torrents-api:
     build: .
+    container_name: torrents-api
+    restart: unless-stopped
     ports:
       - "8009:8009"
+    environment:
+      # Optional: protect the API (WZML-X doesn't send headers — keep unset for WZML)
+      # PYTORRENT_API_KEY: "change-me"
+      # Optional: route all site scrapers through a proxy/Tor when IP is blocked
+      # HTTP_PROXY: "http://proxy-host:port"
+      # HTTPS_PROXY: "http://proxy-host:port"
+      TORRENTS_CACHE_DIR: "/app/cache_data"
+    volumes:
+      - ./cache_data:/app/cache_data

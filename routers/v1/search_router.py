@@ -60,8 +60,8 @@ async def search_for_torrents(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             json_message={"error": "Site took too long to respond, try again."},
         )
-    except Exception:
-        site_health.mark_failure(site)
+    except Exception as e:
+        site_health.mark_failure(site, e)
         return error_handler(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             json_message={"error": "Site is temporarily unavailable."},
