@@ -1,6 +1,7 @@
 from torrents.freecourseweb import FreeCourseWeb
 from torrents.hindibooks import HindiBooks
 from torrents.hindiaudio import HindiAudio
+from torrents.archivebooks import ArchiveBooks
 from torrents.audiobookbay import AudiobookBay
 from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
@@ -25,6 +26,17 @@ from torrents.zooqle import Zooqle
 all_sites = {
     "hindibooks": {
         "website": HindiBooks,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 20,
+    },
+    "archivebooks": {
+        "website": ArchiveBooks,
         "combo_available": False,
         "trending_available": False,
         "trending_category": False,
