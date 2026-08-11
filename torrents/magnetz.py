@@ -1,5 +1,6 @@
 import re
 import time
+import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 import aiohttp
@@ -16,6 +17,70 @@ class Magnetz:
     def __init__(self):
         self.BASE_URL = MAGNETZ
         self.LIMIT = None
+
+    def _parse_rss(self, xml_text, start_time):
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return None
+        data = []
+        for item in root.iter("item"):
+            def field(tag):
+                el = item.find(tag)
+                return el.text.strip() if el is not None and el.text else ""
+
+            name = field("title")
+            if not name:
+                continue
+            size = field("{https://magnetz.eu/rss/}contentLength")
+            magnet = field("{https://magnetz.eu/rss/}magnetURI")
+            info_hash = field("{https://magnetz.eu/rss/}infoHash")
+            if not info_hash:
+                m = re.search(r"urn:btih:([a-fA-F0-9]{40})", magnet)
+                info_hash = m.group(1) if m else ""
+            data.append(
+                {
+                    "name": name,
+                    "size": self._format_size(size) if size else None,
+                    "date": field("pubDate"),
+                    "seeders": None,
+                    "leechers": None,
+                    "category": None,
+                    "uploader": "",
+                    "hash": info_hash if info_hash else None,
+                    "magnet": magnet if magnet else None,
+                    "torrent": (
+                        build_torrent_url(info_hash, name) if info_hash else None
+                    ),
+                    "url": field("link"),
+                }
+            )
+            if self.LIMIT and len(data) >= self.LIMIT:
+                break
+        if not data:
+            return None
+        return {
+            "data": data,
+            "current_page": 1,
+            "total_pages": 1,
+            "time": time.time() - start_time,
+            "total": len(data),
+        }
+
+    @staticmethod
+    def _format_size(size):
+        try:
+            size = float(size)
+        except (TypeError, ValueError):
+            return str(size)
+        if size <= 0:
+            return "0"
+        units = ["B", "KB", "MB", "GB", "TB"]
+        i = 0
+        while size >= 1024 and i < len(units) - 1:
+            size /= 1024
+            i += 1
+        return "{:.2f} {}".format(size, units[i])
 
     def _parser(self, htmls):
         try:
@@ -85,6 +150,15 @@ class Magnetz:
             return await self.parser_result(
                 start_time, url, session, page=page, query=query
             )
+
+    async def recent(self, category, page, limit):
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            start_time = time.time()
+            self.LIMIT = limit
+            htmls = await Scraper().get_all_results(session, self.BASE_URL + "/rss")
+            if not htmls or not htmls[0]:
+                return None
+            return self._parse_rss(htmls[0], start_time)
 
     async def parser_result(self, start_time, url, session, page=1, query=None):
         html = await Scraper().get_all_results(session, url)

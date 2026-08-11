@@ -11,6 +11,7 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import EXTO
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.trackers import build_torrent_url
 
 
 class ExtraTorrent:
@@ -124,12 +125,15 @@ class ExtraTorrent:
                     hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
                     if hash_match:
                         obj["hash"] = hash_match.group(1)
+                        obj["torrent"] = build_torrent_url(
+                            hash_match.group(1), obj.get("name") or ""
+                        )
             except:
                 return None
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(20)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:

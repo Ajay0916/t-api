@@ -82,39 +82,60 @@ class FreeCourseWeb:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            all_data = []
-            total_pages = page
-            current = page
-            while True:
-                if current > 1:
-                    url = self.BASE_URL + "/page/{}/?s={}".format(
-                        current, quote(query)
-                    )
-                else:
-                    url = self.BASE_URL + "/?s={}".format(quote(query))
-                html = await Scraper().get_all_results(session, url)
-                results = self._parser(html)
-                if results is None or len(results["data"]) == 0:
-                    break
-                seen = {obj["url"] for obj in all_data}
-                for obj in results["data"]:
-                    if obj["url"] not in seen:
-                        all_data.append(obj)
-                if results.get("total_pages"):
-                    total_pages = results["total_pages"]
-                if len(all_data) >= self.LIMIT:
-                    break
-                if current >= total_pages or current >= 25:
-                    break
-                current += 1
-            if not all_data:
-                return None
-            urls = [obj["url"] for obj in all_data]
-            results = {"data": all_data}
-            results = await self._get_magnets(results, session, urls)
-            results["data"] = results["data"][0 : self.LIMIT]
-            results["time"] = time.time() - start_time
-            results["total"] = len(results["data"])
-            results["current_page"] = page
-            results["total_pages"] = total_pages
-            return results
+            return await self._collect(
+                session,
+                lambda p: (
+                    self.BASE_URL + "/page/{}/?s={}".format(p, quote(query))
+                    if p > 1
+                    else self.BASE_URL + "/?s={}".format(quote(query))
+                ),
+                page,
+                start_time,
+            )
+
+    async def recent(self, category, page, limit):
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            start_time = time.time()
+            self.LIMIT = limit
+            return await self._collect(
+                session,
+                lambda p: (
+                    self.BASE_URL + "/tutorialsv4/page/{}/".format(p)
+                    if p > 1
+                    else self.BASE_URL + "/tutorialsv4/"
+                ),
+                page,
+                start_time,
+            )
+
+    async def _collect(self, session, url_fn, page, start_time):
+        all_data = []
+        total_pages = page
+        current = page
+        while True:
+            html = await Scraper().get_all_results(session, url_fn(current))
+            results = self._parser(html)
+            if results is None or len(results["data"]) == 0:
+                break
+            seen = {obj["url"] for obj in all_data}
+            for obj in results["data"]:
+                if obj["url"] not in seen:
+                    all_data.append(obj)
+            if results.get("total_pages"):
+                total_pages = results["total_pages"]
+            if len(all_data) >= self.LIMIT:
+                break
+            if current >= total_pages or current >= 25:
+                break
+            current += 1
+        if not all_data:
+            return None
+        urls = [obj["url"] for obj in all_data]
+        results = {"data": all_data}
+        results = await self._get_magnets(results, session, urls)
+        results["data"] = results["data"][0 : self.LIMIT]
+        results["time"] = time.time() - start_time
+        results["total"] = len(results["data"])
+        results["current_page"] = page
+        results["total_pages"] = total_pages
+        return results

@@ -27,6 +27,8 @@
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
+- **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
+- **Faster detail scraping** — ExtraTorrent & MagnetDL concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
 - **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with per-site deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.

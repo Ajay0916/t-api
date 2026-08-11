@@ -159,62 +159,85 @@ class PimpMyMind:
         self.LIMIT = limit
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
-
-            async def _fetch_page(p):
-                url = "{}?s={}&paged={}".format(
+            return await self._paginate(
+                session,
+                lambda p: "{}?s={}&paged={}".format(
                     self.BASE_URL, quote(query), p
-                )
-                try:
-                    async with session.get(
-                        url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
-                    ) as res:
-                        return await res.text()
-                except Exception:
-                    return None
+                ),
+                page,
+                start_time,
+            )
 
-            async def _enrich(items):
-                sem = asyncio.Semaphore(10)
-                await asyncio.gather(
-                    *[
-                        self._individual(session, item["url"], item, sem)
-                        for item in items
-                    ]
-                )
-                await asyncio.gather(
-                    *[
-                        self._magnet(session, item["torrent"], item, sem)
-                        for item in items
-                        if item.get("torrent")
-                    ]
-                )
+    @decorator_asyncio_fix
+    async def recent(self, category, page, limit):
+        self.LIMIT = limit
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            start_time = time.time()
+            return await self._paginate(
+                session,
+                lambda p: (
+                    "{}/page/{}/".format(self.BASE_URL, p)
+                    if p > 1
+                    else self.BASE_URL
+                ),
+                page,
+                start_time,
+            )
 
+    @decorator_asyncio_fix
+    async def _paginate(self, session, url_fn, page, start_time):
+        async def _fetch_page(p):
+            try:
+                async with session.get(
+                    url_fn(p), headers=HEADER_AIO, timeout=AIO_TIMEOUT
+                ) as res:
+                    return await res.text()
+            except Exception:
+                return None
+
+        async def _enrich(items):
+            sem = asyncio.Semaphore(10)
+            await asyncio.gather(
+                *[
+                    self._individual(session, item["url"], item, sem)
+                    for item in items
+                ]
+            )
+            await asyncio.gather(
+                *[
+                    self._magnet(session, item["torrent"], item, sem)
+                    for item in items
+                    if item.get("torrent")
+                ]
+            )
+
+        html = await _fetch_page(page)
+        if html is None:
+            return None
+        result = self._parser(html, page, start_time)
+        if result is None:
+            return None
+        await _enrich(result["data"])
+        while len(result["data"]) < self.LIMIT:
+            try:
+                total_pages = result.get("total_pages") or page
+            except:
+                break
+            if page >= total_pages or page >= 25:
+                break
+            page += 1
             html = await _fetch_page(page)
             if html is None:
-                return None
-            result = self._parser(html, page, start_time)
-            if result is None:
-                return None
-            await _enrich(result["data"])
-            while len(result["data"]) < self.LIMIT:
-                try:
-                    total_pages = result.get("total_pages") or page
-                except:
-                    break
-                if page >= total_pages or page >= 25:
-                    break
-                page += 1
-                html = await _fetch_page(page)
-                if html is None:
-                    break
-                nxt = self._parser(html, page, start_time)
-                if nxt is None or len(nxt["data"]) == 0:
-                    break
-                await _enrich(nxt["data"])
-                result["data"].extend(nxt["data"])
-                if nxt.get("total_pages"):
-                    result["total_pages"] = nxt["total_pages"]
-                result["time"] = time.time() - start_time
-                result["total"] = len(result["data"])
-            result["data"] = result["data"][0 : self.LIMIT]
+                break
+            nxt = self._parser(html, page, start_time)
+            if nxt is None or len(nxt["data"]) == 0:
+                break
+            await _enrich(nxt["data"])
+            result["data"].extend(nxt["data"])
+            if nxt.get("total_pages"):
+                result["total_pages"] = nxt["total_pages"]
+            result["time"] = time.time() - start_time
             result["total"] = len(result["data"])
-            return result
+        result["data"] = result["data"][0 : self.LIMIT]
+        result["total"] = len(result["data"])
+        return result

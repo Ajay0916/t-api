@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+import xml.etree.ElementTree as ET
 from urllib.parse import quote
 
 import aiohttp
@@ -141,6 +142,61 @@ class AudiobookBay:
             return await self.parser_result(
                 start_time, path, session, page=page, query=query
             )
+
+    def _parse_rss(self, xml_text, start_time):
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return None
+        data = []
+        for item in root.iter("item"):
+            title_el = item.find("title")
+            link_el = item.find("link")
+            date_el = item.find("pubDate")
+            name = title_el.text.strip() if title_el is not None and title_el.text else ""
+            link = link_el.text.strip() if link_el is not None and link_el.text else ""
+            if not name or not link:
+                continue
+            data.append(
+                {
+                    "name": name,
+                    "size": "",
+                    "category": "",
+                    "date": date_el.text.strip() if date_el is not None and date_el.text else "",
+                    "uploader": "",
+                    "url": link,
+                    "hash": None,
+                    "magnet": None,
+                }
+            )
+            if self.LIMIT and len(data) >= self.LIMIT:
+                break
+        if not data:
+            return None
+        return {
+            "data": data,
+            "current_page": 1,
+            "total_pages": 1,
+            "time": time.time() - start_time,
+            "total": len(data),
+        }
+
+    async def recent(self, category, page, limit):
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            start_time = time.time()
+            self.LIMIT = limit
+            html = await self._fetch_page(session, "/feed/")
+            if html is None:
+                return None
+            results = self._parse_rss(html[0], start_time)
+            if results is None:
+                return None
+            urls = [item["url"] for item in results["data"]]
+            results = await self._get_torrent(results, session, urls)
+            results["data"] = results["data"][0 : self.LIMIT]
+            results["time"] = time.time() - start_time
+            results["total"] = len(results["data"])
+            return results
 
     async def parser_result(self, start_time, path, session, page=1, query=None):
         html = await self._fetch_page(session, path)
