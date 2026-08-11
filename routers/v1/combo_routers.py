@@ -86,6 +86,8 @@ async def get_search_combo(
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
     COMBO = {"data": main_data + last_data}
+    if limit > 0:
+        COMBO["data"] = COMBO["data"][:limit]
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = total_torrents_overall
     if total_torrents_overall == 0:
@@ -143,6 +145,8 @@ async def get_all_trending(limit: Optional[int] = 0):
             total_torrents_overall = total_torrents_overall + res["total"]
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = total_torrents_overall
+    if requested > 0:
+        COMBO["data"] = COMBO["data"][:requested]
     if total_torrents_overall == 0:
         return error_handler(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -197,6 +201,8 @@ async def get_all_recent(limit: Optional[int] = 0):
             total_torrents_overall = total_torrents_overall + res["total"]
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = total_torrents_overall
+    if requested > 0:
+        COMBO["data"] = COMBO["data"][:requested]
     if total_torrents_overall == 0:
         return error_handler(
             status_code=status.HTTP_404_NOT_FOUND,

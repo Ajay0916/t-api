@@ -9,6 +9,7 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import X1337
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.trackers import build_torrent_url
 
 HOSTS = [
     X1337,
@@ -92,6 +93,9 @@ class x1337:
                         obj["hash"] = re.search(
                             r"([{a-f\d,A-F\d}]{32,40})\b", magnet
                         ).group(0)
+                        obj["torrent"] = build_torrent_url(
+                            obj["hash"], obj.get("name") or ""
+                        )
                         try:
                             uls = soup.find_all("ul", class_="list")[1]
                             lis = uls.find_all("li")[0]

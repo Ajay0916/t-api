@@ -29,6 +29,9 @@
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent & MagnetDL concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results.
+- **Combo respects `limit`** — `/all/search` now returns exactly what you ask for (before it could return up to 750+ items even with `limit=5`).
+- **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
+- **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
 - **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with per-site deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.

@@ -62,18 +62,10 @@ class YourBittorrent:
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                html = None
-                for attempt in range(3):
-                    try:
-                        async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                            html = await res.text(encoding="ISO-8859-1")
-                        break
-                    except Exception:
-                        if attempt == 2:
-                            return None
-                        await asyncio.sleep(1)
-                if html is None:
-                    return None
+                async with session.get(
+                    url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
+                ) as res:
+                    html = await res.text(encoding="ISO-8859-1")
                 soup = BeautifulSoup(html, "html.parser")
                 try:
                     torrent_a = soup.find(
@@ -84,23 +76,19 @@ class YourBittorrent:
                         if torrent.startswith("/"):
                             torrent = self.BASE_URL + torrent
                         obj["torrent"] = torrent
-                        for attempt in range(3):
-                            try:
-                                async with session.get(
-                                    torrent, headers=HEADER_AIO
-                                ) as tr:
-                                    raw = await tr.read()
-                                info_hash = extract_info_hash(raw)
-                                if info_hash:
-                                    obj["hash"] = info_hash
-                                    obj["magnet"] = build_magnet(
-                                        info_hash, obj.get("name") or ""
-                                    )
-                                break
-                            except Exception:
-                                if attempt == 2:
-                                    pass
-                                await asyncio.sleep(1)
+                        try:
+                            async with session.get(
+                                torrent, headers=HEADER_AIO
+                            ) as tr:
+                                raw = await tr.read()
+                            info_hash = extract_info_hash(raw)
+                            if info_hash:
+                                obj["hash"] = info_hash
+                                obj["magnet"] = build_magnet(
+                                    info_hash, obj.get("name") or ""
+                                )
+                        except Exception:
+                            pass
                     try:
                         poster = soup.find("img", class_="img-fluid")
                         if poster:
@@ -114,7 +102,7 @@ class YourBittorrent:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(10)
+        sem = asyncio.Semaphore(15)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
