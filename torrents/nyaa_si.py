@@ -1,10 +1,24 @@
 import re
 import time
+import xml.etree.ElementTree as ET
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
+
 import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import NYAASI
+from helper.trackers import build_magnet
+
+NS = {"nyaa": "https://nyaa.si/xmlns/nyaa"}
+
+
+def _rss_date(value):
+    try:
+        return parsedate_to_datetime(value).strftime("%Y-%m-%d")
+    except (TypeError, ValueError):
+        return value or None
 
 
 class NyaaSi:
@@ -12,6 +26,41 @@ class NyaaSi:
     def __init__(self):
         self.BASE_URL = NYAASI
         self.LIMIT = None
+
+    def _parse_rss(self, xml_text):
+        try:
+            root = ET.fromstring(xml_text)
+        except ET.ParseError:
+            return None
+        results = []
+        for item in root.iter("item"):
+            title = item.findtext("title")
+            info_hash = item.findtext("nyaa:infoHash", namespaces=NS)
+            if not title or not info_hash:
+                continue
+            def _f(tag):
+                el = item.find("nyaa:" + tag, namespaces=NS)
+                return el.text if el is not None else None
+            link = item.findtext("link")
+            guid = item.findtext("guid")
+            results.append(
+                {
+                    "name": title,
+                    "size": _f("size"),
+                    "date": _rss_date(item.findtext("pubDate")),
+                    "seeders": _f("seeders"),
+                    "leechers": _f("leechers"),
+                    "downloads": _f("downloads"),
+                    "category": _f("category"),
+                    "hash": info_hash,
+                    "magnet": build_magnet(info_hash, title),
+                    "torrent": link,
+                    "url": guid or link,
+                }
+            )
+            if self.LIMIT and len(results) >= self.LIMIT:
+                break
+        return results
 
     def _parser(self, htmls):
         try:
@@ -69,7 +118,22 @@ class NyaaSi:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/?f=0&c=0_0&q={}&p={}".format(query, page)
+            rss_url = self.BASE_URL + "/?page=rss&q={}&c=0_0&f=0".format(
+                quote(query)
+            )
+            htmls = await Scraper().get_all_results(session, rss_url)
+            data = self._parse_rss(htmls[0]) if htmls and htmls[0] else None
+            if data is not None:
+                return {
+                    "data": data,
+                    "current_page": page,
+                    "total_pages": 1,
+                    "time": time.time() - start_time,
+                    "total": len(data),
+                }
+            url = self.BASE_URL + "/?f=0&c=0_0&q={}&p={}".format(
+                quote(query), page
+            )
             return await self.parser_result(start_time, url, session)
 
     async def parser_result(self, start_time, url, session):
@@ -85,5 +149,16 @@ class NyaaSi:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
+            rss_url = self.BASE_URL + "/?page=rss&c=0_0&f=0"
+            htmls = await Scraper().get_all_results(session, rss_url)
+            data = self._parse_rss(htmls[0]) if htmls and htmls[0] else None
+            if data is not None:
+                return {
+                    "data": data,
+                    "current_page": page,
+                    "total_pages": 1,
+                    "time": time.time() - start_time,
+                    "total": len(data),
+                }
             url = self.BASE_URL
             return await self.parser_result(start_time, url, session)

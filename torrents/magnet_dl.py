@@ -1,6 +1,8 @@
 import asyncio
 import re
 import time
+from urllib.parse import quote
+
 import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
@@ -98,7 +100,7 @@ class Magnetdl:
                 while len(results["data"]) < self.LIMIT:
                     page += 1
                     url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
-                        query, page
+                        quote(query), page
                     )
                     htmls = await Scraper().get_all_results(session, url)
                     res = self._parser(htmls)
@@ -123,7 +125,7 @@ class Magnetdl:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
-                query, page
+                quote(query), page
             )
             return await self.parser_result(
                 start_time, url, session, page=page, query=query

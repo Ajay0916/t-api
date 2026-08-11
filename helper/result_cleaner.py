@@ -36,7 +36,7 @@ def clean_results(resp, sort=True):
     for item in data:
         if isinstance(item, dict):
             item = {k: v for k, v in item.items() if v is not None}
-            for key in ("seeders", "leechers"):
+            for key in ("seeders", "leechers", "downloads"):
                 if item.get(key) is not None:
                     item[key] = _to_int(item[key])
             if "size" not in item:
