@@ -14,7 +14,7 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 class NinexMovies:
     _name = "9xMovies"
 
-    _executor = ThreadPoolExecutor(max_workers=3)
+    _executor = ThreadPoolExecutor(max_workers=8)
     _UA = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -43,7 +43,7 @@ class NinexMovies:
             url = self.BASE_URL + "/?s=" + quote(query)
             if page > 1:
                 url = self.BASE_URL + "/page/{}/?s=".format(page) + quote(query)
-            r = self._get_scraper().get(url, headers=self._UA, timeout=45)
+            r = self._get_scraper().get(url, headers=self._UA, timeout=25)
             if r.status_code >= 400:
                 return []
             soup = BeautifulSoup(r.text, "html.parser")
@@ -74,7 +74,7 @@ class NinexMovies:
 
     def _detail_links_sync(self, url):
         try:
-            r = self._get_scraper().get(url, headers=self._UA, timeout=45)
+            r = self._get_scraper().get(url, headers=self._UA, timeout=25)
             if r.status_code >= 400:
                 return []
             html = r.text
@@ -116,7 +116,7 @@ class NinexMovies:
     def _unlock_sync(self, view_url):
         try:
             scraper = self._get_scraper()
-            r = scraper.get(view_url, headers=self._UA, timeout=45)
+            r = scraper.get(view_url, headers=self._UA, timeout=25)
             if r.status_code >= 400:
                 return None
             m = re.search(
@@ -124,9 +124,9 @@ class NinexMovies:
             )
             if not m:
                 return None
-            time.sleep(1)
+            time.sleep(0.3)
             r = scraper.post(
-                view_url, data={m.group(1): m.group(2)}, headers=self._UA, timeout=45
+                view_url, data={m.group(1): m.group(2)}, headers=self._UA, timeout=25
             )
             if r.status_code >= 400:
                 return None
@@ -135,19 +135,19 @@ class NinexMovies:
                 return host
             final = r.url
             if final and final != view_url:
-                time.sleep(0.5)
-                r = scraper.get(final, headers=self._UA, timeout=45)
+                time.sleep(0.3)
+                r = scraper.get(final, headers=self._UA, timeout=25)
                 m = re.search(
                     r'name="(_csrf_token_[a-f0-9]+)" value="([a-f0-9]+)"', r.text
                 )
                 if not m:
                     return None
-                time.sleep(1)
+                time.sleep(0.3)
                 r = scraper.post(
                     final,
                     data={m.group(1): m.group(2)},
                     headers=self._UA,
-                    timeout=45,
+                    timeout=25,
                 )
                 return self._extract_hosts(r.text)
             return None
@@ -166,7 +166,7 @@ class NinexMovies:
                     return None
                 if links[0]["size"]:
                     obj["size"] = links[0]["size"]
-                for item in links[:3]:
+                for item in links[:2]:
                     direct = await loop.run_in_executor(
                         self._executor, self._unlock_sync, item["link"]
                     )
@@ -178,7 +178,7 @@ class NinexMovies:
 
     async def _get_links(self, result):
         tasks = []
-        sem = asyncio.Semaphore(1)
+        sem = asyncio.Semaphore(4)
         for item in result["data"]:
             tasks.append(asyncio.create_task(self._individual_scrap(item, sem)))
         await asyncio.gather(*tasks)
