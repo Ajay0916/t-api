@@ -10,6 +10,14 @@ from helper.html_scraper import Scraper
 from constants.base_url import X1337
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
+HOSTS = [
+    X1337,
+    "https://1337x.to",
+    "https://1337x.st",
+    "https://x1337x.ws",
+    "https://1337xx.to",
+]
+
 
 STOPWORDS = {
     "the", "a", "an", "and", "or", "of", "in", "on", "for", "with", "to",
@@ -59,6 +67,15 @@ class x1337:
     def __init__(self):
         self.BASE_URL = X1337
         self.LIMIT = None
+
+    async def _fetch_page(self, session, path):
+        for host in HOSTS:
+            url = host + path
+            htmls = await Scraper().get_all_results(session, url)
+            if htmls and htmls[0]:
+                self.BASE_URL = host
+                return htmls
+        return None
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
@@ -169,8 +186,8 @@ class x1337:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             self.LIMIT = limit
             start_time = time.time()
-            url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
-            result = await self.parser_result(start_time, url, session, page=page, query=query)
+            path = "/search/{}/{}/".format(requests_quote(query), page)
+            result = await self.parser_result(start_time, path, session, page=page, query=query)
             if result is not None and len(result["data"]) > 0:
                 return result
             # 1337x search only surfaces matches for the first word of
@@ -187,15 +204,17 @@ class x1337:
                 return result
             tokens.sort(key=len, reverse=True)
             for tok in tokens:
-                url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(tok), page)
-                res = await self.parser_result(start_time, url, session, page=page, query=query)
+                path = "/search/{}/{}/".format(requests_quote(tok), page)
+                res = await self.parser_result(start_time, path, session, page=page, query=query)
                 if res is not None and len(res["data"]) > 0:
                     return res
             return result
 
-    async def parser_result(self, start_time, url, session, page, query=None):
+    async def parser_result(self, start_time, path, session, page, query=None):
         self._query = query
-        htmls = await Scraper().get_all_results(session, url)
+        htmls = await self._fetch_page(session, path)
+        if htmls is None:
+            return None
         result, urls = self._parser(htmls)
         if result is not None:
             results = await self._get_torrent(result, session, urls)
@@ -211,8 +230,10 @@ class x1337:
                 if page >= 25:
                     break
                 page = page + 1
-                url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
-                htmls = await Scraper().get_all_results(session, url)
+                path = "/search/{}/{}/".format(requests_quote(query), page)
+                htmls = await self._fetch_page(session, path)
+                if htmls is None:
+                    break
                 result, urls = self._parser(htmls)
                 if result is not None:
                     if len(result["data"]) > 0:
@@ -237,28 +258,28 @@ class x1337:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
-                url = self.BASE_URL + "/home/"
+                path = "/home/"
             else:
-                url = self.BASE_URL + "/popular-{}".format(category.lower())
-            return await self.parser_result(start_time, url, session, page)
+                path = "/popular-{}".format(category.lower())
+            return await self.parser_result(start_time, path, session, page)
 
     async def recent(self, category, page, limit):
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
-                url = self.BASE_URL + "/trending"
+                path = "/trending"
             else:
-                url = self.BASE_URL + "/cat/{}/{}/".format(
+                path = "/cat/{}/{}/".format(
                     str(category).capitalize(), page
                 )
-            return await self.parser_result(start_time, url, session, page)
+            return await self.parser_result(start_time, path, session, page)
 
     async def search_by_category(self, query, category, page, limit):
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/category-search/{}/{}/{}/".format(
+            path = "/category-search/{}/{}/{}/".format(
                 requests_quote(query), category.capitalize(), page
             )
-            return await self.parser_result(start_time, url, session, page, query)
+            return await self.parser_result(start_time, path, session, page, query)

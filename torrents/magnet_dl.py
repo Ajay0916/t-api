@@ -3,20 +3,11 @@ import re
 import time
 import aiohttp
 from helper.session import get_connector
-from urllib.parse import quote as requests_quote
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import MAGNETDL
-
-TRACKERS = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.demonii.com:1337/announce",
-    "udp://tracker.openbittorrent.com:80/announce",
-    "udp://9.rarbg.to:2710/announce",
-    "udp://tracker.leechers-paradise.org:6969/announce",
-    "udp://tracker.coppersurfer.tk:6969/announce",
-]
+from helper.trackers import build_magnet
 
 
 class Magnetdl:
@@ -25,14 +16,6 @@ class Magnetdl:
     def __init__(self):
         self.BASE_URL = MAGNETDL
         self.LIMIT = None
-
-    def _magnet(self, info_hash, name):
-        magnet = "magnet:?xt=urn:btih:{}&dn={}".format(
-            info_hash, requests_quote(name)
-        )
-        for tracker in TRACKERS:
-            magnet += "&tr=" + requests_quote(tracker, safe=":/")
-        return magnet
 
     def _parser(self, htmls):
         try:
@@ -85,7 +68,7 @@ class Magnetdl:
                 info_hash = dd.get_text(strip=True) if dd else None
                 if info_hash:
                     obj["hash"] = info_hash
-                    obj["magnet"] = self._magnet(info_hash, obj["name"])
+                    obj["magnet"] = build_magnet(info_hash, obj["name"])
             except:
                 return None
 

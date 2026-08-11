@@ -2,22 +2,10 @@ import re
 import time
 import aiohttp
 from helper.session import get_connector
-from urllib.parse import quote as requests_quote
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTDOWNLOAD
-
-TRACKERS = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://tracker.openbittorrent.com:80/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://exodus.desync.com:6969/announce",
-    "udp://tracker.cyberia.is:6969/announce",
-    "udp://tracker.moeking.me:6969/announce",
-    "http://tracker.openbittorrent.com:80/announce",
-    "https://tracker.fastdownload.xyz:443/announce",
-]
+from helper.trackers import build_magnet
 
 
 class TorrentDownloads:
@@ -26,14 +14,6 @@ class TorrentDownloads:
     def __init__(self):
         self.BASE_URL = TORRENTDOWNLOAD
         self.LIMIT = None
-
-    def _magnet(self, info_hash, name):
-        magnet = "magnet:?xt=urn:btih:{}&dn={}".format(
-            info_hash, requests_quote(name)
-        )
-        for tracker in TRACKERS:
-            magnet += "&tr=" + requests_quote(tracker, safe=":/")
-        return magnet
 
     def _parser(self, htmls):
         try:
@@ -60,7 +40,7 @@ class TorrentDownloads:
                             "seeders": td[3].get_text(strip=True),
                             "leechers": td[4].get_text(strip=True),
                             "hash": info_hash,
-                            "magnet": self._magnet(info_hash, name),
+                            "magnet": build_magnet(info_hash, name),
                             "url": self.BASE_URL + link["href"],
                         }
                     )

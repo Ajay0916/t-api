@@ -1,7 +1,6 @@
 import asyncio
 import re
 import time
-from urllib.parse import quote
 
 import aiohttp
 from helper.session import get_connector
@@ -9,24 +8,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import AUDIOBOOKBAY
-
-TRACKERS = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://tracker.openbittorrent.com:80/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://exodus.desync.com:6969/announce",
-    "udp://tracker.cyberia.is:6969/announce",
-    "udp://tracker.moeking.me:6969/announce",
-    "http://tracker.openbittorrent.com:80/announce",
-    "https://tracker.fastdownload.xyz:443/announce",
-]
-
-
-def build_magnet(info_hash, name):
-    dn = quote(name)
-    tr = "".join("&tr={}".format(quote(t)) for t in TRACKERS)
-    return "magnet:?xt=urn:btih:{}&dn={}{}".format(info_hash, dn, tr)
+from helper.trackers import build_magnet
 
 
 class AudiobookBay:

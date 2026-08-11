@@ -1,12 +1,14 @@
 import json
+import re
 import time
 from urllib.parse import quote
 
 import aiohttp
 from constants.base_url import PIRATEBAY
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.trackers import build_magnet
 from helper.session import get_connector
-from torrents.torrent_galaxy import build_magnet, format_date, format_size
+from torrents.torrent_galaxy import format_date, format_size
 
 TORRENT_CDN = "https://itorrents.org/torrent/{}.torrent"
 
@@ -41,9 +43,13 @@ class PirateBay:
     @staticmethod
     def _build_item(item):
         name = item.get("name")
-        if not name:
+        if not name or str(item.get("id")) == "0":
+            return None
+        if str(name).strip().lower().startswith("no results"):
             return None
         info_hash = (item.get("info_hash") or "").strip()
+        if not re.fullmatch(r"[a-f0-9]{40}", info_hash.lower()):
+            return None
         return {
             "name": name,
             "size": format_size(item.get("size")),

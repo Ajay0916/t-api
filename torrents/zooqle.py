@@ -11,24 +11,7 @@ from bs4 import BeautifulSoup
 from constants.base_url import ZOOQLE
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-
-TRACKERS = [
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.demonii.com:1337/announce",
-    "udp://tracker.openbittorrent.com:80/announce",
-    "udp://9.rarbg.to:2710/announce",
-    "udp://tracker.leechers-paradise.org:6969/announce",
-    "udp://tracker.coppersurfer.tk:6969/announce",
-    "udp://open.stealth.si:80/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://tracker.qu.ax:6969/announce",
-]
-
-
-def build_magnet(info_hash, name):
-    dn = quote(name)
-    tr = "".join("&tr={}".format(quote(t)) for t in TRACKERS)
-    return "magnet:?xt=urn:btih:{}&dn={}{}".format(info_hash, dn, tr)
+from helper.trackers import build_magnet
 
 
 def extract_info_hash(raw):
