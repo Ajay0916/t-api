@@ -9,7 +9,7 @@ from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
 from torrents.magnetz import Magnetz
 from torrents.torrentdownload import TorrentDownloads
-from torrents.torrentdownloads import TorrentDownloadsPro
+from torrents.torrentdownloads import TDP
 from torrents.kickass import Kickass
 from torrents.libgen import Libgen
 from torrents.limetorrents import Limetorrent
@@ -331,7 +331,7 @@ all_sites = {
         "limit": 50,
     },
     "torrentdownloads": {
-        "website": TorrentDownloadsPro,
+        "website": TDP,
         "trending_available": True,
         "trending_category": False,
         "search_by_category": False,

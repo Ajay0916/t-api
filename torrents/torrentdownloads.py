@@ -26,7 +26,7 @@ def format_size(size):
     return "{:.2f} {}".format(size, units[i])
 
 
-class TorrentDownloadsPro:
+class TDP:
     _name = "Torrent Downloads"
 
     def __init__(self):
