@@ -50,19 +50,24 @@ class HindiBooks:
                 m = re.search(
                     r'href="(https://archive\.org/download/[^"]+\.pdf)"', html[0]
                 )
-                if not m:
-                    return None
-                obj["torrent"] = m.group(1)
-                try:
-                    async with session.head(
-                        m.group(1), headers=HEADER_AIO, timeout=AIO_TIMEOUT,
-                        allow_redirects=True,
-                    ) as r:
-                        length = r.headers.get("Content-Length")
-                        if length:
-                            obj["size"] = self._format_size(int(length))
-                except:
-                    pass
+                if m:
+                    obj["torrent"] = m.group(1)
+                    try:
+                        async with session.head(
+                            m.group(1), headers=HEADER_AIO, timeout=AIO_TIMEOUT,
+                            allow_redirects=True,
+                        ) as r:
+                            length = r.headers.get("Content-Length")
+                            if length:
+                                obj["size"] = self._format_size(int(length))
+                    except:
+                        pass
+                else:
+                    dm = re.search(
+                        r'href="(https://buy\.hindibook\.in/[^"]+)"', html[0]
+                    )
+                    if dm:
+                        obj["torrent"] = dm.group(1)
             except:
                 return None
 

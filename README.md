@@ -74,6 +74,7 @@ nohup ./venv/bin/python main.py > server.log 2>&1 &
 | :------- | :----- |
 | `GET /api/v1/sites` | — |
 | `GET /api/v1/sites/config` | — |
+| `GET /api/v1/sites/status` | — (health: blocked/cooldown/fail_count per site) |
 | `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh` |
 | `GET /api/v1/trending` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/recent` | `site` ✅, `limit`, `category`, `page` |
