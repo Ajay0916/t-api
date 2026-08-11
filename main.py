@@ -12,7 +12,6 @@ from routers.v1.sites_list_router import router as site_list_router
 from routers.home_router import router as home_router
 from routers.v1.search_url_router import router as search_url_router
 from routers.v1.status_router import router as status_router
-from routers.v1.torznab_router import router as torznab_router
 from helper.uptime import getUptime
 from helper.dependencies import authenticate_request
 from mangum import Mangum
@@ -23,7 +22,7 @@ startTime = time.time()
 
 app = FastAPI(
     title="Torrents-Api",
-    version="1.4.0",
+    version="1.3.0",
     description="Unofficial Torrents / Books / Courses API — 25 sites, mirror rotation, combo search",
     docs_url="/docs",
     contact={
@@ -54,7 +53,7 @@ async def health_route(req: Request):
     return JSONResponse(
         {
             "app": "Torrents-Api",
-            "version": "v" + "1.4.0",
+            "version": "v" + "1.3.0",
             "ip": req.client.host,
             "uptime": ceil(getUptime(startTime)),
         }
@@ -69,8 +68,6 @@ app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(aut
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends(authenticate_request)])
-# Torznab (Sonarr/Radarr/Prowlarr/Jackett): apikey checked inside via query param
-app.include_router(torznab_router, prefix="/api/v1/torznab")
 app.include_router(home_router, prefix="")
 
 handler = Mangum(app)

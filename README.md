@@ -35,7 +35,6 @@
 - **Infohash link fallback** — every result carrying an infohash automatically gets both a magnet AND a `.torrent` Direct Link (itorrents.net), so WZML always has a working button even when a scraper only exposes the hash.
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
 - **GZip responses** — API responses are gzip-compressed automatically (big combo payloads reach WZML faster).
-- **Torznab API** — `/api/v1/torznab` (Jackett/Prowlarr-compatible) serves all 25 sites to Sonarr/Radarr/other Torznab clients: `t=search|tvsearch|movie|caps`, `q`, `cat`, `limit`, `offset`, `minseeders`, `imdbid`. Results include seeders/peers/infohash/magneturl attributes.
 - **API key auth** — optional `PYTORRENT_API_KEY` via `x-api-key` header. ⚠️ WZML-X doesn't send headers, so **don't enable the key if WZML-X uses this API** (keep it unset for public/WZML use).
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
@@ -147,29 +146,6 @@ curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5"
 Set `PYTORRENT_API_KEY` env var, then send requests with header `x-api-key: <your-key>`.
 
 > ⚠️ **WZML-X warning:** WZML-X calls the API directly without headers. If you use this API with WZML-X, keep the key unset or WZML search will fail with 403.
-
----
-
-## 📡 Torznab (Sonarr / Radarr / Prowlarr)
-
-Torznab-compatible endpoint on top of all 25 sites — add it in Sonarr/Radarr (or Prowlarr/Jackett) as a custom indexer:
-
-```
-URL:   http://<host>:8009/api/v1/torznab
-API:   t=caps  → capabilities
-       t=search&q=<query>
-       t=tvsearch&q=<query>&season=<n>&ep=<n>
-       t=movie&q=<query>&imdbid=<tt...>
-```
-
-Example:
-
-```sh
-curl "http://localhost:8009/api/v1/torznab?t=search&q=inception&limit=10"
-curl "http://localhost:8009/api/v1/torznab?t=caps"
-```
-
-If `PYTORRENT_API_KEY` is set, append `&apikey=<your-key>` to every request.
 
 ---
 
