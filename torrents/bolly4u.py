@@ -102,16 +102,6 @@ class Bolly4u:
         except:
             return None
 
-    def _save_magnet_sync(self, url):
-        try:
-            r = self._get_scraper().get(url, headers=self._UA, timeout=45)
-            if r.status_code >= 400:
-                return None
-            m = re.search(r'href="(magnet:\?xt=[^"]+)"', r.text)
-            return m.group(1) if m else None
-        except:
-            return None
-
     @decorator_asyncio_fix
     async def _individual_scrap(self, url, obj, sem):
         async with sem:
@@ -122,20 +112,6 @@ class Bolly4u:
                 )
                 if not html:
                     return None
-                magnet = re.search(r'href="(magnet:\?xt=[^"]+)"', html)
-                if magnet:
-                    obj["magnet"] = magnet.group(1)
-                    return None
-                save_links = re.findall(
-                    r'href="(https?://[^"]+/save/[A-Za-z0-9]+)"', html
-                )
-                if save_links:
-                    magnet = await loop.run_in_executor(
-                        self._executor, self._save_magnet_sync, save_links[0]
-                    )
-                    if magnet:
-                        obj["magnet"] = magnet
-                        return None
                 links = re.findall(
                     r'href="(https?://[^"]+/download/[A-Za-z0-9%:,_.\-]+)"', html
                 )
@@ -174,7 +150,9 @@ class Bolly4u:
             url = it.get("u")
             if not url:
                 continue
-            my_dict["data"].append({"name": name, "url": url})
+            m = re.search(r"(\d+(?:\.\d+)?)\s?(GB|GiB|MB|MiB)", name)
+            size = "{}{}".format(m.group(1), m.group(2)) if m else "1GB"
+            my_dict["data"].append({"name": name, "url": url, "size": size})
             if len(my_dict["data"]) == self.LIMIT:
                 break
         return my_dict
