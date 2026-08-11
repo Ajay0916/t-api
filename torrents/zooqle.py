@@ -60,7 +60,7 @@ def extract_info_hash(raw):
 
 
 class Zooqle:
-    _name = "Zooqle"
+    _name = "PimpMyMind"
 
     def __init__(self):
         self.BASE_URL = ZOOQLE

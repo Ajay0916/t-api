@@ -27,7 +27,7 @@ def format_size(size):
 
 
 class Glodls:
-    _name = "Glodls"
+    _name = "Torrent Downloads"
 
     def __init__(self):
         self.BASE_URL = GLODLS
