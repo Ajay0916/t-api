@@ -14,7 +14,7 @@ from helper.html_scraper import Scraper
 
 
 class HindiAudio:
-    _name = "Hindi Audio Books"
+    _name = "Hindi Audio Books & Media"
 
     def __init__(self):
         self.BASE_URL = HINDIAUDIO
@@ -22,23 +22,26 @@ class HindiAudio:
 
     async def _search_items(self, session, query, limit):
         hindi_q = (
-            "language:(Hindi) AND mediatype:(audio) AND "
+            "language:(Hindi) AND (mediatype:(audio) OR mediatype:(texts)) AND "
             "(title:({}) OR description:({}))"
         ).format(quote(query), quote(query))
         url = self.BASE_URL + (
             "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-            "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
+            "&fl[]=downloads&fl[]=date&fl[]=mediatype&rows={}"
+            "&output=json&sort[]=downloads+desc"
         ).format(quote(hindi_q), limit)
         html = await Scraper().get_all_results(session, url)
         docs = self._parse_docs(html)
         if docs:
             return docs
-        general_q = "mediatype:(audio) AND (title:({}) OR description:({}))".format(
-            quote(query), quote(query)
-        )
+        general_q = (
+            "(mediatype:(audio) OR mediatype:(texts)) AND "
+            "(title:({}) OR description:({}))"
+        ).format(quote(query), quote(query))
         url = self.BASE_URL + (
             "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-            "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
+            "&fl[]=downloads&fl[]=date&fl[]=mediatype&rows={}"
+            "&output=json&sort[]=downloads+desc"
         ).format(quote(general_q), limit)
         html = await Scraper().get_all_results(session, url)
         return self._parse_docs(html)
@@ -68,12 +71,20 @@ class HindiAudio:
                         (".mp3", ".m4a", ".ogg", ".opus", ".flac", ".wav")
                     )
                 ]
-                if not audio:
+                texts = [
+                    f
+                    for f in files
+                    if f.get("name", "").lower().endswith(
+                        (".pdf", ".epub", ".djvu", ".azw3", ".mobi")
+                    )
+                ]
+                pool = audio if audio else texts
+                if not pool:
                     return None
-                audio.sort(
+                pool.sort(
                     key=lambda f: int(f.get("size") or 0), reverse=True
                 )
-                f = audio[0]
+                f = pool[0]
                 name = f["name"]
                 obj["torrent"] = self.BASE_URL + "/download/{}/{}".format(
                     identifier, quote(name)
