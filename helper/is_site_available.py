@@ -9,7 +9,7 @@ from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
 from torrents.magnetz import Magnetz
 from torrents.torrentdownload import TorrentDownloads
-from torrents.torrentdownloads import TDP
+from torrents.tdp import TDP
 from torrents.kickass import Kickass
 from torrents.libgen import Libgen
 from torrents.limetorrents import Limetorrent
@@ -330,7 +330,7 @@ all_sites = {
         ],  # television # software #adult # ebooks
         "limit": 50,
     },
-    "torrentdownloads": {
+    "tdp": {
         "website": TDP,
         "trending_available": True,
         "trending_category": False,

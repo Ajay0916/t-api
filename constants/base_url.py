@@ -11,7 +11,7 @@ LIBGEN = "https://libgen.li"
 YTS = "https://yts.gg"
 LIMETORRENT = "https://www.limetorrents.fun"
 TORRENTFUNK = "https://www.torrentfunk.com"
-TORRENTDOWNLOADS = "https://www.torrentdownloads.pro"
+TDP_URL = "https://www.torrentdownloads.pro"
 TORRENTPROJECT = "https://torrentproject.cc"
 YOURBITTORRENT = "https://yourbittorrent.com"
 

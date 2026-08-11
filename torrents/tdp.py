@@ -5,7 +5,7 @@ from urllib.parse import quote
 import aiohttp
 from helper.session import get_connector
 
-from constants.base_url import TORRENTDOWNLOADS
+from constants.base_url import TDP_URL
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet
@@ -27,10 +27,10 @@ def format_size(size):
 
 
 class TDP:
-    _name = "Torrent Downloads"
+    _name = "TDP"
 
     def __init__(self):
-        self.BASE_URL = TORRENTDOWNLOADS
+        self.BASE_URL = TDP_URL
         self.LIMIT = None
 
     @decorator_asyncio_fix
