@@ -111,12 +111,11 @@ async def get_all_trending(limit: Optional[int] = 0):
     COMBO = {"data": []}
     total_torrents_overall = 0
     tasks = []
+    requested = limit
     for site in sites_list:
-        limit = (
-            all_sites[site]["limit"]
-            if limit == 0 or limit > all_sites[site]["limit"]
-            else limit
-        )
+        site_limit = all_sites[site]["limit"]
+        if requested > 0 and requested < site_limit:
+            site_limit = requested
         if site_health.is_blocked(site):
             continue
         tasks.append(
@@ -124,7 +123,7 @@ async def get_all_trending(limit: Optional[int] = 0):
                 site,
                 asyncio.create_task(
                     all_sites[site]["website"]().trending(
-                        category=None, page=1, limit=limit
+                        category=None, page=1, limit=site_limit
                     )
                 ),
             )
@@ -166,12 +165,11 @@ async def get_all_recent(limit: Optional[int] = 0):
     COMBO = {"data": []}
     total_torrents_overall = 0
     tasks = []
+    requested = limit
     for site in sites_list:
-        limit = (
-            all_sites[site]["limit"]
-            if limit == 0 or limit > all_sites[site]["limit"]
-            else limit
-        )
+        site_limit = all_sites[site]["limit"]
+        if requested > 0 and requested < site_limit:
+            site_limit = requested
         if site_health.is_blocked(site):
             continue
         tasks.append(
@@ -179,7 +177,7 @@ async def get_all_recent(limit: Optional[int] = 0):
                 site,
                 asyncio.create_task(
                     all_sites[site]["website"]().recent(
-                        category=None, page=1, limit=limit
+                        category=None, page=1, limit=site_limit
                     )
                 ),
             )

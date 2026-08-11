@@ -5,6 +5,25 @@ def _norm(text):
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 
 
+_SIZE_RE = re.compile(r"([\d.,]+\s?)([kmgt]?i?b)\b", re.I)
+_SIZE_UNITS = {"b": 1, "kb": 1024, "mb": 1024**2, "gb": 1024**3, "tb": 1024**4}
+
+
+def _size_to_bytes(text):
+    try:
+        m = _SIZE_RE.search(str(text or ""))
+        if not m:
+            return None
+        num = float(m.group(1).replace(",", ""))
+        unit = m.group(2).lower().replace("ib", "b")
+        multiplier = _SIZE_UNITS.get(unit)
+        if not multiplier:
+            return None
+        return int(num * multiplier)
+    except (TypeError, ValueError):
+        return None
+
+
 def _to_int(value):
     try:
         return int(str(value).replace(",", "").strip())
@@ -39,6 +58,10 @@ def clean_results(resp, sort=True):
             for key in ("seeders", "leechers", "downloads"):
                 if item.get(key) is not None:
                     item[key] = _to_int(item[key])
+            if item.get("size") is not None and "size_bytes" not in item:
+                size_bytes = _size_to_bytes(item.get("size"))
+                if size_bytes:
+                    item["size_bytes"] = size_bytes
             if "size" not in item:
                 item["size"] = ""
         cleaned.append(item)

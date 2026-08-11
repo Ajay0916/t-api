@@ -10,6 +10,13 @@ from helper.html_scraper import Scraper
 from constants.base_url import LIBGEN
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
+HOSTS = [
+    LIBGEN,
+    "https://libgen.is",
+    "https://libgen.rs",
+    "https://libgen.st",
+]
+
 
 class Libgen:
     _name = "Libgen"
@@ -49,7 +56,7 @@ class Libgen:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(6)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
@@ -119,10 +126,22 @@ class Libgen:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/index.php?req={}&res=100".format(
-                quote(query)
-            )
-            return await self.parser_result(start_time, url, session)
+            htmls = None
+            for host in HOSTS:
+                self.BASE_URL = host
+                url = host + "/index.php?req={}&res=100".format(quote(query))
+                htmls = await Scraper().get_all_results(session, url)
+                if htmls and htmls[0]:
+                    break
+            if not htmls or not htmls[0]:
+                return None
+            result, urls = self._parser(htmls)
+            if result is not None:
+                results = await self._get_torrent(result, session, urls)
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+                return results
+            return result
 
     async def parser_result(self, start_time, url, session):
         htmls = await Scraper().get_all_results(session, url)

@@ -132,6 +132,54 @@ class x1337:
         await asyncio.gather(*tasks)
         return result
 
+    async def get_torrent_by_url(self, torrent_url):
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            try:
+                async with session.get(
+                    torrent_url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
+                ) as res:
+                    html = await res.text(encoding="ISO-8859-1")
+            except Exception:
+                return None
+            soup = BeautifulSoup(html, "html.parser")
+            try:
+                name = soup.select_one("h1").get_text(strip=True)
+            except (AttributeError, TypeError):
+                return None
+            item = {"name": name, "url": torrent_url}
+            try:
+                magnet = soup.select_one(
+                    ".no-top-radius > div > ul > li > a"
+                )["href"]
+                if magnet and magnet.startswith("magnet:"):
+                    item["magnet"] = magnet
+                    m = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                    if m:
+                        item["hash"] = m.group(1)
+            except (IndexError, AttributeError, TypeError):
+                ...
+            try:
+                for li in soup.find_all("li"):
+                    txt = re.sub(r"\s+", " ", li.get_text(" ", strip=True))
+                    low = txt.lower()
+                    if "total size" in low:
+                        item["size"] = txt.split("Total size", 1)[-1].strip()
+                    elif "seeders" in low:
+                        item["seeders"] = re.sub(
+                            r"\D", "", txt.split("Seeders", 1)[-1]
+                        )
+                    elif "leechers" in low:
+                        item["leechers"] = re.sub(
+                            r"\D", "", txt.split("Leechers", 1)[-1]
+                        )
+                    elif "date uploaded" in low:
+                        item["date"] = txt.split("Uploaded", 1)[-1].strip()
+                    elif "uploaded by" in low:
+                        item["uploader"] = txt.split("By", 1)[-1].strip()
+            except Exception:
+                ...
+            return {"data": [item], "total": 1}
+
     def _parser(self, htmls):
         try:
             for html in htmls:
