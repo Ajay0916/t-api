@@ -79,7 +79,8 @@ class NinexMovies:
             links = list(
                 dict.fromkeys(
                     re.findall(
-                        r'href="(https://linksddr\.live/view/[A-Za-z0-9]+)"', html
+                        r'href="(https://[a-z0-9.-]*linksddr[a-z0-9.-]*/view/[A-Za-z0-9]+)"',
+                        html,
                     )
                 )
             )
@@ -171,5 +172,10 @@ class NinexMovies:
         results["time"] = time.time() - start_time
         results["total"] = len(results["data"])
         results = await self._get_links(results)
+        results["data"] = [
+            d
+            for d in results["data"]
+            if d.get("torrent") or d.get("magnet")
+        ]
         results["total"] = len(results["data"])
         return results
