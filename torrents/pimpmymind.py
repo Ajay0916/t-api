@@ -8,7 +8,7 @@ import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
 
-from constants.base_url import ZOOQLE
+from constants.base_url import PIMPMYMIND
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet
@@ -59,11 +59,11 @@ def extract_info_hash(raw):
         return None, None
 
 
-class Zooqle:
+class PimpMyMind:
     _name = "PimpMyMind"
 
     def __init__(self):
-        self.BASE_URL = ZOOQLE
+        self.BASE_URL = PIMPMYMIND
         self.LIMIT = None
 
     @decorator_asyncio_fix

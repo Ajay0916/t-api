@@ -37,7 +37,7 @@
 
 ## 🌐 Sites
 
-**Torrents:** `1337x`, `tgx`, `torlock`, `piratebay`, `nyaasi`, `zooqle`, `kickass`, `bitsearch`, `magnetdl`, `libgen`, `yts`, `limetorrent`, `torrentfunk`, `glodls`, `torrentproject`, `ybt`, `ext`, `torrentdownload`, `magnetz`
+**Torrents:** `1337x`, `tgx`, `torlock`, `piratebay`, `nyaasi`, `pimpmymind`, `kickass`, `bitsearch`, `magnetdl`, `libgen`, `yts`, `limetorrent`, `torrentfunk`, `torrentdownloads`, `torrentproject`, `ybt`, `ext`, `torrentdownload`, `magnetz`
 
 **Audiobooks:** `audiobookbay`
 

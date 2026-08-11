@@ -5,7 +5,7 @@ from urllib.parse import quote
 import aiohttp
 from helper.session import get_connector
 
-from constants.base_url import GLODLS
+from constants.base_url import TORRENTDOWNLOADS
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet
@@ -26,11 +26,11 @@ def format_size(size):
     return "{:.2f} {}".format(size, units[i])
 
 
-class Glodls:
+class TorrentDownloadsPro:
     _name = "Torrent Downloads"
 
     def __init__(self):
-        self.BASE_URL = GLODLS
+        self.BASE_URL = TORRENTDOWNLOADS
         self.LIMIT = None
 
     @decorator_asyncio_fix

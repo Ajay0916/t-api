@@ -9,7 +9,7 @@ from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
 from torrents.magnetz import Magnetz
 from torrents.torrentdownload import TorrentDownloads
-from torrents.glodls import Glodls
+from torrents.torrentdownloads import TorrentDownloadsPro
 from torrents.kickass import Kickass
 from torrents.libgen import Libgen
 from torrents.limetorrents import Limetorrent
@@ -23,7 +23,7 @@ from torrents.torrentProject import TorrentProject
 from torrents.x1337 import x1337
 from torrents.your_bittorrent import YourBittorrent
 from torrents.yts import Yts
-from torrents.zooqle import Zooqle
+from torrents.pimpmymind import PimpMyMind
 
 all_sites = {
     "hindibooks": {
@@ -176,8 +176,8 @@ all_sites = {
         ],  # ebooks
         "limit": 50,
     },
-    "zooqle": {
-        "website": Zooqle,
+    "pimpmymind": {
+        "website": PimpMyMind,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
@@ -330,8 +330,8 @@ all_sites = {
         ],  # television # software #adult # ebooks
         "limit": 50,
     },
-    "glodls": {
-        "website": Glodls,
+    "torrentdownloads": {
+        "website": TorrentDownloadsPro,
         "trending_available": True,
         "trending_category": False,
         "search_by_category": False,
