@@ -5,11 +5,16 @@ def _norm(text):
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 
 
-def _seeders(item):
+def _to_int(value):
     try:
-        return float(str(item.get("seeders")).replace(",", "").strip())
+        return int(str(value).replace(",", "").strip())
     except (TypeError, ValueError):
-        return -1
+        return value
+
+
+def _seeders(item):
+    seeds = _to_int(item.get("seeders"))
+    return float(seeds) if isinstance(seeds, int) else -1
 
 
 def clean_results(resp, sort=True):
@@ -31,6 +36,9 @@ def clean_results(resp, sort=True):
     for item in data:
         if isinstance(item, dict):
             item = {k: v for k, v in item.items() if v is not None}
+            for key in ("seeders", "leechers"):
+                if item.get(key) is not None:
+                    item[key] = _to_int(item[key])
             if "size" not in item:
                 item["size"] = ""
         cleaned.append(item)

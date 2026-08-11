@@ -1,128 +1,106 @@
-import re
+import json
 import time
+from urllib.parse import quote
+
 import aiohttp
-from helper.session import get_connector
-from bs4 import BeautifulSoup
-from helper.html_scraper import Scraper
 from constants.base_url import PIRATEBAY
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.session import get_connector
+from torrents.torrent_galaxy import build_magnet, format_date, format_size
+
+TORRENT_CDN = "https://itorrents.org/torrent/{}.torrent"
+
+
+def _category(cat):
+    try:
+        cat = int(cat)
+    except (TypeError, ValueError):
+        return None
+    if 100 <= cat < 200:
+        return "Audio"
+    if 200 <= cat < 300:
+        return "TV" if cat in (205, 208) else "Movies"
+    if 300 <= cat < 400:
+        return "Apps"
+    if 400 <= cat < 500:
+        return "Games"
+    if 500 <= cat < 600:
+        return "Porn"
+    if 600 <= cat < 700:
+        return "Books" if cat == 604 else "Other"
+    return None
 
 
 class PirateBay:
     _name = "Pirate Bay"
+
     def __init__(self):
         self.BASE_URL = PIRATEBAY
         self.LIMIT = None
 
-    def _parser(self, htmls):
-        try:
-            for html in htmls:
-                soup = BeautifulSoup(html, "html.parser")
-
-                my_dict = {"data": []}
-                for tr in soup.find_all("tr")[1:]:
-                    td = tr.find_all("td")
-                    try:
-                        name = td[1].find("a").text
-                    except:
-                        name = None
-                    if name:
-                        url = td[1].find("a")["href"]
-                        magnet = td[3].find_all("a")[0]["href"]
-                        size = td[4].text.strip()
-                        seeders = td[5].text
-                        leechers = td[6].text
-                        category = td[0].find_all("a")[0].text
-                        uploader = td[7].text
-                        dateUploaded = td[2].text
-                           
-                        my_dict["data"].append(
-                            {
-                                "name": name,
-                                "size": size,
-                                "seeders": seeders,
-                                "leechers": leechers,
-                                "category": category,
-                                "uploader": uploader,
-                                "url": url,
-                                "date": dateUploaded,
-                                "hash": re.search(
-                                    r"([{a-f\d,A-F\d}]{32,40})\b", magnet
-                                ).group(0),
-                                "magnet": magnet,
-                            }
-                        )
-                    if len(my_dict["data"]) == self.LIMIT:
-                        break
-                last_tr = soup.find_all("tr")[-1]
-                potential_page_link = last_tr.find("td").find("a")["href"]
-                check_if_pagination_available = potential_page_link is not None and potential_page_link[:len("/search/")] == "/search/"
-                if check_if_pagination_available:
-                    current_page = last_tr.find("td").find("b").text
-                    my_dict["current_page"] = int(current_page)
-                    my_dict["total_pages"] = int(
-                        last_tr.find("td").find_all("a")[-2].text
-                    )
-                return my_dict
-        except:
+    @staticmethod
+    def _build_item(item):
+        name = item.get("name")
+        if not name:
             return None
+        info_hash = (item.get("info_hash") or "").strip()
+        return {
+            "name": name,
+            "size": format_size(item.get("size")),
+            "date": format_date(item.get("added")),
+            "seeders": item.get("seeders"),
+            "leechers": item.get("leechers"),
+            "category": _category(item.get("category")),
+            "uploader": item.get("username") or "",
+            "url": "{}/t.php?id={}".format(PIRATEBAY, item.get("id")),
+            "hash": info_hash,
+            "magnet": build_magnet(info_hash, name) if info_hash else None,
+            "torrent": TORRENT_CDN.format(info_hash) if info_hash else None,
+            "imdb_id": item.get("imdb") or None,
+        }
+
+    async def _fetch(self, url):
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
+            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                return json.loads(await res.text())
+
+    async def _results(self, url, start_time):
+        try:
+            data = await self._fetch(url)
+        except Exception:
+            return None
+        if not isinstance(data, list):
+            return None
+        results = []
+        for item in data:
+            parsed = self._build_item(item)
+            if parsed is None:
+                continue
+            results.append(parsed)
+            if self.LIMIT and len(results) >= self.LIMIT:
+                break
+        return {
+            "data": results,
+            "current_page": 1,
+            "total_pages": 1,
+            "time": time.time() - start_time,
+            "total": len(results),
+        }
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
-            start_time = time.time()
-            self.LIMIT = limit
-            url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
-            return await self.parser_result(
-                start_time, url, session, page=page, query=query
-            )
-
-    async def parser_result(self, start_time, url, session, page=1, query=None):
-        html = await Scraper().get_all_results(session, url)
-        results = self._parser(html)
-        if results is not None:
-            results["time"] = time.time() - start_time
-            results["total"] = len(results["data"])
-            if query is not None:
-                results["current_page"] = page
-                while len(results["data"]) < self.LIMIT:
-                    try:
-                        total_pages = results.get("total_pages", page)
-                    except:
-                        break
-                    if page >= total_pages:
-                        break
-                    if page >= 25:
-                        break
-                    page += 1
-                    url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
-                    html = await Scraper().get_all_results(session, url)
-                    res = self._parser(html)
-                    if res is None or len(res["data"]) == 0:
-                        break
-                    for obj in res["data"]:
-                        results["data"].append(obj)
-                    results["current_page"] = page
-                    if res.get("total_pages"):
-                        results["total_pages"] = res["total_pages"]
-                    results["time"] = time.time() - start_time
-                    results["total"] = len(results["data"])
-                results["data"] = results["data"][0 : self.LIMIT]
-                results["total"] = len(results["data"])
-            return results
-        return results
+        start_time = time.time()
+        self.LIMIT = limit
+        url = self.BASE_URL + "/q.php?q={}&cat=0".format(quote(query))
+        return await self._results(url, start_time)
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
-            start_time = time.time()
-            self.LIMIT = limit
-            url = self.BASE_URL + "/top/all"
-            return await self.parser_result(start_time, url, session)
+        start_time = time.time()
+        self.LIMIT = limit
+        url = self.BASE_URL + "/precompiled/data_top100_all.json"
+        return await self._results(url, start_time)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
-            start_time = time.time()
-            self.LIMIT = limit
-            if not category:
-                url = self.BASE_URL + "/recent"
-            else:
-                url = self.BASE_URL + "/{}/latest/".format(category)
-            return await self.parser_result(start_time, url, session)
+        start_time = time.time()
+        self.LIMIT = limit
+        url = self.BASE_URL + "/precompiled/data_top100_recent.json"
+        return await self._results(url, start_time)

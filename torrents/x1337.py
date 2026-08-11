@@ -171,12 +171,13 @@ class x1337:
             start_time = time.time()
             url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
             result = await self.parser_result(start_time, url, session, page=page, query=query)
-            if result is None or len(result["data"]) > 0:
+            if result is not None and len(result["data"]) > 0:
                 return result
             # 1337x search only surfaces matches for the first word of
             # multi-word queries, so fall back to searching the distinctive
             # tokens (e.g. "bob proctor" -> search "proctor") and keep only
-            # results relevant to the full query.
+            # results relevant to the full query. Try the most distinctive
+            # token first to minimize extra requests.
             tokens = [
                 t
                 for t in re.sub(r"[^a-z0-9]+", " ", (query or "").lower()).split()
@@ -184,6 +185,7 @@ class x1337:
             ]
             if len(tokens) < 2:
                 return result
+            tokens.sort(key=len, reverse=True)
             for tok in tokens:
                 url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(tok), page)
                 res = await self.parser_result(start_time, url, session, page=page, query=query)

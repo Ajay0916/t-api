@@ -1,7 +1,7 @@
 X1337 = "https://www.1377x.to"
 TGX = "https://torrentgalaxy.info"
 TORLOCK = "https://www.torlock2.com"
-PIRATEBAY = "https://thepiratebay10.xyz"
+PIRATEBAY = "https://apibay.org"
 NYAASI = "https://nyaa.si"
 ZOOQLE = "https://pimpmymind.net"
 KICKASS = "https://kickasstorrents.bz"
