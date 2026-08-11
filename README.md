@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>26 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>25 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **26 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **25 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
@@ -52,7 +52,7 @@
 
 **Courses:** `freecourseweb`
 
-**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`, `pdfdrive`
+**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
 
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 
