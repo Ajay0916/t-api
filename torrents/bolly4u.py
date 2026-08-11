@@ -122,7 +122,7 @@ class Bolly4u:
                         self._executor, self._resolve_download_sync, link
                     )
                     if direct:
-                        obj["download"] = direct
+                        obj["torrent"] = direct
                         break
             except:
                 return None
