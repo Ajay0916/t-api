@@ -48,18 +48,23 @@ class NinexMovies:
                 return []
             soup = BeautifulSoup(r.text, "html.parser")
             posts = {}
-            for a in soup.find_all("a", href=True):
+            for div in soup.find_all("div", class_=re.compile(r"\bthumb\b")):
+                a = div.find("a", href=True)
+                img = div.find("img")
+                title = None
+                if img:
+                    title = img.get("title") or img.get("alt")
+                if not title and a:
+                    title = a.get_text(" ", strip=True)
+                if not a or not title:
+                    continue
                 href = a["href"]
                 if not href.startswith(self.BASE_URL):
                     continue
                 path = href[len(self.BASE_URL):].strip("/")
-                if not path or "/" in path:
+                if not path or "/" in path or path.startswith(self._SKIP):
                     continue
-                if path.startswith(self._SKIP):
-                    continue
-                title = a.get_text(" ", strip=True)
-                if not title or not any(c.isalnum() for c in title):
-                    continue
+                title = title.strip()
                 if len(title) < 10:
                     continue
                 posts[href] = title
@@ -96,6 +101,18 @@ class NinexMovies:
         except:
             return []
 
+    @staticmethod
+    def _extract_hosts(html):
+        hosts = re.findall(r'href="(https?://[^"]+)"', html)
+        for h in hosts:
+            if re.search(
+                r"linksddr|favicon|\.css|\.js|/login|/register|/faqs|/contact|/money|/page/|/save/",
+                h,
+            ):
+                continue
+            return h
+        return None
+
     def _unlock_sync(self, view_url):
         try:
             scraper = self._get_scraper()
@@ -113,14 +130,26 @@ class NinexMovies:
             )
             if r.status_code >= 400:
                 return None
-            hosts = re.findall(r'href="(https?://[^"]+)"', r.text)
-            for h in hosts:
-                if re.search(
-                    r"linksddr|favicon|\.css|\.js|/login|/register|/faqs|/contact|/money|/page/|/save/",
-                    h,
-                ):
-                    continue
-                return h
+            host = self._extract_hosts(r.text)
+            if host:
+                return host
+            final = r.url
+            if final and final != view_url:
+                time.sleep(0.5)
+                r = scraper.get(final, headers=self._UA, timeout=45)
+                m = re.search(
+                    r'name="(_csrf_token_[a-f0-9]+)" value="([a-f0-9]+)"', r.text
+                )
+                if not m:
+                    return None
+                time.sleep(1)
+                r = scraper.post(
+                    final,
+                    data={m.group(1): m.group(2)},
+                    headers=self._UA,
+                    timeout=45,
+                )
+                return self._extract_hosts(r.text)
             return None
         except:
             return None
@@ -155,6 +184,14 @@ class NinexMovies:
         await asyncio.gather(*tasks)
         return result
 
+    @staticmethod
+    def _matches_query(name, query):
+        tokens = [t for t in re.split(r"\s+", query.lower()) if len(t) >= 2]
+        if not tokens:
+            return True
+        title = re.sub(r"[^a-z0-9]+", "", name.lower())
+        return all(t in title for t in tokens)
+
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
@@ -164,8 +201,11 @@ class NinexMovies:
         )
         if not posts:
             return None
+        posts = [p for p in posts if self._matches_query(p["name"], query)]
+        if not posts:
+            return None
         results = {"data": []}
-        for p in posts:
+        for p in posts[: limit]:
             m = re.search(r"(\d+(?:\.\d+)?)\s?(GB|GiB|MB|MiB)", p["name"])
             p["size"] = "{}{}".format(m.group(1), m.group(2)) if m else "1GB"
             results["data"].append(p)
