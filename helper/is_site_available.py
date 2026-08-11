@@ -31,6 +31,7 @@ all_sites = {
         "limit": 50,
     },
     "torrentdownload": {
+        "combo_available": False,
         "website": TorrentDownloads,
         "trending_available": False,
         "trending_category": False,
@@ -146,6 +147,7 @@ all_sites = {
         "limit": 50,
     },
     "nyaasi": {
+        "combo_available": False,
         "website": NyaaSi,
         "trending_available": False,
         "trending_category": False,
@@ -156,6 +158,7 @@ all_sites = {
         "limit": 50,
     },
     "piratebay": {
+        "combo_available": False,
         "website": PirateBay,
         "trending_available": True,
         "trending_category": False,
@@ -166,6 +169,7 @@ all_sites = {
         "limit": 50,
     },
     "bitsearch": {
+        "combo_available": False,
         "website": Bitsearch,
         "trending_available": True,
         "trending_category": False,
@@ -197,6 +201,7 @@ all_sites = {
         "limit": 50,
     },
     "libgen": {
+        "combo_available": False,
         "website": Libgen,
         "trending_available": False,
         "trending_category": False,
@@ -207,6 +212,7 @@ all_sites = {
         "limit": 25,
     },
     "yts": {
+        "combo_available": False,
         "website": Yts,
         "trending_available": True,
         "trending_category": False,
@@ -265,6 +271,7 @@ all_sites = {
         "limit": 45,
     },
     "torrentproject": {
+        "combo_available": False,
         "website": TorrentProject,
         "trending_available": False,
         "trending_category": False,
@@ -275,6 +282,7 @@ all_sites = {
         "limit": 20,
     },
     "ybt": {
+        "combo_available": False,
         "website": YourBittorrent,
         "trending_available": True,
         "trending_category": True,
