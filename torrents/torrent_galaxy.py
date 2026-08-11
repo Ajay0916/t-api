@@ -4,6 +4,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 import aiohttp
+from helper.session import get_connector
 
 from constants.base_url import TGX
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
@@ -74,7 +75,7 @@ class TorrentGalaxy:
 
     @decorator_asyncio_fix
     async def _fetch(self, url):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
                 return await res.json()
 

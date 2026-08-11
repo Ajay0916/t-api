@@ -1,6 +1,7 @@
 import re
 import time
 import aiohttp
+from helper.session import get_connector
 from urllib.parse import quote as requests_quote
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
@@ -80,7 +81,7 @@ class TorrentDownloads:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search?q={}&p={}".format(query, page)

@@ -3,6 +3,7 @@ import re
 import time
 from urllib.parse import parse_qs, unquote, urlparse
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -118,7 +119,7 @@ class Kickass:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/usearch/{}/{}/".format(query, page)
@@ -135,7 +136,7 @@ class Kickass:
         return result
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
@@ -147,7 +148,7 @@ class Kickass:
             return await self.parser_result(start_time, url, session)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

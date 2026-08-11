@@ -57,7 +57,7 @@ all_sites = {
         "recent_available": False,
         "recent_category_available": False,
         "categories": [],
-        "limit": 10,
+        "limit": 5,
     },
     "archivebooks": {
         "website": ArchiveBooks,

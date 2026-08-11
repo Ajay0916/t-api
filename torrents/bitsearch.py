@@ -1,6 +1,7 @@
 import re
 import time
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import BITSEARCH
@@ -89,7 +90,7 @@ class Bitsearch:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search?q={}&page={}".format(query, page)
@@ -133,7 +134,7 @@ class Bitsearch:
         return results
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/trending"

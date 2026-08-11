@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 import aiohttp
+from helper.session import get_connector
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -88,7 +89,7 @@ class Yts:
         return None
 
     async def _get_movies(self, url, start_time):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             data = await self._fetch_json(session, url)
             if data is None or data.get("status") != "ok":
                 return None

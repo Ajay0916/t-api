@@ -5,6 +5,7 @@ import time
 from urllib.parse import quote
 
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -176,7 +177,7 @@ class YourBittorrent:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/?v=&c=&q={}".format(query)
@@ -193,7 +194,7 @@ class YourBittorrent:
         return result
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             idx = None
@@ -208,7 +209,7 @@ class YourBittorrent:
             return await self.parser_result(start_time, url, session, idx)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             idx = None

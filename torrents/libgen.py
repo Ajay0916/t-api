@@ -1,6 +1,7 @@
 import asyncio
 import time
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -113,7 +114,7 @@ class Libgen:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/index.php?req={}&res=100".format(query)

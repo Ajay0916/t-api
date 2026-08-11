@@ -1,6 +1,7 @@
 import re
 import time
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import PIRATEBAY
@@ -66,7 +67,7 @@ class PirateBay:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/{}/{}/99/0".format(query, page)
@@ -110,14 +111,14 @@ class PirateBay:
         return results
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/top/all"
             return await self.parser_result(start_time, url, session)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

@@ -4,6 +4,7 @@ import time
 from urllib.parse import urljoin
 
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 
 from constants.base_url import PDFDRIVE
@@ -24,11 +25,14 @@ class PdfDrive:
             "Referer": "https://pdfdrive.com.co/",
         }
 
-    async def _fetch(self, session, url, retries=2):
+    async def _fetch(self, session, url, retries=2, timeout=15):
         for attempt in range(retries):
             try:
                 async with session.get(
-                    url, headers=self._UA, allow_redirects=True
+                    url,
+                    headers=self._UA,
+                    allow_redirects=True,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as r:
                     if r.status >= 400:
                         return None
@@ -65,7 +69,7 @@ class PdfDrive:
         async with sem:
             try:
                 html = await self._fetch(
-                    session, obj["url"] + "?download=links&opt=1"
+                    session, obj["url"] + "?download=links&opt=1", retries=1, timeout=12
                 )
                 if not html:
                     return None
@@ -91,7 +95,7 @@ class PdfDrive:
 
     async def _get_links(self, result, session):
         tasks = []
-        sem = asyncio.Semaphore(6)
+        sem = asyncio.Semaphore(8)
         for idx in range(len(result["data"])):
             tasks.append(
                 asyncio.create_task(
@@ -104,14 +108,14 @@ class PdfDrive:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
-        timeout = aiohttp.ClientTimeout(total=25)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, timeout=timeout) as session:
             q = query.replace(" ", "+")
             if page > 1:
                 url = self.BASE_URL + "/page/{}/?s=".format(page) + q
             else:
                 url = self.BASE_URL + "/?s=" + q
-            html = await self._fetch(session, url)
+            html = await self._fetch(session, url, retries=2, timeout=20)
             if not html:
                 return None
             posts = self._parser(html)

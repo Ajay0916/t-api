@@ -4,6 +4,7 @@ import time
 from urllib.parse import quote
 
 import aiohttp
+from helper.session import get_connector
 
 from constants.base_url import ARCHIVEBOOKS
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -103,7 +104,7 @@ class ArchiveBooks:
         return result
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             docs = await self._search_items(session, query, limit)

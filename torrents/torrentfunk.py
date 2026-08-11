@@ -3,6 +3,7 @@ import time
 from urllib.parse import quote
 
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTFUNK
@@ -97,7 +98,7 @@ class TorrentFunk:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/all/torrents/{}/{}.html".format(query, page)
@@ -144,14 +145,14 @@ class TorrentFunk:
         return result
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL
             return await self.parser_result(start_time, url, session)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

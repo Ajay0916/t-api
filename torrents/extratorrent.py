@@ -5,6 +5,7 @@ import re
 import time
 from urllib.parse import quote as requests_quote
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -149,7 +150,7 @@ class ExtraTorrent:
         return results
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/browse/?q={}".format(requests_quote(query))

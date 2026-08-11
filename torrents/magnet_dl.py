@@ -2,6 +2,7 @@ import asyncio
 import re
 import time
 import aiohttp
+from helper.session import get_connector
 from urllib.parse import quote as requests_quote
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -135,7 +136,7 @@ class Magnetdl:
         return results
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
@@ -146,7 +147,7 @@ class Magnetdl:
             )
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

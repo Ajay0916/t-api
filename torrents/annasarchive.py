@@ -3,6 +3,7 @@ import re
 import time
 
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 
 from constants.base_url import ANNASAARCHIVE
@@ -128,8 +129,8 @@ class AnnasArchive:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
-        timeout = aiohttp.ClientTimeout(total=25)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, timeout=timeout) as session:
             posts = []
             mirrors = [self.BASE_URL] + [
                 m for m in self.MIRRORS if m != self.BASE_URL

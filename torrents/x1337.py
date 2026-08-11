@@ -3,6 +3,7 @@ import re
 import time
 from urllib.parse import quote as requests_quote
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
@@ -122,7 +123,7 @@ class x1337:
             return None, None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             self.LIMIT = limit
             start_time = time.time()
             url = self.BASE_URL + "/search/{}/{}/".format(requests_quote(query), page)
@@ -167,7 +168,7 @@ class x1337:
         return result
 
     async def trending(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
@@ -177,7 +178,7 @@ class x1337:
             return await self.parser_result(start_time, url, session, page)
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
@@ -189,7 +190,7 @@ class x1337:
             return await self.parser_result(start_time, url, session, page)
 
     async def search_by_category(self, query, category, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/category-search/{}/{}/{}/".format(

@@ -5,6 +5,7 @@ import time
 from urllib.parse import quote
 
 import aiohttp
+from helper.session import get_connector
 from bs4 import BeautifulSoup
 
 from constants.base_url import HINDIBOOKS
@@ -87,7 +88,7 @@ class HindiBooks:
         return result
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search?q={}&max-results={}".format(
