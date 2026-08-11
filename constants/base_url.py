@@ -19,3 +19,6 @@ EXTO = "https://extto.com"
 TORRENTDOWNLOAD = "https://www.torrentdownload.info"
 AUDIOBOOKBAY = "http://theaudiobookbay.se"
 MAGNETZ = "https://magnetz.eu"
+
+FREECOURSEWEB = "https://freecourseweb.com"
+BOLLY4U = "https://bolly4u.mov"

@@ -1,0 +1,94 @@
+import asyncio
+import re
+import time
+from urllib.parse import quote
+
+import aiohttp
+from bs4 import BeautifulSoup
+from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.html_scraper import Scraper
+from constants.base_url import FREECOURSEWEB
+
+
+class FreeCourseWeb:
+    _name = "Free Course Web"
+
+    def __init__(self):
+        self.BASE_URL = FREECOURSEWEB
+        self.LIMIT = None
+
+    @decorator_asyncio_fix
+    async def _individual_scrap(self, session, url, obj, sem):
+        async with sem:
+            try:
+                html = await Scraper().get_all_results(session, url)
+                if not html or not html[0]:
+                    return None
+                m = re.search(r'href="(magnet:\?xt=[^"]+)"', html[0])
+                if not m:
+                    return None
+                magnet = m.group(1)
+                obj["magnet"] = magnet
+                hm = re.search(r"([{a-f\d,A-F\d}]{32,40})\b", magnet)
+                if hm:
+                    obj["hash"] = hm.group(0)
+            except:
+                return None
+
+    async def _get_magnets(self, result, session, urls):
+        tasks = []
+        sem = asyncio.Semaphore(6)
+        for idx, url in enumerate(urls):
+            for obj in result["data"]:
+                if obj["url"] == url:
+                    task = asyncio.create_task(
+                        self._individual_scrap(session, url, result["data"][idx], sem)
+                    )
+                    tasks.append(task)
+        await asyncio.gather(*tasks)
+        return result
+
+    def _parser(self, htmls):
+        try:
+            for html in htmls:
+                soup = BeautifulSoup(html, "html.parser")
+                my_dict = {"data": []}
+                for a in soup.select("h2.entry-title.post-title a[href]"):
+                    name = a.get_text(" ", strip=True)
+                    url = a["href"]
+                    if url.startswith("/"):
+                        url = self.BASE_URL + url
+                    my_dict["data"].append({"name": name, "url": url})
+                    if len(my_dict["data"]) == self.LIMIT:
+                        break
+                try:
+                    page_nums = []
+                    for a in soup.select('a[href*="/page/"]'):
+                        m = re.search(r"/page/(\d+)/", a["href"])
+                        if m:
+                            page_nums.append(int(m.group(1)))
+                    if page_nums:
+                        my_dict["total_pages"] = max(page_nums)
+                except:
+                    ...
+                return my_dict
+        except:
+            return None
+
+    async def search(self, query, page, limit):
+        async with aiohttp.ClientSession() as session:
+            start_time = time.time()
+            self.LIMIT = limit
+            url = self.BASE_URL + "/?s={}".format(quote(query))
+            if page > 1:
+                url = self.BASE_URL + "/page/{}/?s={}".format(page, quote(query))
+            html = await Scraper().get_all_results(session, url)
+            results = self._parser(html)
+            if results is None or len(results["data"]) == 0:
+                return None
+            results["time"] = time.time() - start_time
+            results["total"] = len(results["data"])
+            urls = [obj["url"] for obj in results["data"]]
+            results = await self._get_magnets(results, session, urls)
+            results["total"] = len(results["data"])
+            return results
