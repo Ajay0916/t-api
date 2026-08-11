@@ -31,7 +31,7 @@ async def get_search_combo(
         cached = combo_cache.get(cache_key)
         if cached is not None:
             cached["time"] = time.time() - start_time
-            return clean_results(cached)
+            return clean_results(cached, sort=False)
 
     all_sites = check_if_site_available("1337x")
     sites_list = [
@@ -39,7 +39,18 @@ async def get_search_combo(
         for site in all_sites.keys()
         if all_sites[site].get("combo_available", True)
     ]
-    COMBO = {"data": []}
+    # Sites whose results are pushed to the end of the combined list
+    # (1337x search quality varies and the user wants its results last).
+    LAST_SITES = {"1337x"}
+
+    def _seeders(item):
+        try:
+            return float(str(item.get("seeders")).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return -1
+
+    main_data = []
+    last_data = []
     total_torrents_overall = 0
 
     tasks = []
@@ -68,10 +79,13 @@ async def get_search_combo(
             continue
         if len(res["data"]) > 0:
             site_health.mark_success(site)
-            for torrent in res["data"]:
-                COMBO["data"].append(torrent)
+            bucket = last_data if site in LAST_SITES else main_data
+            bucket.extend(res["data"])
             total_torrents_overall = total_torrents_overall + res["total"]
 
+    main_data.sort(key=_seeders, reverse=True)
+    last_data.sort(key=_seeders, reverse=True)
+    COMBO = {"data": main_data + last_data}
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = total_torrents_overall
     if total_torrents_overall == 0:
@@ -80,7 +94,7 @@ async def get_search_combo(
             json_message={"error": "Result not found."},
         )
     combo_cache.set(cache_key, COMBO)
-    return clean_results(COMBO)
+    return clean_results(COMBO, sort=False)
 
 
 @router.get("/trending")

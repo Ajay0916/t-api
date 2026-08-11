@@ -12,8 +12,8 @@ def _seeders(item):
         return -1
 
 
-def clean_results(resp):
-    """Normalize, deduplicate and sort results.
+def clean_results(resp, sort=True):
+    """Normalize, deduplicate and (optionally) sort results.
 
     Removes keys with None values (a None "torrent"/"magnet" would render a
     broken button in WZML-X). Deduplicates entries by hash (or normalized
@@ -54,7 +54,8 @@ def clean_results(resp):
             seen.add(key)
         deduped.append(item)
 
-    deduped.sort(key=_seeders, reverse=True)
+    if sort:
+        deduped.sort(key=_seeders, reverse=True)
     resp["data"] = deduped
     if "total" in resp:
         resp["total"] = len(deduped)
