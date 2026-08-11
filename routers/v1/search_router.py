@@ -21,7 +21,11 @@ async def _search_site(website, query, page, limit):
 @router.get("/")
 @router.get("")
 async def search_for_torrents(
-    site: str, query: str, limit: Optional[int] = 0, page: Optional[int] = 1
+    site: str,
+    query: str,
+    limit: Optional[int] = 0,
+    page: Optional[int] = 1,
+    fresh: Optional[int] = 0,
 ):
     site = site.lower()
     query = query.lower()
@@ -39,9 +43,10 @@ async def search_for_torrents(
     )
 
     cache_key = f"{site}:{query}:{page}:{limit}"
-    cached = search_cache.get(cache_key)
-    if cached is not None:
-        return clean_results(cached)
+    if not fresh:
+        cached = search_cache.get(cache_key)
+        if cached is not None:
+            return clean_results(cached)
 
     task = asyncio.create_task(
         _search_site(all_sites[site]["website"], query, page, limit)

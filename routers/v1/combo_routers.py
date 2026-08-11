@@ -20,15 +20,18 @@ async def _search_site(website, query, limit):
 
 
 @router.get("/search")
-async def get_search_combo(query: str, limit: Optional[int] = 0):
+async def get_search_combo(
+    query: str, limit: Optional[int] = 0, fresh: Optional[int] = 0
+):
     start_time = time.time()
     query = query.lower()
 
     cache_key = f"combo:{query}:{limit}"
-    cached = combo_cache.get(cache_key)
-    if cached is not None:
-        cached["time"] = time.time() - start_time
-        return clean_results(cached)
+    if not fresh:
+        cached = combo_cache.get(cache_key)
+        if cached is not None:
+            cached["time"] = time.time() - start_time
+            return clean_results(cached)
 
     all_sites = check_if_site_available("1337x")
     sites_list = [
