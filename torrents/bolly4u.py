@@ -117,17 +117,19 @@ class Bolly4u:
                 )
                 if not links:
                     return None
-                direct = await loop.run_in_executor(
-                    self._executor, self._resolve_download_sync, links[0]
-                )
-                if direct:
-                    obj["download"] = direct
+                for link in links[:3]:
+                    direct = await loop.run_in_executor(
+                        self._executor, self._resolve_download_sync, link
+                    )
+                    if direct:
+                        obj["download"] = direct
+                        break
             except:
                 return None
 
     async def _get_download_links(self, result, urls):
         tasks = []
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(1)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
