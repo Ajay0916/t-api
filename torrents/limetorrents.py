@@ -1,6 +1,8 @@
 import asyncio
 import re
 import time
+from urllib.parse import quote
+
 import aiohttp
 from helper.session import get_connector
 from bs4 import BeautifulSoup
@@ -9,12 +11,28 @@ from helper.html_scraper import Scraper
 from constants.base_url import LIMETORRENT
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
+HOSTS = [
+    LIMETORRENT,
+    "https://www.limetorrents.lol",
+    "https://www.limetorrents.info",
+    "https://www.limetorrents.net",
+    "https://www.limetorrents.cc",
+]
+
 
 class Limetorrent:
     _name = "Lime Torrents"
     def __init__(self):
         self.BASE_URL = LIMETORRENT
         self.LIMIT = None
+
+    async def _fetch_page(self, session, path):
+        for host in HOSTS:
+            htmls = await Scraper().get_all_results(session, host + path)
+            if htmls and htmls[0]:
+                self.BASE_URL = host
+                return htmls
+        return None
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
@@ -99,13 +117,15 @@ class Limetorrent:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/search/all/{}//{}".format(query, page)
+            path = "/search/all/{}//{}".format(quote(query), page)
             return await self.parser_result(
-                start_time, url, session, idx=0, page=page, query=query
+                start_time, path, session, idx=0, page=page, query=query
             )
 
-    async def parser_result(self, start_time, url, session, idx=0, page=1, query=None):
-        htmls = await Scraper().get_all_results(session, url)
+    async def parser_result(self, start_time, path, session, idx=0, page=1, query=None):
+        htmls = await self._fetch_page(session, path)
+        if htmls is None:
+            return None
         result, urls = self._parser(htmls, idx)
         if result is not None:
             results = await self._get_torrent(result, session, urls)
@@ -123,8 +143,10 @@ class Limetorrent:
                     if page >= 25:
                         break
                     page += 1
-                    url = self.BASE_URL + "/search/all/{}//{}".format(query, page)
-                    htmls = await Scraper().get_all_results(session, url)
+                    path = "/search/all/{}//{}".format(quote(query), page)
+                    htmls = await self._fetch_page(session, path)
+                    if htmls is None:
+                        break
                     result, urls = self._parser(htmls, idx)
                     if result is None or len(result["data"]) == 0:
                         break
@@ -145,22 +167,22 @@ class Limetorrent:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/top100"
-            return await self.parser_result(start_time, url, session)
+            path = "/top100"
+            return await self.parser_result(start_time, path, session)
 
     async def recent(self, category, page, limit):
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:
-                url = self.BASE_URL + "/latest100"
+                path = "/latest100"
             else:
                 category = (category).capitalize()
                 if category == "Apps":
                     category = "Applications"
                 elif category == "Tv":
                     category = "TV-shows"
-                url = self.BASE_URL + "/browse-torrents/{}/date/{}/".format(
+                path = "/browse-torrents/{}/date/{}/".format(
                     category, page
                 )
-            return await self.parser_result(start_time, url, session)
+            return await self.parser_result(start_time, path, session)

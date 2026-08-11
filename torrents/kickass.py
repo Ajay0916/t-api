@@ -10,12 +10,22 @@ from helper.html_scraper import Scraper
 from constants.base_url import KICKASS
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
+HOSTS = [KICKASS, "https://kickasstorrents.to"]
+
 
 class Kickass:
     _name = "Kick Ass"
     def __init__(self):
         self.BASE_URL = KICKASS
         self.LIMIT = None
+
+    async def _fetch_page(self, session, path):
+        for host in HOSTS:
+            htmls = await Scraper().get_all_results(session, host + path)
+            if htmls and htmls[0]:
+                self.BASE_URL = host
+                return htmls
+        return None
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
@@ -126,10 +136,8 @@ class Kickass:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/usearch/{}/{}/".format(
-                quote(query), page
-            )
-            results = await self.parser_result(start_time, url, session)
+            path = "/usearch/{}/{}/".format(quote(query), page)
+            results = await self.parser_result(start_time, path, session)
             if results is None:
                 return None
             results["current_page"] = page
@@ -141,11 +149,9 @@ class Kickass:
                 if page >= total_pages or page >= 25:
                     break
                 page += 1
-                url = self.BASE_URL + "/usearch/{}/{}/".format(
-                    quote(query), page
-                )
+                path = "/usearch/{}/{}/".format(quote(query), page)
                 res = await self.parser_result(
-                    time.time() - start_time, url, session
+                    time.time() - start_time, path, session
                 )
                 if res is None or len(res["data"]) == 0:
                     break
@@ -160,8 +166,10 @@ class Kickass:
             results["total"] = len(results["data"])
             return results
 
-    async def parser_result(self, start_time, url, session):
-        htmls = await Scraper().get_all_results(session, url)
+    async def parser_result(self, start_time, path, session):
+        htmls = await self._fetch_page(session, path)
+        if htmls is None:
+            return None
         result, urls = self._parser(htmls)
         if result is not None:
             results = await self._get_torrent(result, session, urls)

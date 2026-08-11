@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import AUDIOBOOKBAY
+from constants.headers import HEADER_AIO
 from helper.trackers import build_magnet
 
 HOSTS = [AUDIOBOOKBAY, "https://audiobookbay.lu"]
@@ -23,10 +24,20 @@ class AudiobookBay:
 
     async def _fetch_page(self, session, path):
         for host in HOSTS:
-            htmls = await Scraper().get_all_results(session, host + path)
-            if htmls and htmls[0]:
-                self.BASE_URL = host
-                return htmls
+            try:
+                async with session.get(
+                    host + path,
+                    headers=HEADER_AIO,
+                    timeout=aiohttp.ClientTimeout(total=8),
+                ) as res:
+                    if res.status >= 400:
+                        continue
+                    text = await res.text()
+                if text:
+                    self.BASE_URL = host
+                    return [text]
+            except Exception:
+                continue
         return None
 
     @decorator_asyncio_fix

@@ -25,7 +25,7 @@ class PdfDrive:
             "Referer": "https://pdfdrive.com.co/",
         }
 
-    async def _fetch(self, session, url, retries=2, timeout=15):
+    async def _fetch(self, session, url, retries=2, timeout=12):
         for attempt in range(retries):
             try:
                 async with session.get(
