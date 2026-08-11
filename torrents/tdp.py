@@ -8,7 +8,7 @@ from helper.session import get_connector
 from constants.base_url import TDP_URL
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.trackers import build_magnet
+from helper.trackers import build_magnet, build_torrent_url
 
 
 def format_size(size):
@@ -65,7 +65,7 @@ class TDP:
                     "uploader": "",
                     "hash": info_hash,
                     "magnet": build_magnet(info_hash, title) if info_hash else None,
-                    "torrent": None,
+                    "torrent": build_torrent_url(info_hash, title) if info_hash else None,
                     "url": self.BASE_URL + field("link"),
                 }
             )

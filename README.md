@@ -25,6 +25,8 @@
 - **26 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss auto-failover to next mirror when one is blocked.
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
+- **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
+- **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
 - **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with per-site deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.

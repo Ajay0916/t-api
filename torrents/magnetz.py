@@ -7,6 +7,7 @@ from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import MAGNETZ
+from helper.trackers import build_torrent_url
 
 
 class Magnetz:
@@ -50,6 +51,11 @@ class Magnetz:
                             ),
                             "hash": hash_match.group(0) if hash_match else None,
                             "magnet": magnet,
+                            "torrent": (
+                                build_torrent_url(hash_match.group(0), name)
+                                if hash_match
+                                else None
+                            ),
                             "url": url,
                         }
                     )

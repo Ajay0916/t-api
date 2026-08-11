@@ -16,6 +16,7 @@ class AnnasArchive:
 
     MIRRORS = [
         "https://annas-archive.gl",
+        "https://annas-archive.li",
         "https://annas-archive.pk",
         "https://annas-archive.gd",
     ]

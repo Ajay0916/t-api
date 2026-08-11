@@ -10,7 +10,7 @@ from constants.base_url import YTS
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.trackers import build_magnet
 
-HOSTS = [YTS, "https://yts.mx", "https://yts.am", "https://yts.rs"]
+HOSTS = [YTS, "https://yts.rs"]
 
 
 class Yts:
@@ -65,6 +65,7 @@ class Yts:
                         url,
                         headers=HEADER_AIO,
                         timeout=AIO_TIMEOUT,
+                        allow_redirects=True,
                     ) as res:
                         if res.status >= 400:
                             continue

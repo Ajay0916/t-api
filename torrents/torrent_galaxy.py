@@ -4,14 +4,15 @@ from datetime import datetime
 from urllib.parse import quote
 
 import aiohttp
-from helper.session import get_connector
 
 from constants.base_url import TGX
-from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from constants.headers import HEADER_AIO
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.trackers import build_magnet
+from helper.trackers import build_magnet, build_torrent_url
 
 PAGE_SIZE = 50
+
+HOSTS = [TGX, "https://torrentgalaxy.one"]
 
 
 def format_size(size):
@@ -57,10 +58,31 @@ class TorrentGalaxy:
         return cat.capitalize() if cat else None
 
     @decorator_asyncio_fix
-    async def _fetch(self, url):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
-            async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                return await res.json()
+    async def _fetch(self, endpoint):
+        # torrentgalaxy.info is behind Cloudflare and resets plain-TLS
+        # connections, so each host is tried with a dedicated SSL connector.
+        for host in HOSTS:
+            url = host + endpoint
+            for attempt in range(2):
+                try:
+                    async with aiohttp.ClientSession(
+                        connector=aiohttp.TCPConnector(ssl=True),
+                        connector_owner=False,
+                    ) as session:
+                        async with session.get(
+                            url,
+                            headers=HEADER_AIO,
+                            timeout=aiohttp.ClientTimeout(total=20),
+                        ) as res:
+                            if res.status >= 400:
+                                break
+                            data = await res.json(content_type=None)
+                            self.BASE_URL = host
+                            return data
+                except Exception:
+                    await asyncio.sleep(0.5)
+                    continue
+        return None
 
     def _parse(self, data, page, start_time):
         results = []
@@ -85,7 +107,7 @@ class TorrentGalaxy:
                     "imdb_id": item.get("i"),
                     "hash": info_hash,
                     "magnet": build_magnet(info_hash, name) if info_hash else None,
-                    "torrent": None,
+                    "torrent": build_torrent_url(info_hash, name) if info_hash else None,
                     "url": "{}/post-detail/{}/".format(self.BASE_URL, pk) if pk else self.BASE_URL,
                     "poster": poster,
                 }
@@ -103,14 +125,9 @@ class TorrentGalaxy:
         }
 
     async def _request(self, endpoint, page):
-        url = "{}{}".format(self.BASE_URL, endpoint)
         if page > 1:
-            url += "?page={}".format(page)
-        try:
-            data = await self._fetch(url)
-        except Exception:
-            return None
-        return data
+            endpoint += "?page={}".format(page)
+        return await self._fetch(endpoint)
 
     async def search(self, query, page, limit):
         self.LIMIT = limit

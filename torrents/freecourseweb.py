@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import FREECOURSEWEB
+from helper.trackers import build_torrent_url
 
 
 class FreeCourseWeb:
@@ -33,6 +34,7 @@ class FreeCourseWeb:
                 hm = re.search(r"([{a-f\d,A-F\d}]{32,40})\b", magnet)
                 if hm:
                     obj["hash"] = hm.group(0)
+                    obj["torrent"] = build_torrent_url(hm.group(0), obj.get("name") or "")
             except:
                 return None
 

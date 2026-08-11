@@ -10,6 +10,7 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTPROJECT
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.trackers import build_torrent_url
 
 
 class TorrentProject:
@@ -50,6 +51,9 @@ class TorrentProject:
                                     )
                                     if m:
                                         obj["hash"] = m.group(1)
+                                        obj["torrent"] = build_torrent_url(
+                                            m.group(1), obj.get("name") or ""
+                                        )
                                 break
                     except Exception:
                         ...

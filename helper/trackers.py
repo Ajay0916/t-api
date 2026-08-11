@@ -21,6 +21,8 @@ STATIC_TRACKERS = [
     "http://tracker.openbittorrent.com:80/announce",
 ]
 
+TORRENT_CDN = "https://itorrents.net/torrent/{}.torrent"
+
 TRACKERS_URL = (
     "https://raw.githubusercontent.com/ngosang/trackerslist/master/"
     "trackers_best.txt"
@@ -76,3 +78,8 @@ def build_magnet(info_hash, name):
     dn = quote(name)
     tr = "".join("&tr={}".format(quote(t)) for t in trackers)
     return "magnet:?xt=urn:btih:{}&dn={}{}".format(info_hash, dn, tr)
+
+
+def build_torrent_url(info_hash, name):
+    """Build a .torrent download link from an infohash via itorrents.net."""
+    return TORRENT_CDN.format(info_hash) + "?title=" + quote(name)

@@ -6,12 +6,9 @@ from urllib.parse import quote
 import aiohttp
 from constants.base_url import PIRATEBAY
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
-from helper.trackers import build_magnet
+from helper.trackers import build_magnet, build_torrent_url
 from helper.session import get_connector
 from torrents.torrent_galaxy import format_date, format_size
-
-TORRENT_CDN = "https://itorrents.org/torrent/{}.torrent"
-
 
 def _category(cat):
     try:
@@ -61,7 +58,7 @@ class PirateBay:
             "url": "{}/t.php?id={}".format(PIRATEBAY, item.get("id")),
             "hash": info_hash,
             "magnet": build_magnet(info_hash, name) if info_hash else None,
-            "torrent": TORRENT_CDN.format(info_hash) if info_hash else None,
+            "torrent": build_torrent_url(info_hash, name) if info_hash else None,
             "imdb_id": item.get("imdb") or None,
         }
 

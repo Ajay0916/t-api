@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import MAGNETDL
-from helper.trackers import build_magnet
+from helper.trackers import build_magnet, build_torrent_url
 
 
 class Magnetdl:
@@ -71,6 +71,7 @@ class Magnetdl:
                 if info_hash:
                     obj["hash"] = info_hash
                     obj["magnet"] = build_magnet(info_hash, obj["name"])
+                    obj["torrent"] = build_torrent_url(info_hash, obj["name"])
             except:
                 return None
 

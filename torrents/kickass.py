@@ -9,6 +9,7 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import KICKASS
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.trackers import build_torrent_url
 
 HOSTS = [KICKASS, "https://kickasstorrents.to"]
 
@@ -58,6 +59,9 @@ class Kickass:
                             hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
                             if hash_match:
                                 obj["hash"] = hash_match.group(1)
+                                obj["torrent"] = build_torrent_url(
+                                    hash_match.group(1), obj.get("name") or ""
+                                )
                             obj["magnet"] = magnet
                     except:
                         ...
