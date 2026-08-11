@@ -28,5 +28,20 @@ class SiteHealth:
         self._cooldown_until.pop(site, None)
         return False
 
+    def status(self, site):
+        now = time.monotonic()
+        until = self._cooldown_until.get(site)
+        if until is None or now >= until:
+            return {
+                "blocked": False,
+                "cooldown_remaining": 0,
+                "fail_count": self._fail_count.get(site, 0),
+            }
+        return {
+            "blocked": True,
+            "cooldown_remaining": int(until - now),
+            "fail_count": self._fail_count.get(site, 0),
+        }
+
 
 site_health = SiteHealth(cooldown=300)
