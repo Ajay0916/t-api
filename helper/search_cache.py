@@ -35,3 +35,4 @@ class TTLCache:
 
 search_cache = TTLCache(max_size=256, ttl=300)
 combo_cache = TTLCache(max_size=128, ttl=300)
+rss_cache = TTLCache(max_size=64, ttl=300)

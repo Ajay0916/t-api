@@ -10,3 +10,8 @@ test.json
 
 # virtualenv
 venv/
+
+# local scaffolding / scratch
+plugins/
+server.log
+nohup.out
