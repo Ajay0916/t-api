@@ -69,9 +69,19 @@ async def get_search_combo(
             )
         )
 
+    done, pending = await asyncio.wait(
+        [t for _, t in tasks], timeout=SITE_DEADLINE
+    )
+    for t in pending:
+        t.cancel()
     for site, task in tasks:
+        if task not in done:
+            # Slow but alive: skip this round, don't blacklist (results matter).
+            continue
         try:
-            res = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+            res = task.result()
+        except asyncio.CancelledError:
+            continue
         except Exception:
             site_health.mark_failure(site)
             continue
@@ -130,9 +140,19 @@ async def get_all_trending(limit: Optional[int] = 0):
                 ),
             )
         )
+    done, pending = await asyncio.wait(
+        [t for _, t in tasks], timeout=SITE_DEADLINE
+    )
+    for t in pending:
+        t.cancel()
     for site, task in tasks:
+        if task not in done:
+            # Slow but alive: skip this round, don't blacklist (results matter).
+            continue
         try:
-            res = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+            res = task.result()
+        except asyncio.CancelledError:
+            continue
         except Exception:
             site_health.mark_failure(site)
             continue
@@ -186,9 +206,19 @@ async def get_all_recent(limit: Optional[int] = 0):
                 ),
             )
         )
+    done, pending = await asyncio.wait(
+        [t for _, t in tasks], timeout=SITE_DEADLINE
+    )
+    for t in pending:
+        t.cancel()
     for site, task in tasks:
+        if task not in done:
+            # Slow but alive: skip this round, don't blacklist (results matter).
+            continue
         try:
-            res = await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+            res = task.result()
+        except asyncio.CancelledError:
+            continue
         except Exception:
             site_health.mark_failure(site)
             continue

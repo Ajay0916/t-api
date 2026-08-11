@@ -23,7 +23,7 @@
 ## ✨ What's Unique Here
 
 - **26 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
-- **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss auto-failover to next mirror when one is blocked.
+- **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
@@ -33,7 +33,7 @@
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
-- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites with a per-site 18s deadline; blocked/down sites auto-skip; 1337x pushed to the end of combo results.
+- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites under one hard 18s cap (true deadline, results never drag); slow-but-alive sites are retried next round instead of being blacklisted; hard-failed/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.
 - **Query encoding fixes** — multi-word queries (`bob proctor`) work on every site.
 - **Cleaner output** — seeders/leechers/downloads normalized to int.

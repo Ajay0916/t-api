@@ -13,6 +13,8 @@ from constants.base_url import EXTO
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.trackers import build_torrent_url
 
+HOSTS = [EXTO, "https://extratorrent.st"]
+
 
 class ExtraTorrent:
     _name = "ext"
@@ -20,6 +22,19 @@ class ExtraTorrent:
     def __init__(self):
         self.BASE_URL = EXTO
         self.LIMIT = None
+
+    async def _fetch_page(self, session, path):
+        start = HOSTS.index(self.BASE_URL) if self.BASE_URL in HOSTS else 0
+        for i in range(len(HOSTS)):
+            host = HOSTS[(start + i) % len(HOSTS)]
+            try:
+                htmls = await Scraper().get_all_results(session, host + path)
+                if htmls and htmls[0]:
+                    self.BASE_URL = host
+                    return htmls
+            except Exception:
+                continue
+        return None
 
     @staticmethod
     def _clean(td, prefix):
@@ -146,8 +161,10 @@ class ExtraTorrent:
         await asyncio.gather(*tasks)
         return result
 
-    async def parser_result(self, start_time, url, session):
-        htmls = await Scraper().get_all_results(session, url)
+    async def parser_result(self, start_time, path, session):
+        htmls = await self._fetch_page(session, path)
+        if htmls is None:
+            return None
         results = self._parser(htmls)
         if results is not None:
             urls = [item["url"] for item in results["data"]]
@@ -161,10 +178,10 @@ class ExtraTorrent:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/browse/?q={}".format(requests_quote(query))
+            path = "/browse/?q={}".format(requests_quote(query))
             if page > 1:
-                url += "&page={}".format(page)
-            results = await self.parser_result(start_time, url, session)
+                path += "&page={}".format(page)
+            results = await self.parser_result(start_time, path, session)
             if results is None:
                 return None
             results["current_page"] = page
@@ -176,11 +193,9 @@ class ExtraTorrent:
                 if page >= total_pages or page >= 25:
                     break
                 page += 1
-                url = self.BASE_URL + "/browse/?q={}&page={}".format(
-                    requests_quote(query), page
-                )
+                path = "/browse/?q={}&page={}".format(requests_quote(query), page)
                 res = await self.parser_result(
-                    time.time() - start_time, url, session
+                    time.time() - start_time, path, session
                 )
                 if res is None or len(res["data"]) == 0:
                     break
