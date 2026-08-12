@@ -87,6 +87,7 @@ class HindiAudio:
                 )
                 f = pool[0]
                 name = f["name"]
+                obj["extension"] = name.rsplit(".", 1)[-1].lower()
                 obj["torrent"] = self.BASE_URL + "/download/{}/{}".format(
                     identifier, quote(name)
                 )

@@ -72,6 +72,7 @@ class ArchiveBooks:
                     key=lambda f: int(f.get("size") or 0), reverse=True
                 )
                 f = books[0]
+                obj["extension"] = f["name"].rsplit(".", 1)[-1].lower()
                 obj["torrent"] = self.BASE_URL + "/download/{}/{}".format(
                     identifier, quote(f["name"])
                 )

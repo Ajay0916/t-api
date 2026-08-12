@@ -21,6 +21,139 @@ CATEGORY_ALIASES = {
 NAME_MATCH_CATEGORIES = {"course", "book", "music"}
 
 
+_RES_RE = re.compile(r"(\d{3,4})p\b")
+
+# Language tokens are matched against name + category (+ any language field
+# a scraper exposes). "hindi" is the Indian preference: it also covers Hindi
+# dubbed releases because their names carry "Hindi"/"HIN" tokens.
+_LANG_TOKENS = {
+    "hindi": ("hindi", "hin"),
+    "english": ("english", "eng"),
+    "tamil": ("tamil", "tam"),
+    "telugu": ("telugu", "tel"),
+    "malayalam": ("malayalam", "mal"),
+    "kannada": ("kannada", "kan"),
+    "bengali": ("bengali", "ben"),
+    "punjabi": ("punjabi", "pun"),
+    "marathi": ("marathi", "mar"),
+    "gujarati": ("gujarati", "guj"),
+    "dubbed": ("dubbed", "dub"),
+    "dual": ("dual",),
+    "multi": ("multi",),
+}
+
+# Order matters: longer/rarer extensions first so "azw3" wins over "azw"
+# and "docx" over "doc".
+_EBOOK_FORMATS = (
+    "azw3", "djvu", "fb2", "epub", "mobi", "cbz", "cbr", "docx",
+    "azw", "pdf", "txt", "doc", "lit", "rtf",
+)
+
+
+def _resolutions(name):
+    """All resolutions present in a name (multi-quality releases like
+    "720p 480p" report both, "4K/2160p/UHD" maps to 2160)."""
+    res = set(int(m.group(1)) for m in _RES_RE.finditer(name or ""))
+    if re.search(r"\b(4k|uhd|2160p)\b", name or "", re.I):
+        res.add(2160)
+    return res
+
+
+def detect_quality(item):
+    """Best resolution found in the result name, e.g. "1080p" / "4K"."""
+    res = _resolutions(str(item.get("name") or ""))
+    if not res:
+        return None
+    best = max(res)
+    return "4K" if best >= 2160 else "{}p".format(best)
+
+
+def detect_language(item):
+    """Languages found in the result (name + category), e.g. "Hindi, English".
+
+    Marker tokens (dubbed/dual/multi) are used for matching only, they are
+    not reported as a language.
+    """
+    text = (
+        str(item.get("name") or "") + " " + str(item.get("category") or "")
+    ).lower()
+    langs = []
+    for label, tokens in _LANG_TOKENS.items():
+        if label in ("dubbed", "dual", "multi"):
+            continue
+        if any(t in text for t in tokens):
+            langs.append(label.capitalize())
+    return ", ".join(langs) if langs else None
+
+
+def _ebook_format_in(text):
+    """First ebook extension found in text, or None. Case-insensitive."""
+    for f in _EBOOK_FORMATS:
+        if re.search(r"(?<![a-z0-9])\.?" + re.escape(f) + r"(?![a-z0-9])", text):
+            return f.upper()
+    return None
+
+
+def detect_format(item):
+    """Book format found in name/category/extension/torrent url, e.g. "PDF"."""
+    text = (
+        str(item.get("name") or "") + " " + str(item.get("category") or "")
+        + " " + str(item.get("extension") or "") + " "
+        + str(item.get("torrent") or "") + " " + str(item.get("url") or "")
+    ).lower()
+    return _ebook_format_in(text)
+
+
+def quality_matches(item, quality):
+    """Match a movie result by resolution (480/720/1080/4k) using its name."""
+    q = str(quality or "").lower().strip().replace("p", "")
+    if not q:
+        return True
+    res = _resolutions(str(item.get("name") or ""))
+    if not res:
+        return False
+    if q in ("4k", "2160"):
+        return max(res) >= 2160
+    try:
+        return int(q) in res
+    except ValueError:
+        return False
+
+
+def language_matches(item, language):
+    """Match a result by language (hindi/english/tamil/dual/dubbed...).
+
+    Also checks any language field a scraper exposes (libgen sets one), and
+    "hindi" additionally covers Hindi dubbed releases.
+    """
+    lang = str(language or "").lower().strip()
+    if not lang:
+        return True
+    text = (
+        str(item.get("name") or "") + " " + str(item.get("category") or "")
+        + " " + str(item.get("language") or "") + " "
+        + str(item.get("languages") or "")
+    ).lower()
+    tokens = _LANG_TOKENS.get(lang, (lang,))
+    return any(t in text for t in tokens)
+
+
+def format_matches(item, fmt):
+    """Match a book result by format (pdf/epub/mobi/azw3...) from its name,
+    extension field or download/torrent URL."""
+    f = str(fmt or "").lower().strip().lstrip(".")
+    if not f:
+        return True
+    detected = detect_format(item)
+    if detected and detected.lower() == f:
+        return True
+    text = (
+        str(item.get("name") or "") + " " + str(item.get("category") or "")
+        + " " + str(item.get("extension") or "")
+    ).lower()
+    return re.search(r"(?<![a-z0-9])\.?" + re.escape(f) + r"(?![a-z0-9])", text) is not None
+
+
 def category_matches(item, category):
     """Match a category keyword against a result's category or name.
 
@@ -112,6 +245,17 @@ def clean_results(resp, sort=True):
                     )
             if not (item.get("magnet") or item.get("torrent")):
                 continue
+            # Enrich with detected metadata so WZML and API clients can show
+            # quality/language (movies) and format (books) without parsing names.
+            for _key, _detect in (
+                ("quality", detect_quality),
+                ("language", detect_language),
+                ("format", detect_format),
+            ):
+                if item.get(_key) is None:
+                    _val = _detect(item)
+                    if _val:
+                        item[_key] = _val
             for key in ("seeders", "leechers", "downloads"):
                 if item.get(key) is not None:
                     item[key] = _to_int(item[key])

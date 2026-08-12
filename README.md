@@ -31,7 +31,8 @@
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo merges every site** — `limit` caps how many results each site fetches, but the merged output returns everything collected (deduped by infohash, sorted by seeders).
-- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date` and `order=asc|desc` on both `/all/search` and `/search`.
+- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, plus movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...` and book filter `format=pdf|epub|mobi|azw3|...` on both `/all/search` and `/search`.
+- **Auto-detected metadata** — every result is enriched with `quality` (`480p/720p/1080p/4K`) and `language` (`Hindi, English, Tamil...`) for movies, and `format` (`PDF/EPUB/MOBI...`) for books, detected from the release name / extension / download URL — WZML and API clients can show them without parsing titles. Multi-quality releases (`720p 480p`) match either quality filter.
 - **Torrent file proxy** — `/api/v1/torrent_file?url=...` fetches a `.torrent` through this server so WZML Direct Links survive CDN blocks.
 - **Manual site toggle** — `POST /api/v1/status/{site}/disable` (or `/enable`) blocks/unblocks a site instantly, no restart.
 - **Combo de-duplicates by infohash** — same torrent from multiple sites takes only the best-seeder row (before the limit cap), so WZML result slots never fill with repeats.
@@ -104,11 +105,11 @@ docker compose up -d --build
 | `GET /api/v1/sites` | — |
 | `GET /api/v1/sites/config` | — |
 | `GET /api/v1/sites/status` | — (health: blocked/cooldown/fail_count per site) |
-| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `min_seeders`, `category`, `sort`, `order` |
+| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format` |
 | `GET /api/v1/trending` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/recent` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/category` | `site` ✅, `query` ✅, `category` ✅, `limit`, `page` |
-| `GET /api/v1/all/search` | `query` ✅, `limit`, `min_seeders`, `category`, `sort`, `order`, `fresh` |
+| `GET /api/v1/all/search` | `query` ✅, `limit`, `min_seeders`, `category`, `sort`, `order`, `fresh`, `quality`, `language`, `format` |
 | `GET /api/v1/torrent_file` | `url` ✅, `name` — proxies a .torrent file through this server |
 | `POST /api/v1/status/{site}/disable` · `/enable` | manually block/unblock a site without restart |
 | `GET /api/v1/all/trending` | `limit` |
@@ -119,6 +120,10 @@ docker compose up -d --build
 ```sh
 curl "http://localhost:8009/api/v1/search?site=1337x&query=eternals&limit=10"
 curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5"
+# Hindi 1080p/4K movies only
+curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&language=hindi&quality=1080"
+# Books in epub only
+curl "http://localhost:8009/api/v1/search?site=libgen&query=python&limit=5&format=epub"
 ```
 
 **Response**

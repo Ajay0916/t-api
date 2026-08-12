@@ -52,6 +52,7 @@ class HindiBooks:
                 )
                 if m:
                     obj["torrent"] = m.group(1)
+                    obj["extension"] = "pdf"
                     try:
                         async with session.head(
                             m.group(1), headers=HEADER_AIO, timeout=AIO_TIMEOUT,
@@ -68,6 +69,13 @@ class HindiBooks:
                     )
                     if dm:
                         obj["torrent"] = dm.group(1)
+                    em = re.search(
+                        r"\b(PDF|EPUB|MOBI|AZW3|DJVU|FB2)\b",
+                        obj.get("name") or "",
+                        re.I,
+                    )
+                    if em:
+                        obj["extension"] = em.group(1).lower()
             except:
                 return None
 

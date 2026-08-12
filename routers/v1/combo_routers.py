@@ -4,7 +4,14 @@ import asyncio
 from fastapi import APIRouter, status
 from typing import Optional
 
-from helper.result_cleaner import category_matches, clean_results, sort_results
+from helper.result_cleaner import (
+    category_matches,
+    clean_results,
+    format_matches,
+    language_matches,
+    quality_matches,
+    sort_results,
+)
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import combo_cache
@@ -28,14 +35,23 @@ async def get_search_combo(
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
     order: Optional[str] = "desc",
+    quality: Optional[str] = "",
+    language: Optional[str] = "",
+    format: Optional[str] = "",
 ):
     start_time = time.time()
     query = query.lower().strip()
     category = (category or "").lower().strip()
     sort = (sort or "seeders").lower()
     order = (order or "desc").lower()
+    quality = (quality or "").lower().strip()
+    language = (language or "").lower().strip()
+    format = (format or "").lower().strip()
 
-    cache_key = f"combo:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+    cache_key = (
+        f"combo:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+        f":{quality}:{language}:{format}"
+    )
     if not fresh:
         cached = combo_cache.get(cache_key)
         if cached is not None:
@@ -125,6 +141,18 @@ async def get_search_combo(
     if category:
         unique_data = [
             item for item in unique_data if category_matches(item, category)
+        ]
+    if quality:
+        unique_data = [
+            item for item in unique_data if quality_matches(item, quality)
+        ]
+    if language:
+        unique_data = [
+            item for item in unique_data if language_matches(item, language)
+        ]
+    if format:
+        unique_data = [
+            item for item in unique_data if format_matches(item, format)
         ]
     sort_results(unique_data, sort=sort, order=order)
     COMBO = {"data": unique_data}

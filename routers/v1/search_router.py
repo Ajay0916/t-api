@@ -3,7 +3,14 @@ import asyncio
 from fastapi import APIRouter, status
 from typing import Optional
 
-from helper.result_cleaner import category_matches, clean_results, sort_results
+from helper.result_cleaner import (
+    category_matches,
+    clean_results,
+    format_matches,
+    language_matches,
+    quality_matches,
+    sort_results,
+)
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import search_cache
@@ -48,12 +55,18 @@ async def search_for_torrents(
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
     order: Optional[str] = "desc",
+    quality: Optional[str] = "",
+    language: Optional[str] = "",
+    format: Optional[str] = "",
 ):
     site = site.lower().strip()
     query = query.lower().strip()
     category = (category or "").lower().strip()
     sort = (sort or "seeders").lower()
     order = (order or "desc").lower()
+    quality = (quality or "").lower().strip()
+    language = (language or "").lower().strip()
+    format = (format or "").lower().strip()
     all_sites = check_if_site_available(site)
     if not all_sites:
         return error_handler(
@@ -67,7 +80,10 @@ async def search_for_torrents(
         else limit
     )
 
-    cache_key = f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+    cache_key = (
+        f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+        f":{quality}:{language}:{format}"
+    )
     if not fresh:
         cached = search_cache.get(cache_key)
         if cached is not None:
@@ -107,6 +123,9 @@ async def search_for_torrents(
         for item in resp["data"]
         if (min_seeders <= 0 or _seeders(item) >= min_seeders)
         and (not category or category_matches(item, category))
+        and (not quality or quality_matches(item, quality))
+        and (not language or language_matches(item, language))
+        and (not format or format_matches(item, format))
     ]
     sort_results(data, sort=sort, order=order)
     resp["data"] = data
