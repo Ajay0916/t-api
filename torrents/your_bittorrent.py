@@ -10,6 +10,8 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import YOURBITTORRENT
+
+HOSTS = [YOURBITTORRENT, "https://yourbittorrent2.com"]
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.trackers import build_magnet
 
@@ -196,8 +198,21 @@ class YourBittorrent:
             results["total"] = len(results["data"])
             return results
 
+    async def _fetch_page(self, session, url):
+        # Rotate across mirrors when the pinned host stops responding, then
+        # pin the first host that returns content (same pattern as 1337x/ext).
+        path = url.split(self.BASE_URL, 1)[-1] if self.BASE_URL in url else url
+        start = HOSTS.index(self.BASE_URL) if self.BASE_URL in HOSTS else 0
+        for i in range(len(HOSTS)):
+            host = HOSTS[(start + i) % len(HOSTS)]
+            htmls = await Scraper().get_all_results(session, host + path)
+            if htmls and htmls[0]:
+                self.BASE_URL = host
+                return htmls
+        return None
+
     async def parser_result(self, start_time, url, session, idx=1):
-        htmls = await Scraper().get_all_results(session, url)
+        htmls = await self._fetch_page(session, url)
         result, urls = self._parser(htmls, idx)
         if result is not None:
             results = await self._get_torrent(result, session, urls)

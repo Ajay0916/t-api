@@ -90,7 +90,10 @@ async def get_search_combo(
         if len(res["data"]) > 0:
             site_health.mark_success(site)
             bucket = last_data if site in LAST_SITES else main_data
-            bucket.extend(res["data"])
+            for item in res["data"]:
+                if isinstance(item, dict) and "site" not in item:
+                    item["site"] = site
+                bucket.append(item)
             total_torrents_overall = total_torrents_overall + res["total"]
 
     main_data.sort(key=_seeders, reverse=True)
