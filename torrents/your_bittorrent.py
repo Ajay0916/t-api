@@ -110,7 +110,7 @@ class YourBittorrent:
                 if obj["url"] == url:
                     task = asyncio.create_task(
                         self._individual_scrap(
-                            session, url, result["data"][idx], sem
+                            session, url, obj, sem
                         )
                     )
                     tasks.append(task)
@@ -183,7 +183,7 @@ class YourBittorrent:
                 page += 1
                 url = self.BASE_URL + "/?q={}&page={}".format(quote(query), page)
                 res = await self.parser_result(
-                    time.time() - start_time, url, session, idx=0
+                    start_time, url, session, idx=0
                 )
                 if res is None or len(res["data"]) == 0:
                     break

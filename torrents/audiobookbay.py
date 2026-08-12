@@ -65,7 +65,7 @@ class AudiobookBay:
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx], sem)
+                        self._individual_scrap(session, url, obj, sem)
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)

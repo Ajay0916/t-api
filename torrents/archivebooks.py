@@ -97,7 +97,7 @@ class ArchiveBooks:
         for idx, item in enumerate(result["data"]):
             task = asyncio.create_task(
                 self._individual_scrap(
-                    session, item["identifier"], result["data"][idx], sem
+                    session, item["identifier"], item, sem
                 )
             )
             tasks.append(task)

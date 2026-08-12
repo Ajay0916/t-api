@@ -67,7 +67,7 @@ class TorrentProject:
             for obj in result["data"]:
                 if obj["url"] == url:
                     task = asyncio.create_task(
-                        self._individual_scrap(session, url, result["data"][idx], sem)
+                        self._individual_scrap(session, url, obj, sem)
                     )
                     tasks.append(task)
         await asyncio.gather(*tasks)
@@ -129,7 +129,7 @@ class TorrentProject:
                 page += 1
                 url = self.BASE_URL + "/?t={}&p={}".format(quote(query), page - 1)
                 res = await self.parser_result(
-                    time.time() - start_time, url, session, page
+                    start_time, url, session, page
                 )
                 if res is None or len(res["data"]) == 0:
                     break

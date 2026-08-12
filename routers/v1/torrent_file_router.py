@@ -46,9 +46,14 @@ async def proxy_torrent(url: str, name: str = ""):
         return JSONResponse(
             status_code=502, content={"error": "Failed to fetch torrent."}
         )
-    if len(body) > MAX_SIZE or not body.startswith(b"d") or body[:1].isspace() or body.lstrip().startswith(b"<"):
+    # Reject upstream error pages, but pass through real files of any kind:
+    # book sites (Hindi books, archive.org, libgen) put direct PDF/EPUB links
+    # in "torrent" so WZML's Direct Link must stream those too, not just
+    # bencoded .torrent files.
+    head = body[:512].lstrip()
+    if len(body) > MAX_SIZE or not body or head.startswith(b"<"):
         return JSONResponse(
-            status_code=502, content={"error": "Invalid torrent file."}
+            status_code=502, content={"error": "Invalid file."}
         )
     filename = name or _safe_filename(url)
     return Response(

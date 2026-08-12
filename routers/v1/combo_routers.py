@@ -209,9 +209,16 @@ async def get_search_combo(
             # kickass/limetorrent); if those were slow/empty this round,
             # retry ONLY them before relaxing anything.
             if language and missed:
-                retry_missed = await _collect(_build_tasks(missed))
-                if retry_missed:
-                    missed = retry_missed
+                # A site that failed hard got a cooldown from mark_failure;
+                # retrying it immediately only wastes time, so retry the
+                # slow/alive ones only.
+                retry_candidates = [
+                    s for s in missed if not site_health.is_blocked(s)
+                ]
+                if retry_candidates:
+                    retry_missed = await _collect(_build_tasks(retry_candidates))
+                    if retry_missed:
+                        missed = retry_missed
                 main_data.sort(key=_seeders, reverse=True)
                 last_data.sort(key=_seeders, reverse=True)
                 unique_data = _dedup()

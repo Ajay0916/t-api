@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+from urllib.parse import quote
 
 import aiohttp
 from helper.session import get_connector
@@ -116,7 +117,7 @@ class AnnasArchive:
         return result
 
     async def _search_once(self, session, mirror, query, page):
-        url = mirror + "/search?q=" + query.replace(" ", "+")
+        url = mirror + "/search?q=" + quote(query)
         if page > 1:
             url += "&page={}".format(page)
         try:

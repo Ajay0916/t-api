@@ -76,7 +76,7 @@ class Kickass:
                 if obj["url"] == url:
                     task = asyncio.create_task(
                         self._individual_scrap(
-                            session, url, result["data"][idx], sem
+                            session, url, obj, sem
                         )
                     )
                     tasks.append(task)
@@ -155,7 +155,7 @@ class Kickass:
                 page += 1
                 path = "/usearch/{}/{}/".format(quote(query), page)
                 res = await self.parser_result(
-                    time.time() - start_time, path, session
+                    start_time, path, session
                 )
                 if res is None or len(res["data"]) == 0:
                     break

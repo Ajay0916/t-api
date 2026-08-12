@@ -156,7 +156,7 @@ class ExtraTorrent:
                 if obj["url"] == url:
                     task = asyncio.create_task(
                         self._individual_scrap(
-                            session, url, result["data"][idx], sem
+                            session, url, obj, sem
                         )
                     )
                     tasks.append(task)

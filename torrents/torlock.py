@@ -61,7 +61,7 @@ class Torlock:
                 if obj["url"] == url:
                     task = asyncio.create_task(
                         self._individual_scrap(
-                            session, url, result["data"][idx], sem
+                            session, url, obj, sem
                         )
                     )
                     tasks.append(task)
@@ -141,7 +141,7 @@ class Torlock:
                     quote(query), page
                 )
                 res = await self.parser_result(
-                    time.time() - start_time, url, session, idx=5
+                    start_time, url, session, idx=5
                 )
                 if res is None or len(res["data"]) == 0:
                     break
