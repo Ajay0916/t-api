@@ -59,8 +59,11 @@ class TorrentFunk:
                         uploader = td[5].get_text(strip=True) if len(td) > 5 else ""
                     else:
                         continue
-                    if not url.startswith("http"):
-                        url = self.BASE_URL + url
+                    if url.startswith("http"):
+                        # SEO-spam rows link to external pages (t0r.space CDN)
+                        # with fake names/seeders - real rows are relative.
+                        continue
+                    url = self.BASE_URL + url
                     m = re.search(r"/torrent/(\d+)", url)
                     list_of_urls.append(url)
                     my_dict["data"].append(

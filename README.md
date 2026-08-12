@@ -30,7 +30,7 @@
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
-- **Combo respects `limit`** — `/all/search` now returns exactly what you ask for (before it could return up to 750+ items even with `limit=5`).
+- **Combo merges every site** — `limit` caps how many results each site fetches, but the merged output returns everything collected (deduped by infohash, sorted by seeders).
 - **Combo de-duplicates by infohash** — same torrent from multiple sites takes only the best-seeder row (before the limit cap), so WZML result slots never fill with repeats.
 - **Infohash link fallback** — every result carrying an infohash automatically gets both a magnet AND a `.torrent` Direct Link (itorrents.net), so WZML always has a working button even when a scraper only exposes the hash.
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.

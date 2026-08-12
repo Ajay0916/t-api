@@ -12,7 +12,7 @@ from helper.site_health import site_health
 
 router = APIRouter(tags=["Combo Routes"])
 
-SITE_DEADLINE = 18.0
+SITE_DEADLINE = 30.0
 
 
 async def _search_site(website, query, limit):
@@ -107,8 +107,6 @@ async def get_search_combo(
             seen_hashes.add(h)
         unique_data.append(item)
     COMBO = {"data": unique_data}
-    if limit > 0:
-        COMBO["data"] = COMBO["data"][:limit]
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = len(COMBO["data"])
     if total_torrents_overall == 0:
