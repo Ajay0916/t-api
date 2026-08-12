@@ -10,16 +10,23 @@ router = APIRouter(tags=["Get all sites"])
 @router.get("")
 async def get_all_supported_sites():
     all_sites = check_if_site_available("1337x")
-    sites_list = [
-        site
-        for site in all_sites.keys()
-        if all_sites[site]["website"]
-        and not site_health.is_manually_blocked(site)
-    ]
+    sites_list = []
+    sites = []
+    for site, info in all_sites.items():
+        if not info["website"] or site_health.is_manually_blocked(site):
+            continue
+        sites_list.append(site)
+        sites.append(
+            {
+                "site": site,
+                "name": info["website"]._name,
+            }
+        )
     return error_handler(
         status_code=status.HTTP_200_OK,
         json_message={
             "supported_sites": sites_list,
+            "sites": sites,
         },
     )
     

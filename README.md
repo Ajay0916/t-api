@@ -36,7 +36,7 @@
 - **Smart filter fallback** — if a strict filter combo finds nothing (e.g. Hindi + 1080p when the Hindi release is only 4K), the API relaxes quality → format → category and returns the best available results (marked `relaxed_filters: true`). The `language` filter is **never** relaxed: a Hindi search never silently returns English releases. Language-specific searches also retry only the sites that were slow/empty in the first pass before relaxing anything.
 - **Safe language detection** — language tags use word-start matching (`[Hin-Eng]`, `HinDub`, `[Tam+Tel]` all work) without false positives from substrings (`ben` in "Unbent", `mar` in "Driftmark", `tel` in "Hotel").
 - **Torrent file proxy** — `/api/v1/torrent_file?url=...` fetches a `.torrent` through this server so WZML Direct Links survive CDN blocks.
-- **Manual site toggle** — `POST /api/v1/status/{site}/disable` (or `/enable`) blocks/unblocks a site instantly, no restart. Disabled sites also vanish from `/api/v1/sites`, so WZML hides their buttons too (WZML re-fetches the site list every time it renders the site menu). `/api/v1/sites/status` shows every site's `enabled`/`manual_blocked` state.
+- **Manual site toggle** — `POST /api/v1/status/{site}/disable` (or `/enable`) blocks/unblocks a site instantly, no restart. Disabled sites also vanish from `/api/v1/sites`, so WZML hides their buttons too (WZML re-fetches the site list every time it renders the site menu). `/api/v1/sites` returns both `supported_sites` and `sites[{site,name}]`, and `/api/v1/sites/status` shows every site's `enabled`/`manual_blocked` state.
 - **Combo de-duplicates by infohash** — same torrent from multiple sites takes only the best-seeder row (before the limit cap), so WZML result slots never fill with repeats.
 - **Infohash link fallback** — every result carrying an infohash automatically gets both a magnet AND a `.torrent` Direct Link (itorrents.net), so WZML always has a working button even when a scraper only exposes the hash.
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
@@ -104,7 +104,7 @@ docker compose up -d --build
 
 | Endpoint | Params |
 | :------- | :----- |
-| `GET /api/v1/sites` | — |
+| `GET /api/v1/sites` | — returns `supported_sites` plus `sites[{site,name}]` |
 | `GET /api/v1/sites/config` | — |
 | `GET /api/v1/sites/status` | — every site's `enabled`/`manual_blocked`/`blocked`, cooldown, fail count, combo/trending/recent availability |
 | `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
