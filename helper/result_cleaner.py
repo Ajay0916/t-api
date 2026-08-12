@@ -23,23 +23,25 @@ NAME_MATCH_CATEGORIES = {"course", "book", "music"}
 
 _RES_RE = re.compile(r"(\d{3,4})p\b")
 
-# Language tokens are matched against name + category (+ any language field
-# a scraper exposes). "hindi" is the Indian preference: it also covers Hindi
-# dubbed releases because their names carry "Hindi"/"HIN" tokens.
-_LANG_TOKENS = {
-    "hindi": ("hindi", "hin"),
-    "english": ("english", "eng"),
-    "tamil": ("tamil", "tam"),
-    "telugu": ("telugu", "tel"),
-    "malayalam": ("malayalam", "mal"),
-    "kannada": ("kannada", "kan"),
-    "bengali": ("bengali", "ben"),
-    "punjabi": ("punjabi", "pun"),
-    "marathi": ("marathi", "mar"),
-    "gujarati": ("gujarati", "guj"),
-    "dubbed": ("dubbed", "dub"),
-    "dual": ("dual",),
-    "multi": ("multi",),
+# Language patterns are matched against name + category (+ any language
+# field a scraper exposes). Short tokens (hin/tam/tel/... ) only match at a
+# word start so release tags like "[Hin-Eng]", "HinDub", "[Tam+Tel]" work
+# without false positives from substrings (e.g. "ben" inside "Unbent",
+# "mar" inside "Driftmark"/"March", "tel" inside "Hotel").
+_LANG_PATTERNS = {
+    "hindi": re.compile(r"(?<![a-z0-9])(?:hindi|hin)", re.I),
+    "english": re.compile(r"(?<![a-z0-9])(?:english|eng)", re.I),
+    "tamil": re.compile(r"(?<![a-z0-9])(?:tamil|tam)", re.I),
+    "telugu": re.compile(r"(?<![a-z0-9])(?:telugu|tel)", re.I),
+    "malayalam": re.compile(r"(?<![a-z0-9])(?:malayalam|mal)", re.I),
+    "kannada": re.compile(r"(?<![a-z0-9])(?:kannada|kan)", re.I),
+    "bengali": re.compile(r"(?<![a-z0-9])bengali", re.I),
+    "punjabi": re.compile(r"(?<![a-z0-9])punjabi", re.I),
+    "marathi": re.compile(r"(?<![a-z0-9])marathi", re.I),
+    "gujarati": re.compile(r"(?<![a-z0-9])gujarati", re.I),
+    "dubbed": re.compile(r"(?<![a-z0-9])(?:dubbed|dub)", re.I),
+    "dual": re.compile(r"(?<![a-z0-9])dual", re.I),
+    "multi": re.compile(r"(?<![a-z0-9])multi", re.I),
 }
 
 # Order matters: longer/rarer extensions first so "azw3" wins over "azw"
@@ -78,10 +80,10 @@ def detect_language(item):
         str(item.get("name") or "") + " " + str(item.get("category") or "")
     ).lower()
     langs = []
-    for label, tokens in _LANG_TOKENS.items():
+    for label, pattern in _LANG_PATTERNS.items():
         if label in ("dubbed", "dual", "multi"):
             continue
-        if any(t in text for t in tokens):
+        if pattern.search(text):
             langs.append(label.capitalize())
     return ", ".join(langs) if langs else None
 
@@ -134,8 +136,10 @@ def language_matches(item, language):
         + " " + str(item.get("language") or "") + " "
         + str(item.get("languages") or "")
     ).lower()
-    tokens = _LANG_TOKENS.get(lang, (lang,))
-    return any(t in text for t in tokens)
+    pattern = _LANG_PATTERNS.get(lang)
+    if pattern is not None:
+        return pattern.search(text) is not None
+    return re.search(r"(?<![a-z0-9])" + re.escape(lang), text) is not None
 
 
 def format_matches(item, fmt):

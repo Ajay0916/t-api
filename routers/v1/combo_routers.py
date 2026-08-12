@@ -74,6 +74,40 @@ async def get_search_combo(
         except (TypeError, ValueError):
             return -1
 
+    def _apply_filters(items, min_seeders, category, quality, language, format_):
+        """Apply every active filter; returns the filtered list."""
+        out = items
+        if min_seeders > 0:
+            out = [i for i in out if _seeders(i) >= min_seeders]
+        if category:
+            out = [i for i in out if category_matches(i, category)]
+        if quality:
+            out = [i for i in out if quality_matches(i, quality)]
+        if language:
+            out = [i for i in out if language_matches(i, language)]
+        if format:
+            out = [i for i in out if format_matches(i, format)]
+        return out
+
+    def _relax_filters(items, min_seeders, category, quality, language, format_):
+        """When a strict filter combo leaves nothing (e.g. Hindi is only
+        available in 4K but the user asked 1080p), relax filters in
+        importance order - quality first, then format, then language, then
+        category - so the search still returns usable results instead of an
+        empty "No result found"."""
+        for drop in ("quality", "format", "language", "category"):
+            relaxed = _apply_filters(
+                items,
+                min_seeders,
+                "" if drop == "category" else category,
+                "" if drop == "quality" else quality,
+                "" if drop == "language" else language,
+                "" if drop == "format" else format,
+            )
+            if relaxed:
+                return relaxed, True
+        return _apply_filters(items, min_seeders, "", "", "", ""), True
+
     main_data = []
     last_data = []
     total_torrents_overall = 0
@@ -134,28 +168,20 @@ async def get_search_combo(
         if h:
             seen_hashes.add(h)
         unique_data.append(item)
-    if min_seeders > 0:
-        unique_data = [
-            item for item in unique_data if _seeders(item) >= min_seeders
-        ]
-    if category:
-        unique_data = [
-            item for item in unique_data if category_matches(item, category)
-        ]
-    if quality:
-        unique_data = [
-            item for item in unique_data if quality_matches(item, quality)
-        ]
-    if language:
-        unique_data = [
-            item for item in unique_data if language_matches(item, language)
-        ]
-    if format:
-        unique_data = [
-            item for item in unique_data if format_matches(item, format)
-        ]
+    relaxed = False
+    if unique_data:
+        filtered = _apply_filters(
+            unique_data, min_seeders, category, quality, language, format
+        )
+        if not filtered and (category or quality or language or format):
+            filtered, relaxed = _relax_filters(
+                unique_data, min_seeders, category, quality, language, format
+            )
+        unique_data = filtered
     sort_results(unique_data, sort=sort, order=order)
     COMBO = {"data": unique_data}
+    if relaxed:
+        COMBO["relaxed_filters"] = True
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = len(COMBO["data"])
     if total_torrents_overall == 0:

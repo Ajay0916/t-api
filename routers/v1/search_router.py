@@ -118,18 +118,52 @@ async def search_for_torrents(
         except (TypeError, ValueError):
             return -1
 
-    data = [
-        item
-        for item in resp["data"]
-        if (min_seeders <= 0 or _seeders(item) >= min_seeders)
-        and (not category or category_matches(item, category))
-        and (not quality or quality_matches(item, quality))
-        and (not language or language_matches(item, language))
-        and (not format or format_matches(item, format))
-    ]
+    def _apply_filters(items):
+        out = items
+        if min_seeders > 0:
+            out = [i for i in out if _seeders(i) >= min_seeders]
+        if category:
+            out = [i for i in out if category_matches(i, category)]
+        if quality:
+            out = [i for i in out if quality_matches(i, quality)]
+        if language:
+            out = [i for i in out if language_matches(i, language)]
+        if format:
+            out = [i for i in out if format_matches(i, format)]
+        return out
+
+    data = _apply_filters(resp["data"])
+    relaxed = False
+    # A strict filter combo (e.g. Hindi + 1080p when the Hindi release is
+    # only 4K) must not end in an empty "No result found" - relax quality,
+    # then format, then language, then category and return what exists.
+    if not data and resp["data"] and (category or quality or language or format):
+        for drop in ("quality", "format", "language", "category"):
+            q2 = "" if drop == "quality" else quality
+            f2 = "" if drop == "format" else format
+            l2 = "" if drop == "language" else language
+            c2 = "" if drop == "category" else category
+            relaxed_data = [
+                item
+                for item in resp["data"]
+                if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                and (not c2 or category_matches(item, c2))
+                and (not q2 or quality_matches(item, q2))
+                and (not l2 or language_matches(item, l2))
+                and (not f2 or format_matches(item, f2))
+            ]
+            if relaxed_data:
+                data = relaxed_data
+                relaxed = True
+                break
+        if not data:
+            data = [i for i in resp["data"] if (min_seeders <= 0 or _seeders(i) >= min_seeders)]
+            relaxed = True
     sort_results(data, sort=sort, order=order)
     resp["data"] = data
     resp["total"] = len(data)
+    if relaxed:
+        resp["relaxed_filters"] = True
     if len(resp["data"]) > 0:
         site_health.mark_success(site)
         search_cache.set(cache_key, resp)
