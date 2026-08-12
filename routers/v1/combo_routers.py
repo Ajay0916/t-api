@@ -10,6 +10,7 @@ from helper.result_cleaner import (
     format_matches,
     language_matches,
     quality_matches,
+    size_matches,
     sort_results,
 )
 from helper.is_site_available import check_if_site_available
@@ -38,6 +39,9 @@ async def get_search_combo(
     quality: Optional[str] = "",
     language: Optional[str] = "",
     format: Optional[str] = "",
+    exclude: Optional[str] = "",
+    min_size: Optional[str] = "",
+    max_size: Optional[str] = "",
 ):
     start_time = time.time()
     query = query.lower().strip()
@@ -47,10 +51,16 @@ async def get_search_combo(
     quality = (quality or "").lower().strip()
     language = (language or "").lower().strip()
     format = (format or "").lower().strip()
+    excluded = {
+        s.strip().lower() for s in (exclude or "").split(",") if s.strip()
+    }
+    min_size = (min_size or "").strip().lower()
+    max_size = (max_size or "").strip().lower()
 
     cache_key = (
         f"combo:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
+        f":{','.join(sorted(excluded))}:{min_size}:{max_size}"
     )
     if not fresh:
         cached = combo_cache.get(cache_key)
@@ -63,6 +73,7 @@ async def get_search_combo(
         site
         for site in all_sites.keys()
         if all_sites[site].get("combo_available", True)
+        and site not in excluded
     ]
     # Sites whose results are pushed to the end of the combined list
     # (1337x search quality varies and the user wants its results last).
@@ -74,7 +85,9 @@ async def get_search_combo(
         except (TypeError, ValueError):
             return -1
 
-    def _apply_filters(items, min_seeders, category, quality, language, format_):
+    def _apply_filters(
+        items, min_seeders, category, quality, language, format_, min_size="", max_size=""
+    ):
         """Apply every active filter; returns the filtered list."""
         out = items
         if min_seeders > 0:
@@ -87,6 +100,8 @@ async def get_search_combo(
             out = [i for i in out if language_matches(i, language)]
         if format:
             out = [i for i in out if format_matches(i, format)]
+        if min_size or max_size:
+            out = [i for i in out if size_matches(i, min_size, max_size)]
         return out
 
     def _relax_filters(items, min_seeders, category, quality, language, format_):
@@ -96,7 +111,7 @@ async def get_search_combo(
         filter is NEVER relaxed away: a Hindi search must never silently
         return English releases. If nothing survives, return what keeps
         language (possibly empty)."""
-        for drop in ("quality", "format", "category"):
+        for drop in ("quality", "size", "format", "category"):
             relaxed = _apply_filters(
                 items,
                 min_seeders,
@@ -104,10 +119,12 @@ async def get_search_combo(
                 "" if drop == "quality" else quality,
                 language,
                 "" if drop == "format" else format,
+                "" if drop == "size" else min_size,
+                "" if drop == "size" else max_size,
             )
             if relaxed:
                 return relaxed, True
-        return _apply_filters(items, min_seeders, "", "", language, ""), True
+        return _apply_filters(items, min_seeders, "", "", language, "", "", ""), True
 
     main_data = []
     last_data = []
@@ -189,9 +206,10 @@ async def get_search_combo(
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
-            unique_data, min_seeders, category, quality, language, format
+            unique_data, min_seeders, category, quality, language, format,
+            min_size, max_size,
         )
-        if not filtered and (category or quality or language or format):
+        if not filtered and (category or quality or language or format or min_size or max_size):
             # Language-specific results live on a few sites (e.g. Hindi on
             # kickass/limetorrent); if those were slow/empty this round,
             # retry ONLY them before relaxing anything.
@@ -203,11 +221,13 @@ async def get_search_combo(
                 last_data.sort(key=_seeders, reverse=True)
                 unique_data = _dedup()
                 filtered = _apply_filters(
-                    unique_data, min_seeders, category, quality, language, format
+                    unique_data, min_seeders, category, quality, language, format,
+                    min_size, max_size,
                 )
             if not filtered:
                 filtered, relaxed = _relax_filters(
-                    unique_data, min_seeders, category, quality, language, format
+                    unique_data, min_seeders, category, quality, language, format,
+                    min_size, max_size,
                 )
         unique_data = filtered
     sort_results(unique_data, sort=sort, order=order)

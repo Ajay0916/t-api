@@ -9,6 +9,7 @@ from helper.result_cleaner import (
     format_matches,
     language_matches,
     quality_matches,
+    size_matches,
     sort_results,
 )
 from helper.is_site_available import check_if_site_available
@@ -58,6 +59,8 @@ async def search_for_torrents(
     quality: Optional[str] = "",
     language: Optional[str] = "",
     format: Optional[str] = "",
+    min_size: Optional[str] = "",
+    max_size: Optional[str] = "",
 ):
     site = site.lower().strip()
     query = query.lower().strip()
@@ -67,6 +70,8 @@ async def search_for_torrents(
     quality = (quality or "").lower().strip()
     language = (language or "").lower().strip()
     format = (format or "").lower().strip()
+    min_size = (min_size or "").strip().lower()
+    max_size = (max_size or "").strip().lower()
     all_sites = check_if_site_available(site)
     if not all_sites:
         return error_handler(
@@ -82,7 +87,7 @@ async def search_for_torrents(
 
     cache_key = (
         f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
-        f":{quality}:{language}:{format}"
+        f":{quality}:{language}:{format}:{min_size}:{max_size}"
     )
     if not fresh:
         cached = search_cache.get(cache_key)
@@ -130,6 +135,8 @@ async def search_for_torrents(
             out = [i for i in out if language_matches(i, language)]
         if format:
             out = [i for i in out if format_matches(i, format)]
+        if min_size or max_size:
+            out = [i for i in out if size_matches(i, min_size, max_size)]
         return out
 
     data = _apply_filters(resp["data"])
@@ -139,8 +146,10 @@ async def search_for_torrents(
     # then format, then category. The language filter is NEVER relaxed:
     # a Hindi search must never silently return English releases.
     if not data and resp["data"] and (category or quality or language or format):
-        for drop in ("quality", "format", "category"):
+        for drop in ("quality", "size", "format", "category"):
             q2 = "" if drop == "quality" else quality
+            s_min = "" if drop == "size" else min_size
+            s_max = "" if drop == "size" else max_size
             f2 = "" if drop == "format" else format
             c2 = "" if drop == "category" else category
             relaxed_data = [
@@ -151,6 +160,7 @@ async def search_for_torrents(
                 and (not q2 or quality_matches(item, q2))
                 and (not language or language_matches(item, language))
                 and (not f2 or format_matches(item, f2))
+                and (not (s_min or s_max) or size_matches(item, s_min, s_max))
             ]
             if relaxed_data:
                 data = relaxed_data

@@ -209,6 +209,56 @@ def _to_int(value):
         return value
 
 
+def parse_size(text):
+    """Parse a size filter value into bytes.
+
+    Accepts '500MB', '2GB', '1.5gb', '1024' (bare numbers are treated as
+    MB) and raw byte counts (int). Returns None when unparseable.
+    """
+    if isinstance(text, (int, float)):
+        return int(text)
+    text = str(text or "").strip().lower()
+    if not text:
+        return None
+    m = re.match(r"^([\d.]+)\s*([kmgt]?i?b)?$", text)
+    if not m:
+        return None
+    try:
+        num = float(m.group(1))
+    except ValueError:
+        return None
+    unit = (m.group(2) or "mb").replace("ib", "b")
+    mult = _SIZE_UNITS.get(unit)
+    if not mult:
+        return None
+    return int(num * mult)
+
+
+def _item_size_bytes(item):
+    sb = item.get("size_bytes")
+    if isinstance(sb, (int, float)):
+        return int(sb)
+    return size_to_bytes(item.get("size"))
+
+
+def size_matches(item, min_size=None, max_size=None):
+    """Match a result by size range (min_size/max_size accept '500MB', '2GB'
+    or bare MB numbers). Items without a parseable size are excluded when a
+    size filter is active."""
+    low = parse_size(min_size)
+    high = parse_size(max_size)
+    if low is None and high is None:
+        return True
+    total = _item_size_bytes(item)
+    if total is None:
+        return False
+    if low is not None and total < low:
+        return False
+    if high is not None and total > high:
+        return False
+    return True
+
+
 def _seeders(item):
     seeds = _to_int(item.get("seeders"))
     return float(seeds) if isinstance(seeds, int) else -1
@@ -264,7 +314,7 @@ def clean_results(resp, sort=True):
                 if item.get(key) is not None:
                     item[key] = _to_int(item[key])
             if item.get("size") is not None and "size_bytes" not in item:
-                size_bytes = _size_to_bytes(item.get("size"))
+                size_bytes = size_to_bytes(item.get("size"))
                 if size_bytes:
                     item["size_bytes"] = size_bytes
             if "size" not in item:
@@ -299,8 +349,11 @@ def clean_results(resp, sort=True):
 
 
 def size_to_bytes(text):
-    """Public wrapper around the size parser (used for size sorting)."""
-    return _size_to_bytes(text)
+    """Public wrapper around the size parser (used for size sorting).
+
+    Accepts the same formats as parse_size: '500MB', '2GB', '1.5gb' and
+    bare numbers (treated as MB)."""
+    return _size_to_bytes(text) or parse_size(text)
 
 
 def parse_date(text):
