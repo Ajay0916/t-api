@@ -63,7 +63,7 @@ class AnnasArchive:
                 if len(out) == self.LIMIT:
                     break
             return out
-        except:
+        except Exception:
             return []
 
     def _parse_info(self, obj):
@@ -100,7 +100,7 @@ class AnnasArchive:
                 obj["torrent"] = "https://libgen.li/" + m.group(1)
                 obj["url"] = self.BASE_URL + "/md5/" + obj["md5"]
                 self._parse_info(obj)
-            except:
+            except Exception:
                 return None
 
     async def _get_links(self, result, session):
@@ -124,7 +124,7 @@ class AnnasArchive:
             if not html or not html[0]:
                 return []
             return self._parser(html[0])
-        except:
+        except Exception:
             return []
 
     async def search(self, query, page, limit):

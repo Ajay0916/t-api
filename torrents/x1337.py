@@ -120,7 +120,7 @@ class x1337:
                             ...
                     except (IndexError, AttributeError, TypeError):
                         ...
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -228,10 +228,10 @@ class x1337:
                         my_dict["total_pages"] = int(pages[-2].text)
                     else:
                         my_dict["total_pages"] = int(pages[-1].text)
-                except:
+                except Exception:
                     ...
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):
@@ -294,7 +294,7 @@ class x1337:
                             results["data"].append(obj)
                         try:
                             results["current_page"] = res["current_page"]
-                        except:
+                        except Exception:
                             ...
                         results["time"] = time.time() - start_time
                         results["total"] = len(results["data"])

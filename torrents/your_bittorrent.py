@@ -158,10 +158,10 @@ class YourBittorrent:
                             if m:
                                 pages.append(int(m.group(1)))
                     my_dict["total_pages"] = max(pages) if pages else None
-                except:
+                except Exception:
                     my_dict["total_pages"] = None
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):
@@ -176,7 +176,7 @@ class YourBittorrent:
             while len(results["data"]) < self.LIMIT:
                 try:
                     total_pages = results.get("total_pages") or page
-                except:
+                except Exception:
                     break
                 if page >= total_pages or page >= 25:
                     break

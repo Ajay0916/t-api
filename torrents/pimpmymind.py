@@ -221,7 +221,7 @@ class PimpMyMind:
         while len(result["data"]) < self.LIMIT:
             try:
                 total_pages = result.get("total_pages") or page
-            except:
+            except Exception:
                 break
             if page >= total_pages or page >= 25:
                 break

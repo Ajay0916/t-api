@@ -40,6 +40,8 @@ async def _refresh():
             connector=get_connector(), connector_owner=False
         ) as session:
             async with session.get(TRACKERS_URL, timeout=AIO_TIMEOUT) as res:
+                if res.status >= 400:
+                    return
                 text = await res.text()
         lines = [
             line.strip()

@@ -111,7 +111,7 @@ class TorrentProject:
                 my_dict["current_page"] = page
                 my_dict["total_pages"] = None
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):

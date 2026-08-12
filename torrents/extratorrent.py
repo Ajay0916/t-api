@@ -83,7 +83,7 @@ class ExtraTorrent:
                 if active:
                     try:
                         current_page = int(active.get_text(strip=True))
-                    except:
+                    except Exception:
                         ...
                 pages = []
                 for a in soup.select("ul.pages a[href]"):
@@ -95,7 +95,7 @@ class ExtraTorrent:
                 my_dict["current_page"] = current_page
                 my_dict["total_pages"] = total_pages
                 return my_dict
-        except:
+        except Exception:
             return None
 
     @decorator_asyncio_fix
@@ -145,7 +145,7 @@ class ExtraTorrent:
                         obj["torrent"] = build_torrent_url(
                             hash_match.group(1), obj.get("name") or ""
                         )
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -190,14 +190,14 @@ class ExtraTorrent:
             while len(results["data"]) < self.LIMIT:
                 try:
                     total_pages = results.get("total_pages", page)
-                except:
+                except Exception:
                     break
                 if page >= total_pages or page >= 25:
                     break
                 page += 1
                 path = "/browse/?q={}&page={}".format(requests_quote(query), page)
                 res = await self.parser_result(
-                    time.time() - start_time, path, session
+                    start_time, path, session
                 )
                 if res is None or len(res["data"]) == 0:
                     break

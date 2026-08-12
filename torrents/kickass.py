@@ -63,9 +63,9 @@ class Kickass:
                                     hash_match.group(1), obj.get("name") or ""
                                 )
                             obj["magnet"] = magnet
-                    except:
+                    except Exception:
                         ...
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -130,10 +130,10 @@ class Kickass:
                         total_page = pages[-2].text
                     my_dict["current_page"] = current_page
                     my_dict["total_pages"] = int(total_page)
-                except:
+                except Exception:
                     ...
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):
@@ -148,7 +148,7 @@ class Kickass:
             while len(results["data"]) < self.LIMIT:
                 try:
                     total_pages = results.get("total_pages") or page
-                except:
+                except Exception:
                     break
                 if page >= total_pages or page >= 25:
                     break

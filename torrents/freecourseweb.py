@@ -35,7 +35,7 @@ class FreeCourseWeb:
                 if hm:
                     obj["hash"] = hm.group(0)
                     obj["torrent"] = build_torrent_url(hm.group(0), obj.get("name") or "")
-            except:
+            except Exception:
                 return None
 
     async def _get_magnets(self, result, session, urls):
@@ -72,10 +72,10 @@ class FreeCourseWeb:
                             page_nums.append(int(m.group(1)))
                     if page_nums:
                         my_dict["total_pages"] = max(page_nums)
-                except:
+                except Exception:
                     ...
                 return my_dict
-        except:
+        except Exception:
             return None
 
     async def search(self, query, page, limit):

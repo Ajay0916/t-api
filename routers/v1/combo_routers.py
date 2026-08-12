@@ -102,10 +102,10 @@ async def get_search_combo(
     def _relax_filters(items, min_seeders, category, quality, language, format_):
         """When a strict filter combo leaves nothing (e.g. Hindi is only
         available in 4K but the user asked 1080p), relax filters in
-        importance order - quality, then format, then category. The language
-        filter is NEVER relaxed away: a Hindi search must never silently
-        return English releases. If nothing survives, return what keeps
-        language (possibly empty)."""
+        importance order - quality, then size, then format, then category.
+        The language filter is NEVER relaxed away: a Hindi search must never
+        silently return English releases. If nothing survives, return what
+        keeps language (possibly empty)."""
         for drop in ("quality", "size", "format", "category"):
             relaxed = _apply_filters(
                 items,

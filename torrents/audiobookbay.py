@@ -55,7 +55,7 @@ class AudiobookBay:
                     info_hash = m.group(1)
                     obj["hash"] = info_hash
                     obj["magnet"] = build_magnet(info_hash, obj.get("name") or "")
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -128,10 +128,10 @@ class AudiobookBay:
                             page_nums.append(int(m.group(1)))
                     if page_nums:
                         my_dict["total_pages"] = max(page_nums)
-                except:
+                except Exception:
                     ...
                 return my_dict
-        except:
+        except Exception:
             return None
 
     async def search(self, query, page, limit):
@@ -213,7 +213,7 @@ class AudiobookBay:
                 while len(results["data"]) < self.LIMIT:
                     try:
                         total_pages = results.get("total_pages", page)
-                    except:
+                    except Exception:
                         break
                     if page >= total_pages:
                         break

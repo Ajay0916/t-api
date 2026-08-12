@@ -23,6 +23,11 @@ NAME_MATCH_CATEGORIES = {"course", "book", "music"}
 
 _RES_RE = re.compile(r"(\d{3,4})p\b")
 
+# A valid BitTorrent infohash is 40 hex chars (sha1) or 32 base32 chars.
+# Other "hash"-looking values (e.g. libgen's 32-hex md5) cannot be turned
+# into a working magnet/.torrent link, so don't fabricate one for them.
+_BTIH_RE = re.compile(r"^[a-fA-F0-9]{40}$|^[A-Z2-7]{32}$")
+
 # Language patterns are matched against name + category (+ any language
 # field a scraper exposes). Short tokens (hin/tam/tel/... ) only match at a
 # word start so release tags like "[Hin-Eng]", "HinDub", "[Tam+Tel]" work
@@ -288,7 +293,7 @@ def clean_results(resp, sort=True):
             # missing link from the infohash so hash-bearing results always
             # give WZML a Direct Link (.torrent) AND a magnet.
             info_hash = str(item.get("hash") or "").strip()
-            if info_hash:
+            if info_hash and _BTIH_RE.match(info_hash):
                 if not item.get("torrent"):
                     item["torrent"] = build_torrent_url(
                         info_hash, item.get("name") or ""

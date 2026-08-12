@@ -43,14 +43,14 @@ class Torlock:
                             poster = soup.find("img", class_="img-responsive")
                             if poster:
                                 obj["poster"] = poster["src"]
-                        except:
+                        except Exception:
                             ...
                         imgs = soup.select(".tab-content img.img-fluid")
                         if imgs and len(imgs) > 0:
                             obj["screenshot"] = [img["src"] for img in imgs]
                     except Exception:
                         ...
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -111,11 +111,11 @@ class Torlock:
                     )
                     my_dict["current_page"] = int(current_page)
                     my_dict["total_pages"] = int(tpages)
-                except:
+                except Exception:
                     my_dict["current_page"] = None
                     my_dict["total_pages"] = None
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):
@@ -132,7 +132,7 @@ class Torlock:
             while len(results["data"]) < self.LIMIT:
                 try:
                     total_pages = results.get("total_pages") or page
-                except:
+                except Exception:
                     break
                 if page >= total_pages or page >= 25:
                     break

@@ -77,7 +77,7 @@ class Libgen:
                         obj["poster"] = self.BASE_URL + poster["src"]
                     elif poster:
                         obj["poster"] = poster["src"]
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -155,7 +155,7 @@ class Libgen:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):

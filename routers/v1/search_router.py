@@ -145,7 +145,9 @@ async def search_for_torrents(
     # only 4K) must not end in an empty "No result found" - relax quality,
     # then format, then category. The language filter is NEVER relaxed:
     # a Hindi search must never silently return English releases.
-    if not data and resp["data"] and (category or quality or language or format):
+    if not data and resp["data"] and (
+        category or quality or language or format or min_size or max_size
+    ):
         for drop in ("quality", "size", "format", "category"):
             q2 = "" if drop == "quality" else quality
             s_min = "" if drop == "size" else min_size

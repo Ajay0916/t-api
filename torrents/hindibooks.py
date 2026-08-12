@@ -37,7 +37,7 @@ class HindiBooks:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 return my_dict
-        except:
+        except Exception:
             return None
 
     @decorator_asyncio_fix
@@ -61,7 +61,7 @@ class HindiBooks:
                             length = r.headers.get("Content-Length")
                             if length:
                                 obj["size"] = self._format_size(int(length))
-                    except:
+                    except Exception:
                         pass
                 else:
                     dm = re.search(
@@ -76,7 +76,7 @@ class HindiBooks:
                     )
                     if em:
                         obj["extension"] = em.group(1).lower()
-            except:
+            except Exception:
                 return None
 
     @staticmethod

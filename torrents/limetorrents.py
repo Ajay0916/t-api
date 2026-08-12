@@ -48,9 +48,9 @@ class Limetorrent:
                         obj["hash"] = re.search(
                             r"([{a-f\d,A-F\d}]{32,40})\b", obj["magnet"]
                         ).group(0)
-                    except:
+                    except Exception:
                         ...
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):
@@ -107,10 +107,10 @@ class Limetorrent:
                         total_page = current_page
                     my_dict["current_page"] = current_page
                     my_dict["total_pages"] = total_page
-                except:
+                except Exception:
                     ...
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     async def search(self, query, page, limit):
@@ -136,7 +136,7 @@ class Limetorrent:
                 while len(results["data"]) < self.LIMIT:
                     try:
                         total_pages = results.get("total_pages", page)
-                    except:
+                    except Exception:
                         break
                     if page >= total_pages:
                         break

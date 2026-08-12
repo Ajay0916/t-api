@@ -54,7 +54,7 @@ class Magnetdl:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 return my_dict
-        except:
+        except Exception:
             return None
 
     @decorator_asyncio_fix
@@ -74,7 +74,7 @@ class Magnetdl:
                     obj["hash"] = info_hash
                     obj["magnet"] = build_magnet(info_hash, obj["name"])
                     obj["torrent"] = build_torrent_url(info_hash, obj["name"])
-            except:
+            except Exception:
                 return None
 
     async def _get_torrent(self, result, session, urls):

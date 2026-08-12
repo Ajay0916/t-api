@@ -46,7 +46,7 @@ class ArchiveBooks:
         try:
             data = json.loads(html[0])
             return data.get("response", {}).get("docs", []) or []
-        except:
+        except Exception:
             return []
 
     @decorator_asyncio_fix
@@ -80,7 +80,7 @@ class ArchiveBooks:
                 if size:
                     obj["size"] = self._format_size(int(size))
                 obj["url"] = self.BASE_URL + "/details/" + identifier
-            except:
+            except Exception:
                 return None
 
     @staticmethod

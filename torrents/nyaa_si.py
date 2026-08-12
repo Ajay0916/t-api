@@ -107,11 +107,11 @@ class NyaaSi:
                     current_page = (ul.find("li", class_="active")).find("a").text
                     my_dict["current_page"] = int(current_page)
                     my_dict["total_pages"] = int(tpages)
-                except:
+                except Exception:
                     my_dict["current_page"] = None
                     my_dict["total_pages"] = None
                 return my_dict
-        except:
+        except Exception:
             return None
 
     async def search(self, query, page, limit):

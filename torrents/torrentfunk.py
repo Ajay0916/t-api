@@ -85,7 +85,7 @@ class TorrentFunk:
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 return my_dict, list_of_urls
-        except:
+        except Exception:
             return None, None
 
     @decorator_asyncio_fix

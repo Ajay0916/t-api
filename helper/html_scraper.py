@@ -21,7 +21,7 @@ class Scraper:
                     if r.status >= 400:
                         return None
                     return await r.text()
-            except:
+            except Exception:
                 if attempt == retries - 1:
                     return None
                 await asyncio.sleep(1)

@@ -95,10 +95,10 @@ class Bitsearch:
                             page_nums.append(int(m.group(1)))
                     if page_nums:
                         my_dict["total_pages"] = max(page_nums)
-                except:
+                except Exception:
                     ...
                 return my_dict
-        except:
+        except Exception:
             return None
 
     async def search(self, query, page, limit):
@@ -123,7 +123,7 @@ class Bitsearch:
                 while len(results["data"]) < self.LIMIT:
                     try:
                         total_pages = results.get("total_pages", page)
-                    except:
+                    except Exception:
                         break
                     if page >= total_pages:
                         break
