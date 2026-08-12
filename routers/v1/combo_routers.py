@@ -39,7 +39,6 @@ async def get_search_combo(
     quality: Optional[str] = "",
     language: Optional[str] = "",
     format: Optional[str] = "",
-    exclude: Optional[str] = "",
     min_size: Optional[str] = "",
     max_size: Optional[str] = "",
 ):
@@ -51,16 +50,13 @@ async def get_search_combo(
     quality = (quality or "").lower().strip()
     language = (language or "").lower().strip()
     format = (format or "").lower().strip()
-    excluded = {
-        s.strip().lower() for s in (exclude or "").split(",") if s.strip()
-    }
     min_size = (min_size or "").strip().lower()
     max_size = (max_size or "").strip().lower()
 
     cache_key = (
         f"combo:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
-        f":{','.join(sorted(excluded))}:{min_size}:{max_size}"
+        f":{min_size}:{max_size}"
     )
     if not fresh:
         cached = combo_cache.get(cache_key)
@@ -73,7 +69,6 @@ async def get_search_combo(
         site
         for site in all_sites.keys()
         if all_sites[site].get("combo_available", True)
-        and site not in excluded
     ]
     # Sites whose results are pushed to the end of the combined list
     # (1337x search quality varies and the user wants its results last).

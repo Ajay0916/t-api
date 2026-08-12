@@ -31,7 +31,7 @@
 - **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo merges every site** — `limit` caps how many results each site fetches, but the merged output returns everything collected (deduped by infohash, sorted by seeders).
-- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers) on both `/all/search` and `/search`, plus `exclude=site1,site2` on `/all/search` to drop specific sites from the combo without disabling them.
+- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers) on both `/all/search` and `/search`.
 - **Auto-detected metadata** — every result is enriched with `quality` (`480p/720p/1080p/4K`) and `language` (`Hindi, English, Tamil...`) for movies, and `format` (`PDF/EPUB/MOBI...`) for books, detected from the release name / extension / download URL — WZML and API clients can show them without parsing titles. Multi-quality releases (`720p 480p`) match either quality filter.
 - **Smart filter fallback** — if a strict filter combo finds nothing (e.g. Hindi + 1080p when the Hindi release is only 4K), the API relaxes quality → format → category and returns the best available results (marked `relaxed_filters: true`). The `language` filter is **never** relaxed: a Hindi search never silently returns English releases. Language-specific searches also retry only the sites that were slow/empty in the first pass before relaxing anything.
 - **Safe language detection** — language tags use word-start matching (`[Hin-Eng]`, `HinDub`, `[Tam+Tel]` all work) without false positives from substrings (`ben` in "Unbent", `mar` in "Driftmark", `tel` in "Hotel").
@@ -111,7 +111,7 @@ docker compose up -d --build
 | `GET /api/v1/trending` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/recent` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/category` | `site` ✅, `query` ✅, `category` ✅, `limit`, `page` |
-| `GET /api/v1/all/search` | `query` ✅, `limit`, `min_seeders`, `category`, `sort`, `order`, `fresh`, `quality`, `language`, `format`, `exclude`, `min_size`, `max_size` |
+| `GET /api/v1/all/search` | `query` ✅, `limit`, `min_seeders`, `category`, `sort`, `order`, `fresh`, `quality`, `language`, `format`, `min_size`, `max_size` |
 | `GET /api/v1/torrent_file` | `url` ✅, `name` — proxies a .torrent file through this server |
 | `POST /api/v1/status/{site}/disable` · `/enable` | manually block/unblock a site without restart |
 | `GET /api/v1/all/trending` | `limit` |
@@ -127,7 +127,7 @@ curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&language=hindi&q
 # Books in epub only
 curl "http://localhost:8009/api/v1/search?site=libgen&query=python&limit=5&format=epub"
 # Small files only (under 1GB) without piratebay in the combo
-curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&max_size=1GB&exclude=piratebay"
+curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&max_size=1GB"
 ```
 
 **Response**
