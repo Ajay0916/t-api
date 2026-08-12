@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, status
 from typing import Optional
 
-from helper.result_cleaner import clean_results, sort_results
+from helper.result_cleaner import category_matches, clean_results, sort_results
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import search_cache
@@ -106,7 +106,7 @@ async def search_for_torrents(
         item
         for item in resp["data"]
         if (min_seeders <= 0 or _seeders(item) >= min_seeders)
-        and (not category or category in str(item.get("category") or "").lower())
+        and (not category or category_matches(item, category))
     ]
     sort_results(data, sort=sort, order=order)
     resp["data"] = data

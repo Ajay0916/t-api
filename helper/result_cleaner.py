@@ -5,6 +5,43 @@ from email.utils import parsedate_to_datetime
 from helper.trackers import build_magnet, build_torrent_url
 
 
+CATEGORY_ALIASES = {
+    "course": ("course", "tutorial", "udemy", "training"),
+    "book": ("book", "ebook", "audiobook", "novel", "pdf", "magazine"),
+    "movie": ("movie", "film"),
+    "tv": ("tv", "television"),
+    "anime": ("anime",),
+    "music": ("music", "audio", "flac", "mp3"),
+    "game": ("game",),
+    "app": ("app", "software"),
+}
+
+# Categories where the result name is also checked (sites often don't set a
+# category field, e.g. freecourseweb -> "The Complete Python Course 2024").
+NAME_MATCH_CATEGORIES = {"course", "book", "music"}
+
+
+def category_matches(item, category):
+    """Match a category keyword against a result's category or name.
+
+    Accepts plural keywords too (courses/books/movies/apps/games) so WZML's
+    category buttons work even when sites label things differently."""
+    cat = str(item.get("category") or "").lower()
+    aliases = CATEGORY_ALIASES.get(category)
+    if aliases is None and category.endswith("s") and len(category) > 3:
+        aliases = CATEGORY_ALIASES.get(category[:-1])
+    if aliases is None:
+        aliases = (category,)
+    if any(a in cat for a in aliases):
+        return True
+    if category in NAME_MATCH_CATEGORIES or (
+        category.endswith("s") and category[:-1] in NAME_MATCH_CATEGORIES
+    ):
+        name = str(item.get("name") or "").lower()
+        return any(a in name for a in aliases)
+    return False
+
+
 def _norm(text):
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
 

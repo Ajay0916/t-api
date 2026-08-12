@@ -4,7 +4,7 @@ import asyncio
 from fastapi import APIRouter, status
 from typing import Optional
 
-from helper.result_cleaner import clean_results, sort_results
+from helper.result_cleaner import category_matches, clean_results, sort_results
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import combo_cache
@@ -124,9 +124,7 @@ async def get_search_combo(
         ]
     if category:
         unique_data = [
-            item
-            for item in unique_data
-            if category in str(item.get("category") or "").lower()
+            item for item in unique_data if category_matches(item, category)
         ]
     sort_results(unique_data, sort=sort, order=order)
     COMBO = {"data": unique_data}
