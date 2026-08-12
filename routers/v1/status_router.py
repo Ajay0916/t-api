@@ -20,6 +20,7 @@ async def get_status():
         st = site_health.status(name)
         sites[name] = {
             "blocked": st["blocked"],
+            "manual_blocked": st.get("manual_blocked", False),
             "cooldown_remaining": st["cooldown_remaining"],
             "fail_count": st["fail_count"],
             "last_error": st.get("last_error", ""),
@@ -35,3 +36,23 @@ async def get_status():
         "uptime": int(getUptime(_START)),
         "sites_detail": sites,
     }
+
+
+@router.post("/{site}/disable")
+async def disable_site(site: str):
+    """Manually disable a site without restarting the server."""
+    all_sites = check_if_site_available(site)
+    if not all_sites:
+        return {"error": "Site not available."}
+    site_health.manual_block(site)
+    return {"site": site, "disabled": True}
+
+
+@router.post("/{site}/enable")
+async def enable_site(site: str):
+    """Re-enable a manually disabled site."""
+    all_sites = check_if_site_available(site)
+    if not all_sites:
+        return {"error": "Site not available."}
+    site_health.manual_unblock(site)
+    return {"site": site, "disabled": False}

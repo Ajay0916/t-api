@@ -21,12 +21,17 @@ async def _search_site(website, query, limit):
 
 @router.get("/search")
 async def get_search_combo(
-    query: str, limit: Optional[int] = 0, fresh: Optional[int] = 0
+    query: str,
+    limit: Optional[int] = 0,
+    fresh: Optional[int] = 0,
+    min_seeders: Optional[int] = 0,
+    category: Optional[str] = None,
 ):
     start_time = time.time()
     query = query.lower().strip()
+    category = (category or "").lower().strip()
 
-    cache_key = f"combo:{query}:{limit}"
+    cache_key = f"combo:{query}:{limit}:{min_seeders}:{category}"
     if not fresh:
         cached = combo_cache.get(cache_key)
         if cached is not None:
@@ -109,6 +114,16 @@ async def get_search_combo(
         if h:
             seen_hashes.add(h)
         unique_data.append(item)
+    if min_seeders > 0:
+        unique_data = [
+            item for item in unique_data if _seeders(item) >= min_seeders
+        ]
+    if category:
+        unique_data = [
+            item
+            for item in unique_data
+            if category in str(item.get("category") or "").lower()
+        ]
     COMBO = {"data": unique_data}
     COMBO["time"] = time.time() - start_time
     COMBO["total"] = len(COMBO["data"])

@@ -33,8 +33,10 @@ class Magnetdl:
                     if not name or not link:
                         continue
                     href = link["href"]
-                    if not href.startswith("http"):
-                        href = self.BASE_URL + href
+                    if href.startswith("http"):
+                        # SEO-spam rows link to external pages - real rows are relative.
+                        continue
+                    href = self.BASE_URL + href
                     my_dict["data"].append(
                         {
                             "name": name,
