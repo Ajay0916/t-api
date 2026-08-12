@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, status
 from typing import Optional
 
-from helper.result_cleaner import clean_results
+from helper.result_cleaner import clean_results, sort_results
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import search_cache
@@ -46,10 +46,14 @@ async def search_for_torrents(
     fresh: Optional[int] = 0,
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
+    sort: Optional[str] = "seeders",
+    order: Optional[str] = "desc",
 ):
     site = site.lower().strip()
     query = query.lower().strip()
     category = (category or "").lower().strip()
+    sort = (sort or "seeders").lower()
+    order = (order or "desc").lower()
     all_sites = check_if_site_available(site)
     if not all_sites:
         return error_handler(
@@ -63,7 +67,7 @@ async def search_for_torrents(
         else limit
     )
 
-    cache_key = f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}"
+    cache_key = f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
     if not fresh:
         cached = search_cache.get(cache_key)
         if cached is not None:
@@ -104,6 +108,7 @@ async def search_for_torrents(
         if (min_seeders <= 0 or _seeders(item) >= min_seeders)
         and (not category or category in str(item.get("category") or "").lower())
     ]
+    sort_results(data, sort=sort, order=order)
     resp["data"] = data
     resp["total"] = len(data)
     if len(resp["data"]) > 0:
