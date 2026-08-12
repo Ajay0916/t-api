@@ -136,12 +136,12 @@ async def search_for_torrents(
     relaxed = False
     # A strict filter combo (e.g. Hindi + 1080p when the Hindi release is
     # only 4K) must not end in an empty "No result found" - relax quality,
-    # then format, then language, then category and return what exists.
+    # then format, then category. The language filter is NEVER relaxed:
+    # a Hindi search must never silently return English releases.
     if not data and resp["data"] and (category or quality or language or format):
-        for drop in ("quality", "format", "language", "category"):
+        for drop in ("quality", "format", "category"):
             q2 = "" if drop == "quality" else quality
             f2 = "" if drop == "format" else format
-            l2 = "" if drop == "language" else language
             c2 = "" if drop == "category" else category
             relaxed_data = [
                 item
@@ -149,7 +149,7 @@ async def search_for_torrents(
                 if (min_seeders <= 0 or _seeders(item) >= min_seeders)
                 and (not c2 or category_matches(item, c2))
                 and (not q2 or quality_matches(item, q2))
-                and (not l2 or language_matches(item, l2))
+                and (not language or language_matches(item, language))
                 and (not f2 or format_matches(item, f2))
             ]
             if relaxed_data:
@@ -157,7 +157,12 @@ async def search_for_torrents(
                 relaxed = True
                 break
         if not data:
-            data = [i for i in resp["data"] if (min_seeders <= 0 or _seeders(i) >= min_seeders)]
+            data = [
+                item
+                for item in resp["data"]
+                if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                and (not language or language_matches(item, language))
+            ]
             relaxed = True
     sort_results(data, sort=sort, order=order)
     resp["data"] = data

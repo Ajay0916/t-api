@@ -92,61 +92,71 @@ async def get_search_combo(
     def _relax_filters(items, min_seeders, category, quality, language, format_):
         """When a strict filter combo leaves nothing (e.g. Hindi is only
         available in 4K but the user asked 1080p), relax filters in
-        importance order - quality first, then format, then language, then
-        category - so the search still returns usable results instead of an
-        empty "No result found"."""
-        for drop in ("quality", "format", "language", "category"):
+        importance order - quality, then format, then category. The language
+        filter is NEVER relaxed away: a Hindi search must never silently
+        return English releases. If nothing survives, return what keeps
+        language (possibly empty)."""
+        for drop in ("quality", "format", "category"):
             relaxed = _apply_filters(
                 items,
                 min_seeders,
                 "" if drop == "category" else category,
                 "" if drop == "quality" else quality,
-                "" if drop == "language" else language,
+                language,
                 "" if drop == "format" else format,
             )
             if relaxed:
                 return relaxed, True
-        return _apply_filters(items, min_seeders, "", "", "", ""), True
+        return _apply_filters(items, min_seeders, "", "", language, ""), True
 
     main_data = []
     last_data = []
     total_torrents_overall = 0
 
-    tasks = []
-    for site in sites_list:
-        if site_health.is_blocked(site):
-            continue
+    def _site_limit(site):
         site_limit = all_sites[site]["limit"]
         if limit > 0 and limit < site_limit:
             site_limit = limit
-        tasks.append(
+        return site_limit
+
+    def _build_tasks(site_list):
+        return [
             (
                 site,
                 asyncio.create_task(
-                    _search_site(all_sites[site]["website"], query, site_limit)
+                    _search_site(all_sites[site]["website"], query, _site_limit(site))
                 ),
             )
-        )
+            for site in site_list
+        ]
 
-    done, pending = await asyncio.wait(
-        [t for _, t in tasks], timeout=SITE_DEADLINE
-    )
-    for t in pending:
-        t.cancel()
-    for site, task in tasks:
-        if task not in done:
-            # Slow but alive: skip this round, don't blacklist (results matter).
-            continue
-        try:
-            res = task.result()
-        except asyncio.CancelledError:
-            continue
-        except Exception as e:
-            site_health.mark_failure(site, e)
-            continue
-        if res is None:
-            continue
-        if len(res["data"]) > 0:
+    async def _collect(tasks):
+        """Run site tasks under one deadline and merge their rows.
+        Returns the sites that produced no data (slow/alive/empty/error)."""
+        nonlocal total_torrents_overall
+        done, pending = await asyncio.wait(
+            [t for _, t in tasks], timeout=SITE_DEADLINE
+        )
+        for t in pending:
+            t.cancel()
+        missed = []
+        for site, task in tasks:
+            if task not in done:
+                # Slow but alive: skip this round, don't blacklist.
+                missed.append(site)
+                continue
+            try:
+                res = task.result()
+            except asyncio.CancelledError:
+                missed.append(site)
+                continue
+            except Exception as e:
+                site_health.mark_failure(site, e)
+                missed.append(site)
+                continue
+            if res is None or not res.get("data"):
+                missed.append(site)
+                continue
             site_health.mark_success(site)
             bucket = last_data if site in LAST_SITES else main_data
             for item in res["data"]:
@@ -154,29 +164,51 @@ async def get_search_combo(
                     item["site"] = site
                 bucket.append(item)
             total_torrents_overall = total_torrents_overall + res["total"]
+        return missed
+
+    active_sites = [site for site in sites_list if not site_health.is_blocked(site)]
+    missed = await _collect(_build_tasks(active_sites))
+
+    def _dedup():
+        seen = set()
+        out = []
+        for item in main_data + last_data:
+            h = str(item.get("hash") or "").strip().lower()
+            if h and h in seen:
+                continue
+            if h:
+                seen.add(h)
+            out.append(item)
+        return out
 
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
     # Dedup by infohash BEFORE the limit cap so duplicate torrents from
     # different sites never waste WZML result slots (best seeder wins).
-    seen_hashes = set()
-    unique_data = []
-    for item in main_data + last_data:
-        h = str(item.get("hash") or "").strip().lower()
-        if h and h in seen_hashes:
-            continue
-        if h:
-            seen_hashes.add(h)
-        unique_data.append(item)
+    unique_data = _dedup()
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
             unique_data, min_seeders, category, quality, language, format
         )
         if not filtered and (category or quality or language or format):
-            filtered, relaxed = _relax_filters(
-                unique_data, min_seeders, category, quality, language, format
-            )
+            # Language-specific results live on a few sites (e.g. Hindi on
+            # kickass/limetorrent); if those were slow/empty this round,
+            # retry ONLY them before relaxing anything.
+            if language and missed:
+                retry_missed = await _collect(_build_tasks(missed))
+                if retry_missed:
+                    missed = retry_missed
+                main_data.sort(key=_seeders, reverse=True)
+                last_data.sort(key=_seeders, reverse=True)
+                unique_data = _dedup()
+                filtered = _apply_filters(
+                    unique_data, min_seeders, category, quality, language, format
+                )
+            if not filtered:
+                filtered, relaxed = _relax_filters(
+                    unique_data, min_seeders, category, quality, language, format
+                )
         unique_data = filtered
     sort_results(unique_data, sort=sort, order=order)
     COMBO = {"data": unique_data}
@@ -189,7 +221,10 @@ async def get_search_combo(
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    combo_cache.set(cache_key, COMBO)
+    # Never cache an empty filtered result: a zero-row snapshot would keep
+    # serving "No result found" from disk until its TTL expires.
+    if COMBO["total"] > 0:
+        combo_cache.set(cache_key, COMBO)
     return clean_results(COMBO, sort=False)
 
 
