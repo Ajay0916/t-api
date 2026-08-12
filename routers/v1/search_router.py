@@ -78,6 +78,11 @@ async def search_for_torrents(
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Selected Site Not Available"},
         )
+    if site_health.is_manually_blocked(site):
+        return error_handler(
+            status_code=status.HTTP_403_FORBIDDEN,
+            json_message={"error": "Site is disabled."},
+        )
 
     limit = (
         all_sites[site]["limit"]

@@ -4,6 +4,7 @@ from fastapi import status
 from typing import Optional
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
+from helper.site_health import site_health
 
 router = APIRouter(tags=["Recent Torrents Route"])
 
@@ -20,6 +21,11 @@ async def get_recent(
     site = site.lower().strip()
     category = category.lower() if category is not None else None
     if all_sites:
+        if site_health.is_manually_blocked(site):
+            return error_handler(
+                status_code=status.HTTP_403_FORBIDDEN,
+                json_message={"error": "Site is disabled."},
+            )
         limit = (
             all_sites[site]["limit"]
             if limit == 0 or limit > all_sites[site]["limit"]

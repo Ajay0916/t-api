@@ -10,7 +10,12 @@ router = APIRouter(tags=["Get all sites"])
 @router.get("")
 async def get_all_supported_sites():
     all_sites = check_if_site_available("1337x")
-    sites_list = [site for site in all_sites.keys() if all_sites[site]["website"]]
+    sites_list = [
+        site
+        for site in all_sites.keys()
+        if all_sites[site]["website"]
+        and not site_health.is_manually_blocked(site)
+    ]
     return error_handler(
         status_code=status.HTTP_200_OK,
         json_message={
@@ -34,10 +39,13 @@ async def get_site_status():
         if not info.get("website"):
             continue
         health = site_health.status(key)
+        manual = bool(health.get("manual_blocked"))
         sites.append(
             {
                 "site": key,
                 "name": info["website"]._name,
+                "enabled": not manual,
+                "manual_blocked": manual,
                 "blocked": health["blocked"],
                 "cooldown_remaining": health["cooldown_remaining"],
                 "fail_count": health["fail_count"],
@@ -47,7 +55,13 @@ async def get_site_status():
                 "limit": info.get("limit"),
             }
         )
+    enabled = sum(1 for s in sites if s["enabled"])
     return error_handler(
         status_code=status.HTTP_200_OK,
-        json_message={"sites": sites},
+        json_message={
+            "total": len(sites),
+            "enabled": enabled,
+            "disabled": len(sites) - enabled,
+            "sites": sites,
+        },
     )

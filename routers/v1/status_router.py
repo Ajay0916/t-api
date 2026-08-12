@@ -19,6 +19,7 @@ async def get_status():
     for name, cfg in all_sites.items():
         st = site_health.status(name)
         sites[name] = {
+            "enabled": not st.get("manual_blocked", False),
             "blocked": st["blocked"],
             "manual_blocked": st.get("manual_blocked", False),
             "cooldown_remaining": st["cooldown_remaining"],
