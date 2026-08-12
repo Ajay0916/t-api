@@ -3,62 +3,100 @@ from urllib.parse import quote, unquote, urlsplit
 
 import aiohttp
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from constants.headers import HEADER_AIO
 from helper.session import get_connector
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
-MAX_SIZE = 25 * 1024 * 1024
-TIMEOUT = aiohttp.ClientTimeout(total=20)
+MAX_SIZE = 200 * 1024 * 1024
+TIMEOUT = aiohttp.ClientTimeout(total=180, sock_connect=15, sock_read=60)
 
 
 def _safe_filename(url):
     name = unquote(urlsplit(url).path.split("/")[-1] or "")
     name = re.sub(r"[^\w.\-]", "_", name)
-    return name or "torrent.torrent"
+    return name or "download"
+
+
+def _media_type(filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return {
+        "torrent": "application/x-bittorrent",
+        "pdf": "application/pdf",
+        "epub": "application/epub+zip",
+        "mobi": "application/x-mobipocket-ebook",
+        "azw3": "application/vnd.amazon.ebook",
+        "zip": "application/zip",
+        "rar": "application/vnd.rar",
+        "7z": "application/x-7z-compressed",
+        "mp3": "audio/mpeg",
+        "m4b": "audio/mp4",
+    }.get(ext, "application/octet-stream")
 
 
 @router.get("/")
 @router.get("")
 async def proxy_torrent(url: str, name: str = ""):
-    """Fetch a .torrent file through this server and stream it back.
+    """Fetch a .torrent / book file through this server and stream it back.
 
-    Lets WZML's Direct Link keep working even when the original torrent CDN
-    (t0r.space etc.) blocks the requester's IP.
+    Lets WZML's Direct Link keep working even when the original CDN blocks
+    the requester's IP. Streams instead of buffering so large book files on
+    slow CDNs (libgen/booksdl, archive.org) download reliably.
     """
     if not url.lower().startswith(("http://", "https://")):
         return JSONResponse(status_code=400, content={"error": "Invalid URL."})
     try:
-        async with aiohttp.ClientSession(
+        session = aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
-        ) as session:
-            async with session.get(
-                url, headers=HEADER_AIO, timeout=TIMEOUT, allow_redirects=True
-            ) as res:
-                if res.status >= 400:
-                    return JSONResponse(
-                        status_code=502, content={"error": "Upstream error."}
-                    )
-                body = await res.content.read()
+        )
+        res = await session.get(
+            url, headers=HEADER_AIO, timeout=TIMEOUT, allow_redirects=True
+        )
     except Exception:
+        try:
+            await session.close()
+        except Exception:
+            pass
         return JSONResponse(
-            status_code=502, content={"error": "Failed to fetch torrent."}
+            status_code=502, content={"error": "Failed to fetch file."}
         )
-    # Reject upstream error pages, but pass through real files of any kind:
-    # book sites (Hindi books, archive.org, libgen) put direct PDF/EPUB links
-    # in "torrent" so WZML's Direct Link must stream those too, not just
-    # bencoded .torrent files.
-    head = body[:512].lstrip()
-    if len(body) > MAX_SIZE or not body or head.startswith(b"<"):
+    if res.status >= 400:
+        await res.release()
+        await session.close()
         return JSONResponse(
-            status_code=502, content={"error": "Invalid file."}
+            status_code=502, content={"error": "Upstream error."}
         )
+    # Peek at the start of the body: upstream error pages are HTML and must
+    # be rejected, but real files of any kind (torrent/pdf/epub/zip) pass.
+    try:
+        head = await res.content.read(512)
+    except Exception:
+        head = b""
+    if not head or head.lstrip().startswith(b"<"):
+        await res.release()
+        await session.close()
+        return JSONResponse(status_code=502, content={"error": "Invalid file."})
+
     filename = name or _safe_filename(url)
-    return Response(
-        content=body,
-        media_type="application/x-bittorrent",
+
+    async def _stream():
+        total = len(head)
+        try:
+            yield head
+            async for chunk in res.content.iter_chunked(64 * 1024):
+                total += len(chunk)
+                if total > MAX_SIZE:
+                    break
+                yield chunk
+        finally:
+            await res.release()
+            await session.close()
+
+    return StreamingResponse(
+        _stream(),
+        media_type=_media_type(filename),
         headers={
             "Content-Disposition": 'attachment; filename="{}"'.format(filename)
         },
