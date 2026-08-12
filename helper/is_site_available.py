@@ -169,7 +169,6 @@ all_sites = {
     },
     "freecourseweb": {
         "website": FreeCourseWeb,
-        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
@@ -282,7 +281,6 @@ all_sites = {
         "limit": 50,
     },
     "yts": {
-        "combo_available": False,
         "website": Yts,
         "trending_available": True,
         "trending_category": False,
