@@ -21,6 +21,7 @@ from torrents.x1337 import x1337
 from torrents.your_bittorrent import YourBittorrent
 from torrents.yts import Yts
 from torrents.pimpmymind import PimpMyMind
+from torrents.downarchive import DownArchive
 from torrents.rutracker import RuTracker
 
 all_sites = {
@@ -155,6 +156,17 @@ all_sites = {
             "books",
         ],  # applications and tv-shows
         "limit": 50,
+    },
+    "downarchive": {
+        "website": DownArchive,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 20,
     },
     "pimpmymind": {
         "website": PimpMyMind,

@@ -21,6 +21,7 @@ AUDIOBOOKBAY = "https://audiobookbay.lu"
 MAGNETZ = "https://magnetz.eu"
 
 FREECOURSEWEB = "https://freecourseweb.com"
+DOWNARCHIVE = "https://downarchive.org"
 DOWNLOADFREECOURSE = "https://downloadfreecourse.com"
 HINDIBOOKS = "https://www.hindibook.in"
 HINDIAUDIO = "https://archive.org"
