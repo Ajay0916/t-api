@@ -81,6 +81,11 @@ class AudiobookBay:
                     if not h:
                         continue
                     name = h.get_text(" ", strip=True)
+                    authors = None
+                    if " - " in name:
+                        parts = [p.strip() for p in name.split(" - ") if p.strip()]
+                        if len(parts) >= 2:
+                            authors = [parts[-1]]
                     url = h["href"]
                     if url.startswith("/"):
                         url = self.BASE_URL + url
@@ -109,6 +114,7 @@ class AudiobookBay:
                     my_dict["data"].append(
                         {
                             "name": name,
+                            "authors": authors,
                             "size": size,
                             "category": category,
                             "date": date,

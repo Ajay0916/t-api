@@ -8,6 +8,7 @@ from helper.session import get_connector
 
 from constants.base_url import ARCHIVEBOOKS
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.author_utils import clean_archive_creators
 from helper.html_scraper import Scraper
 
 
@@ -62,6 +63,11 @@ class ArchiveBooks:
                 if not html or not html[0]:
                     return None
                 data = json.loads(html[0])
+                authors = clean_archive_creators(
+                    (data.get("metadata") or {}).get("creator")
+                )
+                if authors:
+                    obj["authors"] = authors
                 files = data.get("files", [])
                 books = [
                     f

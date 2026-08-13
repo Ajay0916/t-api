@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 
 from constants.base_url import ANNASAARCHIVE
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.author_utils import clean_archive_creators
 from helper.html_scraper import Scraper
 
 
@@ -56,7 +57,7 @@ class AnnasArchive:
                 out.append(
                     {
                         "name": name,
-                        "author": author,
+                        "authors": clean_archive_creators(author),
                         "md5": m.group(1),
                         "info": info_text,
                     }

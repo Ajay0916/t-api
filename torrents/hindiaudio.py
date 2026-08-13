@@ -1,6 +1,5 @@
 import asyncio
 import json
-import re
 import time
 from urllib.parse import quote
 
@@ -11,6 +10,7 @@ from bs4 import BeautifulSoup
 from constants.base_url import HINDIAUDIO
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.author_utils import clean_archive_creators
 from helper.html_scraper import Scraper
 
 
@@ -67,6 +67,11 @@ class HindiAudio:
                 if not html or not html[0]:
                     return None
                 data = json.loads(html[0])
+                authors = clean_archive_creators(
+                    (data.get("metadata") or {}).get("creator")
+                )
+                if authors:
+                    obj["authors"] = authors
                 files = data.get("files", [])
                 audio = [
                     f

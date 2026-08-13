@@ -31,22 +31,25 @@ class Libgen:
             try:
                 md5 = obj.get("id") or obj.get("hash")
                 if md5:
-                    try:
-                        async with session.get(
-                            self.BASE_URL + "/ads.php?md5=" + md5,
-                            headers=HEADER_AIO,
-                            timeout=AIO_TIMEOUT,
-                        ) as res:
-                            html = await res.text(encoding="ISO-8859-1")
-                        m = re.search(
-                            r'href="(get\.php\?md5=[a-f0-9]{32}&key=[A-Z0-9]+)"',
-                            html,
-                        )
-                        if m:
-                            obj["torrent"] = self.BASE_URL + "/" + m.group(1)
-                            obj["download"] = obj["torrent"]
-                    except Exception:
-                        pass
+                    for attempt in range(2):
+                        try:
+                            async with session.get(
+                                self.BASE_URL + "/ads.php?md5=" + md5,
+                                headers=HEADER_AIO,
+                                timeout=AIO_TIMEOUT,
+                            ) as res:
+                                html = await res.text(encoding="ISO-8859-1")
+                            m = re.search(
+                                r'href="(get\.php\?md5=[a-f0-9]{32}&key=[A-Z0-9]+)"',
+                                html,
+                            )
+                            if m:
+                                obj["torrent"] = self.BASE_URL + "/" + m.group(1)
+                                obj["download"] = obj["torrent"]
+                                break
+                        except Exception:
+                            if attempt == 0:
+                                await asyncio.sleep(0.5)
                 if not obj.get("torrent"):
                     async with session.get(
                         url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
