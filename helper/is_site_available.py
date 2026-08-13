@@ -1,4 +1,5 @@
 from torrents.freecourseweb import FreeCourseWeb
+from torrents.downloadfreecourse import DownloadFreeCourse
 from torrents.hindibooks import HindiBooks
 from torrents.hindiaudio import HindiAudio
 from torrents.archivebooks import ArchiveBooks
@@ -170,6 +171,16 @@ all_sites = {
     },
     "freecourseweb": {
         "website": FreeCourseWeb,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": True,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 30,
+    },
+    "downloadfreecourse": {
+        "website": DownloadFreeCourse,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>26 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>27 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **26 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **27 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
@@ -59,11 +59,11 @@
 
 ## 🌐 Sites
 
-**Torrents:** `1337x`, `tgx`, `torlock`, `piratebay`, `nyaasi`, `pimpmymind`, `kickass`, `bitsearch`, `magnetdl`, `libgen`, `yts`, `limetorrent`, `torrentfunk`, `tdp`, `torrentproject`, `ybt`, `ext`, `torrentdownload`, `magnetz`
+**Torrents:** `1337x`, `tgx`, `torlock`, `piratebay`, `nyaasi`, `kickass`, `bitsearch`, `magnetdl`, `libgen`, `yts`, `limetorrent`, `torrentfunk`, `tdp`, `torrentproject`, `ybt`, `ext`, `torrentdownload`, `magnetz`
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `freecourseweb`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
+**Courses:** `freecourseweb`, `downloadfreecourse`, `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
 
