@@ -20,9 +20,8 @@ class AnnasArchive:
     _name = "Anna's Archive"
 
     MIRRORS = [
-        "https://annas-archive.gl",
-        "https://annas-archive.pk",
-        "https://annas-archive.gd",
+        "https://annas-archive.is",
+        "https://annas-archive.se",
     ]
 
     def __init__(self):
@@ -39,29 +38,50 @@ class AnnasArchive:
         try:
             soup = BeautifulSoup(html, "html.parser")
             out = []
-            for c in soup.select("div.flex.pt-3.pb-3.border-b"):
-                a = c.select_one("a.js-vim-focus")
+            for c in soup.select("div.bg-white.rounded-lg.shadow.p-4.mb-4"):
+                a = c.select_one("h3 a")
                 if not a or not a.get("href"):
                     continue
                 href = a["href"].strip()
-                m = re.match(r"/md5/([a-f0-9]{32})", href)
-                if not m:
+                if "/books/" not in href:
                     continue
                 name = a.get_text(" ", strip=True)
                 if not name:
                     continue
-                author = None
-                nxt = a.find_next_sibling("a")
-                if nxt and nxt.get("href", "").startswith("/search?q="):
-                    author = nxt.get_text(" ", strip=True)
-                info = c.select_one("div.text-gray-800")
-                info_text = info.get_text(" ", strip=True) if info else ""
+                info_el = c.select_one("div.text-sm.text-\\[\\#666\\].mt-1")
+                info = info_el.get_text(" ", strip=True) if info_el else ""
+                parts = [p.strip() for p in info.split("·")]
+                author = parts[0] if parts else ""
+                year = next(
+                    (p for p in parts if re.fullmatch(r"(?:19|20)\d{2}", p)),
+                    None,
+                )
+                ext = next(
+                    (
+                        p
+                        for p in parts
+                        if p.upper()
+                        in ("PDF", "EPUB", "MOBI", "AZW3", "DJVU", "FB2", "TXT")
+                    ),
+                    None,
+                )
+                size = next(
+                    (
+                        p
+                        for p in parts
+                        if re.search(r"\d+(?:\.\d+)?\s?(?:MB|GB|KB)", p, re.I)
+                    ),
+                    None,
+                )
                 out.append(
                     {
                         "name": name,
                         "authors": clean_archive_creators(author),
-                        "md5": m.group(1),
-                        "info": info_text,
+                        "url": href,
+                        "info": info,
+                        "year": year,
+                        "extension": ext,
+                        "size": size,
                     }
                 )
                 if len(out) == self.LIMIT:
@@ -75,34 +95,49 @@ class AnnasArchive:
         lang = re.search(r"([A-Za-z ]+?)\s*\[[a-z]{2}\]", info)
         if lang:
             obj["language"] = lang.group(1).strip()
-        ext = re.search(r"·\s*(PDF|EPUB|MOBI|AZW3|DJVU|FB2|TXT)\b", info, re.I)
-        if ext:
-            obj["extension"] = ext.group(1).upper()
-        size = re.search(r"(\d+(?:\.\d+)?\s?(?:MB|GB|KB))\b", info, re.I)
-        if size:
-            obj["size"] = size.group(1)
-        year = re.search(r"·\s*(19\d{2}|20\d{2})\b", info)
-        if year:
-            obj["year"] = year.group(1)
+        if not obj.get("extension"):
+            ext = re.search(r"·\s*(PDF|EPUB|MOBI|AZW3|DJVU|FB2|TXT)\b", info, re.I)
+            if ext:
+                obj["extension"] = ext.group(1).upper()
+        if not obj.get("size"):
+            size = re.search(r"(\d+(?:\.\d+)?\s?(?:MB|GB|KB))\b", info, re.I)
+            if size:
+                obj["size"] = size.group(1)
+        if not obj.get("year"):
+            year = re.search(r"·\s*(19\d{2}|20\d{2})\b", info)
+            if year:
+                obj["year"] = year.group(1)
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, obj, sem):
         async with sem:
             try:
-                html = await Scraper().get_all_results(
-                    session,
-                    "https://libgen.li/ads.php?md5=" + obj["md5"],
-                )
+                html = await Scraper().get_all_results(session, obj["url"])
                 if not html or not html[0]:
                     return None
                 m = re.search(
-                    r'href="(get\.php\?md5=[a-f0-9]{32}&key=[A-Z0-9]+)"',
+                    r"cdnagesdb\.com/images/booksimages/([a-f0-9]{32})",
                     html[0],
+                )
+                if not m:
+                    m = re.search(r"\b([a-f0-9]{32})\b", html[0])
+                if not m:
+                    return None
+                md5 = m.group(1)
+                html2 = await Scraper().get_all_results(
+                    session, "https://libgen.li/ads.php?md5=" + md5
+                )
+                if not html2 or not html2[0]:
+                    return None
+                m = re.search(
+                    r'href="(get\.php\?md5=[a-f0-9]{32}&key=[A-Z0-9]+)"',
+                    html2[0],
                 )
                 if not m:
                     return None
                 obj["torrent"] = "https://libgen.li/" + m.group(1)
-                obj["url"] = self.BASE_URL + "/md5/" + obj["md5"]
+                obj["download"] = obj["torrent"]
+                obj["md5"] = md5
                 self._parse_info(obj)
             except Exception:
                 return None
@@ -147,7 +182,7 @@ class AnnasArchive:
                     data = await res.json(content_type=None)
             solution = data.get("solution") or {}
             html = solution.get("response") or ""
-            if solution.get("status") != 200 or "js-vim-focus" not in html:
+            if solution.get("status") != 200 or "/books/" not in html:
                 return []
             return self._parser(html)
         except Exception:
@@ -157,7 +192,10 @@ class AnnasArchive:
         start_time = time.time()
         self.LIMIT = limit
         timeout = aiohttp.ClientTimeout(total=20)
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True, timeout=timeout) as session:
+        async with aiohttp.ClientSession(
+            connector=get_connector(), connector_owner=False, trust_env=True,
+            timeout=timeout,
+        ) as session:
             posts = []
             mirrors = [self.BASE_URL] + [
                 m for m in self.MIRRORS if m != self.BASE_URL

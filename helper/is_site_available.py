@@ -1,6 +1,7 @@
 from torrents.hindibooks import HindiBooks
 from torrents.hindiaudio import HindiAudio
 from torrents.archivebooks import ArchiveBooks
+from torrents.annasarchive import AnnasArchive
 from torrents.audiobookbay import AudiobookBay
 from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
@@ -171,6 +172,17 @@ all_sites = {
     },
     "downarchive": {
         "website": DownArchive,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 20,
+    },
+    "annasarchive": {
+        "website": AnnasArchive,
         "combo_available": False,
         "trending_available": False,
         "trending_category": False,
