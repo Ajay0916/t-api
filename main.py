@@ -23,7 +23,7 @@ startTime = time.time()
 
 app = FastAPI(
     title="Torrents-Api",
-    version="1.6.1",
+    version="1.6.2",
     description="Unofficial Torrents / Books / Courses API — 25 sites, mirror rotation, combo search",
     docs_url="/docs",
     contact={
@@ -54,7 +54,7 @@ async def health_route(req: Request):
     return JSONResponse(
         {
             "app": "Torrents-Api",
-            "version": "v" + "1.6.1",
+            "version": "v" + "1.6.2",
             "ip": req.client.host,
             "uptime": ceil(getUptime(startTime)),
         }
