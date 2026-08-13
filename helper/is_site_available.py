@@ -21,6 +21,7 @@ from torrents.x1337 import x1337
 from torrents.your_bittorrent import YourBittorrent
 from torrents.yts import Yts
 from torrents.pimpmymind import PimpMyMind
+from torrents.oceanofpdf import OceanofPDF
 from torrents.downarchive import DownArchive
 from torrents.rutracker import RuTracker
 
@@ -156,6 +157,17 @@ all_sites = {
             "books",
         ],  # applications and tv-shows
         "limit": 50,
+    },
+    "oceanofpdf": {
+        "website": OceanofPDF,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": ["books"],
+        "limit": 15,
     },
     "downarchive": {
         "website": DownArchive,

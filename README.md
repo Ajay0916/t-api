@@ -65,7 +65,7 @@
 
 **Courses:** `downarchive` (active course DB — direct uploadgig/nitroflare links, no magnets), `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
 
-**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`
+**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`, `oceanofpdf` (Cloudflare-protected — needs Flaresolverr)
 
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 
