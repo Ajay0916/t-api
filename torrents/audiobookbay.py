@@ -13,16 +13,13 @@ from constants.base_url import AUDIOBOOKBAY
 from constants.headers import HEADER_AIO
 from helper.trackers import build_magnet
 
-# .lu is the main domain; .ws/.nl/.se/.is resolve to the same origin server
-# (verified via DNS) and serve the same content, so they work as fallbacks
-# when one hostname is blocked. .org/.me/.to are parked/ad pages and are
-# skipped by _fetch_page's real-page validation.
+# .lu is the main domain; theaudiobookbay.se is a confirmed mirror on the
+# same origin server (176.97.124.219). Other TLDs that resolve to the same
+# IP (.ws/.nl/.se/.is) don't serve content and only add timeout waste, so
+# they are kept out. _fetch_page skips any host that isn't a real page.
 HOSTS = [
     AUDIOBOOKBAY,
-    "https://audiobookbay.ws",
-    "https://audiobookbay.nl",
-    "https://audiobookbay.se",
-    "https://audiobookbay.is",
+    "https://theaudiobookbay.se",
 ]
 
 

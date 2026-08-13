@@ -22,6 +22,20 @@ def _safe_filename(url):
     return name or "download"
 
 
+def _upstream_filename(cd):
+    """Extract the filename the upstream server chose for the file, so the
+    proxy can borrow its extension (libgen sends "...libgen.li.pdf")."""
+    if not cd:
+        return ""
+    m = re.search(r"filename\*=UTF-8''([^;]+)", cd, re.I)
+    if m:
+        return unquote(m.group(1).strip().strip('"'))
+    m = re.search(r'filename="?([^";]+)"?', cd)
+    if m:
+        return m.group(1).strip().strip('"')
+    return ""
+
+
 def _media_type(filename):
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return {
@@ -81,15 +95,23 @@ async def proxy_torrent(url: str, name: str = ""):
         await session.close()
         return JSONResponse(status_code=502, content={"error": "Invalid file."})
 
-    filename = name or _safe_filename(url)
+    up_name = _upstream_filename(res.headers.get("Content-Disposition") or "")
+    filename = name or up_name or _safe_filename(url)
     if "." not in filename.rsplit("/", 1)[-1]:
-        m = re.search(
-            r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
-            filename,
-            re.I,
-        )
-        if m:
-            filename = filename.strip() + "." + m.group(1).lower()
+        ext = ""
+        up_ext = up_name.rsplit(".", 1)[-1] if "." in up_name else ""
+        if up_ext and re.fullmatch(r"[a-z0-9]{2,5}", up_ext, re.I):
+            ext = up_ext.lower()
+        else:
+            m = re.search(
+                r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
+                filename,
+                re.I,
+            )
+            if m:
+                ext = m.group(1).lower()
+        if ext:
+            filename = filename.strip() + "." + ext
 
     # Hindi/Tamil/etc. titles can't go into the latin-1 Content-Disposition
     # header; send an ASCII fallback plus RFC 5987 filename* so browsers
