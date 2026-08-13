@@ -1,7 +1,10 @@
 import asyncio
+import os
 import re
 import time
 from urllib.parse import quote
+
+FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 
 import aiohttp
 from helper.session import get_connector
@@ -18,7 +21,6 @@ class AnnasArchive:
 
     MIRRORS = [
         "https://annas-archive.gl",
-        "https://annas-archive.li",
         "https://annas-archive.pk",
         "https://annas-archive.gd",
     ]
@@ -129,6 +131,28 @@ class AnnasArchive:
         except Exception:
             return []
 
+    async def _flare_search_once(self, query, page):
+        url = self.BASE_URL + "/search?q=" + quote(query)
+        if page > 1:
+            url += "&page={}".format(page)
+        try:
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": 20000}
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as session:
+                async with session.post(
+                    f"{FLARESOLVERR_URL}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=25),
+                ) as res:
+                    data = await res.json(content_type=None)
+            solution = data.get("solution") or {}
+            html = solution.get("response") or ""
+            if solution.get("status") != 200 or "js-vim-focus" not in html:
+                return []
+            return self._parser(html)
+        except Exception:
+            return []
+
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
@@ -142,6 +166,8 @@ class AnnasArchive:
                 posts = await self._search_once(session, mirror, query, page)
                 if posts:
                     break
+            if not posts:
+                posts = await self._flare_search_once(query, page)
             if not posts:
                 return None
             results = {"data": posts}

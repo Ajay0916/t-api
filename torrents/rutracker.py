@@ -64,6 +64,9 @@ def _cookie_list():
 _sid = None
 _sid_created = 0.0
 _SESSION_TTL = 300.0
+# Serialize Flaresolverr calls: concurrent flows sharing one warm session
+# would interleave their fetches and return wrong pages/magnets.
+_flare_lock = asyncio.Lock()
 
 
 def _get_sid():
@@ -131,13 +134,14 @@ class RuTracker:
         return _LOGIN_PAGE_MARK in html or _CAPTCHA_MARK in html
 
     async def _flaresolverr(self, payload, timeout):
-        async with aiohttp.ClientSession(
-            connector=get_connector(), connector_owner=False, trust_env=True
-        ) as session:
-            async with session.post(
-                f"{FLARESOLVERR_URL}/v1", json=payload, timeout=timeout
-            ) as res:
-                data = await res.json(content_type=None)
+        async with _flare_lock:
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as session:
+                async with session.post(
+                    f"{FLARESOLVERR_URL}/v1", json=payload, timeout=timeout
+                ) as res:
+                    data = await res.json(content_type=None)
         solution = data.get("solution") or {}
         if solution.get("status") != 200:
             return None
