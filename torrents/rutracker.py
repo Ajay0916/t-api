@@ -136,7 +136,8 @@ class RuTracker:
     def _parse_rows(self, html):
         results = []
         soup = BeautifulSoup(html, "html.parser")
-        for tr in soup.select("table.forumline tbody tr"):
+        # Raw RuTracker HTML has no <tbody> — rows sit directly in the table.
+        for tr in soup.select("table.forumline tr"):
             name_el = tr.select_one(".row4 .wbr .med")
             if not name_el:
                 continue
