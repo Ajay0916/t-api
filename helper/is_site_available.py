@@ -343,7 +343,7 @@ all_sites = {
         "recent_available": True,
         "recent_category_available": False,
         "categories": [],
-        "limit": 30,
+        "limit": 20,
     },
     "libgen": {
         "combo_available": False,

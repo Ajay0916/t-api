@@ -13,13 +13,16 @@ from constants.base_url import AUDIOBOOKBAY
 from constants.headers import HEADER_AIO
 from helper.trackers import build_magnet
 
-# .lu is the live domain; the others are kept as fallbacks and only
-# accepted when they serve a real page (parked/sale pages are skipped).
+# .lu is the main domain; .ws/.nl/.se/.is resolve to the same origin server
+# (verified via DNS) and serve the same content, so they work as fallbacks
+# when one hostname is blocked. .org/.me/.to are parked/ad pages and are
+# skipped by _fetch_page's real-page validation.
 HOSTS = [
     AUDIOBOOKBAY,
-    "https://audiobookbay.org",
-    "https://audiobookbay.me",
-    "https://audiobookbay.to",
+    "https://audiobookbay.ws",
+    "https://audiobookbay.nl",
+    "https://audiobookbay.se",
+    "https://audiobookbay.is",
 ]
 
 
@@ -73,7 +76,7 @@ class AudiobookBay:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(6)
+        sem = asyncio.Semaphore(3)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
@@ -81,6 +84,9 @@ class AudiobookBay:
                         self._individual_scrap(session, url, obj, sem)
                     )
                     tasks.append(task)
+                    # audiobookbay rate-limits rapid bursts; pacing keeps a
+                    # full search from tripping Cloudflare mid-fetch.
+                    await asyncio.sleep(0.3)
         await asyncio.gather(*tasks)
         return result
 
