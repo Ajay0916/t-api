@@ -63,7 +63,7 @@
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `freecourseweb`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD` env). The bot logs in once through Flaresolverr's session and enriches top results with magnet links)
+**Courses:** `freecourseweb`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD` env). Login + search happen in one Flaresolverr request via the login form's `redirect` field (no session persistence needed), and top results are enriched with magnet links)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
 

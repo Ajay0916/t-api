@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 import time
-from urllib.parse import quote, urlencode
+from urllib.parse import quote_plus, urlencode
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -18,22 +18,25 @@ _SESSION = "rutracker-tapi"
 _SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
 _ENRICH_TIMEOUT = aiohttp.ClientTimeout(total=45)
 
+# RuTracker shows a hidden quick-login form (with login_username input) in the
+# header DOM of every page, so that alone can never tell logged-in from guest.
+# A real login page instead contains this full-page form heading.
+_LOGIN_PAGE_MARK = "Введите ваше имя и пароль"
+
 _RU_MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "июн": 6,
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
 }
-
-_login_done = False
-_login_lock = asyncio.Lock()
 
 
 class RuTracker:
     """RuTracker search via a self-hosted Flaresolverr instance.
 
     RuTracker is behind a Cloudflare JS challenge AND requires login for
-    search, so plain HTTP clients cannot use it. Flaresolverr solves the
-    challenge with a headless browser; we then log in once through the same
-    session (cookies persist) and scrape tracker.php. Top results are
+    search. Flaresolverr solves the challenge with a headless browser; the
+    login form's ``redirect`` field then takes us straight to the search
+    results page, so login + search happen inside one Flaresolverr request
+    and no cross-request cookie persistence is needed. Top results are
     enriched with magnet links from their topic pages.
     """
 
@@ -45,8 +48,9 @@ class RuTracker:
 
     @staticmethod
     def _int(value):
+        # RuTracker formats counts as "12 345" (space thousands separator)
         try:
-            return int(str(value).replace(",", "").strip() or 0)
+            return int(re.sub(r"[^\d]", "", str(value)))
         except (TypeError, ValueError):
             return None
 
@@ -87,40 +91,23 @@ class RuTracker:
         }
         return await self._flaresolverr(payload, timeout)
 
-    async def _do_login(self):
+    async def _login_and_fetch(self, redirect_target, timeout):
+        """Log in and land directly on ``redirect_target`` in one request."""
         payload = {
             "cmd": "request.post",
-            "url": "https://rutracker.org/forum/login.php",
+            "url": "{}/forum/login.php".format(self.BASE_URL),
             "postData": urlencode(
                 {
                     "login_username": _RUTRACKER_USER,
                     "login_password": _RUTRACKER_PASS,
                     "login": "Вход",
-                    "redirect": "index.php",
+                    "redirect": redirect_target,
                 }
             ),
             "maxTimeout": 55000,
             "session": _SESSION,
         }
-        html = await self._flaresolverr(payload, _SEARCH_TIMEOUT)
-        return bool(html) and 'name="login_username"' not in html
-
-    async def _ensure_login(self):
-        global _login_done
-        if _login_done:
-            return True
-        if not _RUTRACKER_USER or not _RUTRACKER_PASS:
-            return False
-        async with _login_lock:
-            if _login_done:
-                return True
-            try:
-                ok = await self._do_login()
-            except Exception:
-                return False
-            if ok:
-                _login_done = True
-            return ok
+        return await self._flaresolverr(payload, timeout)
 
     def _parse_rows(self, html):
         results = []
@@ -165,13 +152,20 @@ class RuTracker:
 
     async def _magnet(self, tid, sem):
         async with sem:
+            url = "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid)
             try:
-                html = await self._fetch_html(
-                    "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid),
-                    _ENRICH_TIMEOUT,
-                )
+                html = await self._fetch_html(url, _ENRICH_TIMEOUT)
             except Exception:
                 return None
+            if html and _LOGIN_PAGE_MARK in html:
+                # Session cookies did not survive; log in and land on the
+                # topic page in one request instead.
+                try:
+                    html = await self._login_and_fetch(
+                        "viewtopic.php?t={}".format(tid), _ENRICH_TIMEOUT
+                    )
+                except Exception:
+                    return None
             if not html:
                 return None
             soup = BeautifulSoup(html, "html.parser")
@@ -185,8 +179,7 @@ class RuTracker:
             return {"hash": m.group(1).upper(), "magnet": href}
 
     async def search(self, query, page, limit):
-        global _login_done
-        if not (await self._ensure_login()):
+        if not _RUTRACKER_USER or not _RUTRACKER_PASS:
             return None
         start_time = time.time()
         self.LIMIT = limit or None
@@ -194,25 +187,19 @@ class RuTracker:
             page = max(int(page or 1) - 1, 0)
         except (TypeError, ValueError):
             page = 0
-        url = "{}/forum/tracker.php?nm={}&start={}".format(
-            self.BASE_URL, quote(query), page * 50
-        )
+        start = page * 50
+        redirect = "tracker.php?nm={}".format(quote_plus(query))
+        if start:
+            redirect += "&start={}".format(start)
         try:
-            html = await self._fetch_html(url, _SEARCH_TIMEOUT)
+            html = await self._login_and_fetch(redirect, _SEARCH_TIMEOUT)
         except Exception:
             return None
         if not html:
             return None
-        if 'name="login_username"' in html:
-            _login_done = False
-            if not (await self._ensure_login()):
-                return None
-            try:
-                html = await self._fetch_html(url, _SEARCH_TIMEOUT)
-            except Exception:
-                return None
-            if not html:
-                return None
+        if _LOGIN_PAGE_MARK in html:
+            # Login page came back → login itself failed (bad creds/blocked).
+            return None
         raw = self._parse_rows(html)
         if self.LIMIT:
             raw = raw[: self.LIMIT]
