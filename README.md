@@ -26,9 +26,9 @@
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
-- **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, FreeCourseWeb, TorrentProject, PirateBay).
+- **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, TorrentProject, PirateBay).
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
-- **Recent feeds** — new arrivals for Magnetz (native RSS), FreeCourseWeb, PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
+- **Recent feeds** — new arrivals for Magnetz (native RSS), PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo merges every site** — `limit` caps how many results each site fetches, but the merged output returns everything collected (deduped by infohash, sorted by seeders).
 - **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers) on both `/all/search` and `/search`.
@@ -51,7 +51,7 @@
 - **Cleaner output** — seeders/leechers/downloads normalized to int.
 - **No empty WZML buttons** — results with neither a magnet nor a `.torrent`/direct link are dropped from every response, so every rendered row has a working download button.
 - **Lenient params** — `site`/`query` are trimmed, so trailing spaces (WZML sends `query=kgf `) no longer break or skew results.
-- **Author metadata on books** — every book result carries `authors` (libgen, annasarchive, hindiaudio, archivebooks, audiobookbay), cleaned of `Uploded By`/role junk, so WZML shows a proper Author tag.
+- **Author metadata on books** — every book result carries `authors` (libgen, hindiaudio, archivebooks, audiobookbay), cleaned of `Uploded By`/role junk, so WZML shows a proper Author tag.
 - **Hindi book downloads fixed** — the torrent proxy serves non-ASCII titles via RFC 5987 `filename*` (Hindi/Tamil names no longer 500), auto-appends the right extension, and hindibooks prefers live file hosts (archive.org → Zoho → Google Drive → `book.php` → legacy `quick-download`).
 - **AudiobookBay resilience** — mirror rotation with real-page validation (parked/sale pages skipped), plus one quick retry on transient Cloudflare blocks; blocked sites now return a clear *"try again"* message instead of *"change your IP"*.
 - **Caching** — repeated queries served from cache (`fresh=1` to bypass).
@@ -63,9 +63,9 @@
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `freecourseweb`, `downloadfreecourse`, `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
+**Courses:** `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
 
-**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
+**Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`
 
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 

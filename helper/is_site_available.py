@@ -1,9 +1,6 @@
-from torrents.freecourseweb import FreeCourseWeb
-from torrents.downloadfreecourse import DownloadFreeCourse
 from torrents.hindibooks import HindiBooks
 from torrents.hindiaudio import HindiAudio
 from torrents.archivebooks import ArchiveBooks
-from torrents.annasarchive import AnnasArchive
 from torrents.audiobookbay import AudiobookBay
 from torrents.bitsearch import Bitsearch
 from torrents.extratorrent import ExtraTorrent
@@ -169,26 +166,8 @@ all_sites = {
         "categories": [],
         "limit": 30,
     },
-    "freecourseweb": {
-        "website": FreeCourseWeb,
-        "trending_available": False,
-        "trending_category": False,
-        "search_by_category": False,
-        "recent_available": True,
-        "recent_category_available": False,
-        "categories": [],
-        "limit": 30,
-    },
-    "downloadfreecourse": {
-        "website": DownloadFreeCourse,
-        "trending_available": False,
-        "trending_category": False,
-        "search_by_category": False,
-        "recent_available": True,
-        "recent_category_available": False,
-        "categories": [],
-        "limit": 30,
-    },
+
+
     "torrentfunk": {
         "website": TorrentFunk,
         "trending_available": True,
@@ -302,17 +281,7 @@ all_sites = {
         "categories": [],
         "limit": 20,
     },
-    "annasarchive": {
-        "website": AnnasArchive,
-        "combo_available": False,
-        "trending_available": False,
-        "trending_category": False,
-        "search_by_category": False,
-        "recent_available": False,
-        "recent_category_available": False,
-        "categories": [],
-        "limit": 20,
-    },
+
     "hindibooks": {
         "website": HindiBooks,
         "combo_available": False,
