@@ -130,9 +130,21 @@ class OceanofPDF:
                     cookies=cookies,
                     allow_redirects=True,
                 )
-                if post.status == 200 and post.url:
-                    obj["torrent"] = str(post.url)
-                    obj["download"] = str(post.url)
+                if post.status == 200:
+                    body = await post.text(errors="replace")
+                    m = re.search(
+                        r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*>',
+                        body,
+                        re.I,
+                    )
+                    if not m:
+                        return
+                    u = re.search(r"url=([^\"'\s>]+)", m.group(0), re.I)
+                    if not u:
+                        return
+                    dl_url = u.group(1).replace("&amp;", "&")
+                    obj["torrent"] = dl_url
+                    obj["download"] = dl_url
             except Exception:
                 return
 
