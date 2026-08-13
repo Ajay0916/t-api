@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import time
+import uuid
 from urllib.parse import quote_plus, urlencode
 
 import aiohttp
@@ -69,11 +70,11 @@ class RuTracker:
     RuTracker is behind a Cloudflare JS challenge AND requires login for
     search. Flaresolverr solves the challenge with a headless browser. If
     ``RUTRACKER_COOKIE`` is set (from a manual browser login), it is sent
-    with every request — no login POST needed (logins are captcha-gated
-    from datacenter IPs). Otherwise the login form's ``redirect`` field
-    takes us straight to the search results page in one Flaresolverr
-    request. Top results are enriched with magnet links from their topic
-    pages.
+    with every request inside a fresh per-flow session — no login POST
+    needed (logins are captcha-gated from datacenter IPs). Otherwise the
+    login form's ``redirect`` field takes us straight to the search
+    results page in one Flaresolverr request. Top results are enriched
+    with magnet links from their topic pages.
     """
 
     _name = "RuTracker"
@@ -81,6 +82,7 @@ class RuTracker:
     def __init__(self):
         self.BASE_URL = "https://rutracker.org"
         self.LIMIT = None
+        self._sid = _SESSION
 
     @staticmethod
     def _int(value):
@@ -127,14 +129,15 @@ class RuTracker:
             "cmd": "request.get",
             "url": url,
             "maxTimeout": 55000,
+            "session": self._sid,
         }
         if _RUTRACKER_COOKIE:
-            # Fresh browser per request: a shared Flaresolverr session keeps
-            # stale state and can return wrong pages/magnets. Explicit cookies
-            # are enough to stay logged in.
+            # A fresh session per search flow avoids the stale-state/wrong
+            # page problem of a long-lived shared session, while reusing the
+            # browser for enrichment (one Cloudflare challenge solve per flow,
+            # otherwise the 28s API deadline is exceeded). Explicit cookies
+            # keep us logged in without any login POST.
             payload["cookies"] = _cookie_list()
-        else:
-            payload["session"] = _SESSION
         return await self._flaresolverr(payload, timeout)
 
     async def _login_and_fetch(self, redirect_target, timeout):
@@ -228,6 +231,7 @@ class RuTracker:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit or None
+        self._sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
         try:
             page = max(int(page or 1) - 1, 0)
         except (TypeError, ValueError):
@@ -259,12 +263,21 @@ class RuTracker:
             raw = raw[: self.LIMIT]
         extras = []
         if raw and FLARESOLVERR_ENRICH:
-            sem = asyncio.Semaphore(2)
+            # Same-session fetches must stay sequential to avoid races, and a
+            # hard cap keeps the whole flow under the API's 28s deadline
+            # (timeout → results without magnets instead of a 504).
+            sem = asyncio.Semaphore(1)
             enrich_n = min(len(raw), ENRICH_CAP)
-            extras = await asyncio.gather(
-                *(self._magnet(row["tid"], sem) for row in raw[:enrich_n]),
-                return_exceptions=True,
-            )
+            try:
+                extras = await asyncio.wait_for(
+                    asyncio.gather(
+                        *(self._magnet(row["tid"], sem) for row in raw[:enrich_n]),
+                        return_exceptions=True,
+                    ),
+                    timeout=15.0,
+                )
+            except asyncio.TimeoutError:
+                extras = []
         results = []
         for idx, row in enumerate(raw):
             extra = (
