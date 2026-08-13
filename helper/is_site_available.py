@@ -23,6 +23,7 @@ from torrents.x1337 import x1337
 from torrents.your_bittorrent import YourBittorrent
 from torrents.yts import Yts
 from torrents.pimpmymind import PimpMyMind
+from torrents.rutracker import RuTracker
 
 all_sites = {
     "1337x": {
@@ -355,6 +356,17 @@ all_sites = {
         "recent_category_available": False,
         "categories": [],
         "limit": 25,
+    },
+    "rutracker": {
+        "combo_available": False,
+        "website": RuTracker,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 50,
     },
 }
 

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>25 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>26 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **25 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **26 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
@@ -63,7 +63,7 @@
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `freecourseweb`
+**Courses:** `freecourseweb`, `rutracker` (RuTracker via a self-hosted [TorAPI](https://github.com/Lifailon/TorAPI) instance — set `TORAPI_URL` to its address, default `http://127.0.0.1:8443`; top results are enriched with magnet links via TorAPI's id endpoint)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
 
