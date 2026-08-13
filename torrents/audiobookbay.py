@@ -13,7 +13,14 @@ from constants.base_url import AUDIOBOOKBAY
 from constants.headers import HEADER_AIO
 from helper.trackers import build_magnet
 
-HOSTS = [AUDIOBOOKBAY]
+# .lu is the live domain; the others are kept as fallbacks and only
+# accepted when they serve a real page (parked/sale pages are skipped).
+HOSTS = [
+    AUDIOBOOKBAY,
+    "https://audiobookbay.org",
+    "https://audiobookbay.me",
+    "https://audiobookbay.to",
+]
 
 
 class AudiobookBay:
@@ -34,7 +41,13 @@ class AudiobookBay:
                     if res.status >= 400:
                         continue
                     text = await res.text()
-                if text:
+                # Real search pages contain .postTitle, the RSS feed <item>.
+                # Parked/Cloudflare pages fail this and the next host is tried.
+                if (
+                    text
+                    and len(text) > 2000
+                    and ("postTitle" in text or "<item>" in text)
+                ):
                     self.BASE_URL = host
                     return [text]
             except Exception:
@@ -145,9 +158,17 @@ class AudiobookBay:
             start_time = time.time()
             self.LIMIT = limit
             path = "/search/{}/".format(quote(query))
-            return await self.parser_result(
+            results = await self.parser_result(
                 start_time, path, session, page=page, query=query
             )
+            if results is None:
+                # Blocks are often transient; one quick retry usually gets
+                # through before the user sees an error.
+                await asyncio.sleep(1.5)
+                results = await self.parser_result(
+                    start_time, path, session, page=page, query=query
+                )
+            return results
 
     def _parse_rss(self, xml_text, start_time):
         try:

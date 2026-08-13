@@ -119,7 +119,9 @@ async def search_for_torrents(
     if resp is None:
         return error_handler(
             status_code=status.HTTP_403_FORBIDDEN,
-            json_message={"error": "Website Blocked Change IP or Website Domain."},
+            json_message={
+                "error": "Site is temporarily blocked or unreachable. Try again in a few minutes."
+            },
         )
 
     def _seeders(item):

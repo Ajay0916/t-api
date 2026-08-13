@@ -51,6 +51,9 @@
 - **Cleaner output** — seeders/leechers/downloads normalized to int.
 - **No empty WZML buttons** — results with neither a magnet nor a `.torrent`/direct link are dropped from every response, so every rendered row has a working download button.
 - **Lenient params** — `site`/`query` are trimmed, so trailing spaces (WZML sends `query=kgf `) no longer break or skew results.
+- **Author metadata on books** — every book result carries `authors` (libgen, annasarchive, hindiaudio, archivebooks, audiobookbay), cleaned of `Uploded By`/role junk, so WZML shows a proper Author tag.
+- **Hindi book downloads fixed** — the torrent proxy serves non-ASCII titles via RFC 5987 `filename*` (Hindi/Tamil names no longer 500), auto-appends the right extension, and hindibooks prefers live file hosts (archive.org → Zoho → Google Drive → `book.php` → legacy `quick-download`).
+- **AudiobookBay resilience** — mirror rotation with real-page validation (parked/sale pages skipped), plus one quick retry on transient Cloudflare blocks; blocked sites now return a clear *"try again"* message instead of *"change your IP"*.
 - **Caching** — repeated queries served from cache (`fresh=1` to bypass).
 - --
 
