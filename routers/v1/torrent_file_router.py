@@ -82,6 +82,23 @@ async def proxy_torrent(url: str, name: str = ""):
         return JSONResponse(status_code=502, content={"error": "Invalid file."})
 
     filename = name or _safe_filename(url)
+    if "." not in filename.rsplit("/", 1)[-1]:
+        m = re.search(
+            r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
+            filename,
+            re.I,
+        )
+        if m:
+            filename = filename.strip() + "." + m.group(1).lower()
+
+    # Hindi/Tamil/etc. titles can't go into the latin-1 Content-Disposition
+    # header; send an ASCII fallback plus RFC 5987 filename* so browsers
+    # still show the original name.
+    ascii_name = filename.encode("latin-1", "ignore").decode("latin-1") or "download"
+    ascii_name = ascii_name.replace('"', "_").replace("\\", "_")
+    disposition = 'attachment; filename="{}"'.format(ascii_name)
+    if ascii_name != filename:
+        disposition += "; filename*=UTF-8''" + quote(filename)
 
     async def _stream():
         try:
@@ -95,7 +112,5 @@ async def proxy_torrent(url: str, name: str = ""):
     return StreamingResponse(
         _stream(),
         media_type=_media_type(filename),
-        headers={
-            "Content-Disposition": 'attachment; filename="{}"'.format(filename)
-        },
+        headers={"Content-Disposition": disposition},
     )

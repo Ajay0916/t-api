@@ -64,11 +64,54 @@ class HindiBooks:
                     except Exception:
                         pass
                 else:
-                    dm = re.search(
-                        r'href="(https://buy\.hindibook\.in/[^"]+)"', html[0]
+                    # File hosts (Zoho, Google Drive) still serve the actual
+                    # PDF; buy.hindibook.in backend is down on old posts.
+                    fm = re.search(
+                        r'href="(https://[^"]*(?:zohoexternal|drive\.usercontent\.google\.com)[^"]+)"',
+                        html[0],
                     )
-                    if dm:
-                        obj["torrent"] = dm.group(1)
+                    if fm:
+                        obj["torrent"] = (
+                            fm.group(1).replace("&amp;", "&").replace(" ", "%20")
+                        )
+                        em = re.search(
+                            r"\.(pdf|epub|mobi|azw3|djvu|fb2)(?:[?#]|$)",
+                            fm.group(1),
+                            re.I,
+                        )
+                        if em:
+                            obj["extension"] = em.group(1).lower()
+                        try:
+                            async with session.head(
+                                fm.group(1),
+                                headers=HEADER_AIO,
+                                timeout=AIO_TIMEOUT,
+                                allow_redirects=True,
+                            ) as r:
+                                length = r.headers.get("Content-Length")
+                                if length:
+                                    obj["size"] = self._format_size(int(length))
+                        except Exception:
+                            pass
+                    else:
+                        # Prefer the current book.php format; the legacy
+                        # quick-download.php links are dead on old posts.
+                        dm = None
+                        bm = re.search(
+                            r'href="(https://buy\.hindibook\.in/book\.php\?name=[^"]+)"',
+                            html[0],
+                        )
+                        if bm:
+                            dm = bm
+                        else:
+                            qm = re.search(
+                                r'href="(https://buy\.hindibook\.in/quick-download\.php\?ref=[^"]+)"',
+                                html[0],
+                            )
+                            if qm:
+                                dm = qm
+                        if dm:
+                            obj["torrent"] = dm.group(1).replace(" ", "%20")
                     em = re.search(
                         r"\b(PDF|EPUB|MOBI|AZW3|DJVU|FB2)\b",
                         obj.get("name") or "",
