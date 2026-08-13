@@ -20,53 +20,73 @@ class Kickass:
         self.BASE_URL = KICKASS
         self.LIMIT = None
 
-    async def _fetch_page(self, session, path):
-        for host in HOSTS:
-            htmls = await Scraper().get_all_results(session, host + path)
-            if htmls and htmls[0]:
-                self.BASE_URL = host
-                return htmls
-        return None
+    def _absolute(self, src):
+        if src.startswith("//"):
+            return "https:" + src
+        if src.startswith(("http://", "https://")):
+            return src
+        return self.BASE_URL + src
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
-            try:
-                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
-                    html = await res.text(encoding="ISO-8859-1")
-                    soup = BeautifulSoup(html, "html.parser")
-                    try:
-                        poster = soup.find("a", class_="movieCover")
-                        if poster:
-                            poster = poster.find("img")["src"]
-                            obj["poster"] = self.BASE_URL + poster
-                        imgs = (soup.find("div", class_="data")).find_all("img")
-                        if imgs and len(imgs) > 0:
-                            obj["screenshot"] = [img["src"] for img in imgs]
-                        magnet_and_torrent = soup.find_all("a", class_="kaGiantButton")
-                        magnet = None
-                        for a in magnet_and_torrent:
-                            href = a.get("href", "")
-                            if "magnet:?xt=" in unquote(href):
-                                if "mylink.cloud" in href:
-                                    magnet = parse_qs(urlparse(href).query).get(
-                                        "url", [None]
-                                    )[0]
-                                else:
-                                    magnet = unquote(href)
-                                break
-                        if magnet:
-                            hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
-                            if hash_match:
-                                obj["hash"] = hash_match.group(1)
-                                obj["torrent"] = build_torrent_url(
-                                    hash_match.group(1), obj.get("name") or ""
-                                )
-                            obj["magnet"] = magnet
-                    except Exception:
-                        ...
-            except Exception:
+            html = None
+            for attempt in range(2):
+                try:
+                    async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                        if res.status >= 400:
+                            return None
+                        html = await res.text(encoding="ISO-8859-1")
+                    break
+                except Exception:
+                    if attempt == 0:
+                        await asyncio.sleep(0.5)
+            if html is None:
                 return None
+            soup = BeautifulSoup(html, "html.parser")
+            try:
+                poster = soup.find("a", class_="movieCover")
+                if poster:
+                    img = poster.find("img")
+                    if img and img.get("src"):
+                        obj["poster"] = self._absolute(img["src"])
+            except Exception:
+                ...
+            try:
+                data = soup.find("div", class_="data")
+                if data:
+                    imgs = data.find_all("img")
+                    if imgs:
+                        obj["screenshot"] = [
+                            self._absolute(img["src"])
+                            for img in imgs
+                            if img.get("src")
+                        ]
+            except Exception:
+                ...
+            try:
+                magnet_and_torrent = soup.find_all("a", class_="kaGiantButton")
+                magnet = None
+                for a in magnet_and_torrent:
+                    href = a.get("href", "")
+                    if "magnet:?xt=" in unquote(href):
+                        if "mylink.cloud" in href:
+                            magnet = parse_qs(urlparse(href).query).get(
+                                "url", [None]
+                            )[0]
+                        else:
+                            magnet = unquote(href)
+                        break
+                if magnet:
+                    hash_match = re.search(r"([a-fA-F0-9]{32,40})\b", magnet)
+                    if hash_match:
+                        obj["hash"] = hash_match.group(1)
+                        obj["torrent"] = build_torrent_url(
+                            hash_match.group(1), obj.get("name") or ""
+                        )
+                    obj["magnet"] = magnet
+            except Exception:
+                ...
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
@@ -95,30 +115,34 @@ class Kickass:
                     if name_link is None or len(td) < 4:
                         continue
                     name = name_link.text.strip()
+                    if not name:
+                        continue
                     url = self.BASE_URL + name_link["href"]
                     list_of_urls.append(url)
-                    if name:
-                        size = td[1].text.strip()
-                        if len(td) >= 6:
-                            uploader = td[2].text.strip()
-                            date = td[3].text.strip()
-                        else:
-                            uploader = ""
-                            date = td[2].text.strip()
-                        seeders = td[-2].text.strip()
-                        leechers = td[-1].text.strip()
+                    size = td[1].text.strip()
+                    posted = re.search(
+                        r"Posted by\s+(.+?)\s+in\s+",
+                        td[0].get_text(" ", strip=True),
+                    )
+                    uploader = posted.group(1).strip() if posted else ""
+                    if len(td) >= 6:
+                        date = td[3].text.strip()
+                    else:
+                        date = td[2].text.strip()
+                    seeders = td[-2].text.strip()
+                    leechers = td[-1].text.strip()
 
-                        my_dict["data"].append(
-                            {
-                                "name": name,
-                                "size": size,
-                                "date": date,
-                                "seeders": seeders,
-                                "leechers": leechers,
-                                "url": url,
-                                "uploader": uploader,
-                            }
-                        )
+                    my_dict["data"].append(
+                        {
+                            "name": name,
+                            "size": size,
+                            "date": date,
+                            "seeders": seeders,
+                            "leechers": leechers,
+                            "url": url,
+                            "uploader": uploader,
+                        }
+                    )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
                 try:
@@ -137,6 +161,10 @@ class Kickass:
             return None, None
 
     async def search(self, query, page, limit):
+        try:
+            query.encode("latin-1")
+        except UnicodeEncodeError:
+            return None
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
@@ -171,16 +199,22 @@ class Kickass:
             return results
 
     async def parser_result(self, start_time, path, session):
-        htmls = await self._fetch_page(session, path)
-        if htmls is None:
-            return None
-        result, urls = self._parser(htmls)
-        if result is not None:
-            results = await self._get_torrent(result, session, urls)
-            results["time"] = time.time() - start_time
-            results["total"] = len(results["data"])
-            return results
-        return result
+        if path.startswith("http"):
+            targets = [(self.BASE_URL, path)]
+        else:
+            targets = [(host, host + path) for host in HOSTS]
+        for host, target in targets:
+            htmls = await Scraper().get_all_results(session, target)
+            if not htmls or not htmls[0]:
+                continue
+            self.BASE_URL = host
+            result, urls = self._parser(htmls)
+            if result is not None and result.get("data"):
+                results = await self._get_torrent(result, session, urls)
+                results["time"] = time.time() - start_time
+                results["total"] = len(results["data"])
+                return results
+        return None
 
     async def trending(self, category, page, limit):
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
