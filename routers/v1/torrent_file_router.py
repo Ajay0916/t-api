@@ -10,7 +10,9 @@ from helper.session import get_connector
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
-MAX_SIZE = 200 * 1024 * 1024
+# No size cap: the body streams straight through, so large books/audiobooks
+# download fully instead of being cut off mid-file. sock_read bounds idle
+# connections so a stalled upstream can't hold the request forever.
 TIMEOUT = aiohttp.ClientTimeout(total=180, sock_connect=15, sock_read=60)
 
 
@@ -82,13 +84,9 @@ async def proxy_torrent(url: str, name: str = ""):
     filename = name or _safe_filename(url)
 
     async def _stream():
-        total = len(head)
         try:
             yield head
             async for chunk in res.content.iter_chunked(64 * 1024):
-                total += len(chunk)
-                if total > MAX_SIZE:
-                    break
                 yield chunk
         finally:
             await res.release()

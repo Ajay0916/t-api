@@ -54,12 +54,14 @@ class SiteHealth:
                 "manual_blocked": manual,
                 "cooldown_remaining": 0,
                 "fail_count": self._fail_count.get(site, 0),
+                "last_error": self._last_error.get(site, ""),
             }
         return {
             "blocked": True,
             "manual_blocked": manual,
             "cooldown_remaining": int(until - now),
             "fail_count": self._fail_count.get(site, 0),
+            "last_error": self._last_error.get(site, ""),
         }
 
 

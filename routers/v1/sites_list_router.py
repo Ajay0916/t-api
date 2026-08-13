@@ -56,6 +56,7 @@ async def get_site_status():
                 "blocked": health["blocked"],
                 "cooldown_remaining": health["cooldown_remaining"],
                 "fail_count": health["fail_count"],
+                "last_error": health.get("last_error", ""),
                 "combo_available": info.get("combo_available", True),
                 "trending_available": info.get("trending_available", False),
                 "recent_available": info.get("recent_available", False),
