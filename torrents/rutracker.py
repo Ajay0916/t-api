@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -11,6 +11,8 @@ from helper.session import get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
+_RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
+_RUTRACKER_PASS = os.getenv("RUTRACKER_PASSWORD", "").strip()
 ENRICH_CAP = 6
 _SESSION = "rutracker-tapi"
 _SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
@@ -21,14 +23,17 @@ _RU_MONTHS = {
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
 }
 
+_login_done = False
+_login_lock = asyncio.Lock()
+
 
 class RuTracker:
     """RuTracker search via a self-hosted Flaresolverr instance.
 
-    RuTracker sits behind a Cloudflare JS challenge ("Just a moment..."),
-    which plain HTTP clients cannot pass. Flaresolverr solves it with a
-    headless browser and returns the final HTML, which we parse with the
-    same selectors the site uses for its search table. Top results are
+    RuTracker is behind a Cloudflare JS challenge AND requires login for
+    search, so plain HTTP clients cannot use it. Flaresolverr solves the
+    challenge with a headless browser; we then log in once through the same
+    session (cookies persist) and scrape tracker.php. Top results are
     enriched with magnet links from their topic pages.
     """
 
@@ -57,13 +62,7 @@ class RuTracker:
             return raw
         return "20{}-{:02d}-{:02d}".format(yr, num, int(day))
 
-    async def _fetch_html(self, url, timeout):
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 55000,
-            "session": _SESSION,
-        }
+    async def _flaresolverr(self, payload, timeout):
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
         ) as session:
@@ -78,6 +77,50 @@ class RuTracker:
         if "Just a moment" in html or "cf-chl" in html:
             return None
         return html
+
+    async def _fetch_html(self, url, timeout):
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 55000,
+            "session": _SESSION,
+        }
+        return await self._flaresolverr(payload, timeout)
+
+    async def _do_login(self):
+        payload = {
+            "cmd": "request.post",
+            "url": "https://rutracker.org/forum/login.php",
+            "postData": urlencode(
+                {
+                    "login_username": _RUTRACKER_USER,
+                    "login_password": _RUTRACKER_PASS,
+                    "login": "Вход",
+                    "redirect": "index.php",
+                }
+            ),
+            "maxTimeout": 55000,
+            "session": _SESSION,
+        }
+        html = await self._flaresolverr(payload, _SEARCH_TIMEOUT)
+        return bool(html) and 'name="login_username"' not in html
+
+    async def _ensure_login(self):
+        global _login_done
+        if _login_done:
+            return True
+        if not _RUTRACKER_USER or not _RUTRACKER_PASS:
+            return False
+        async with _login_lock:
+            if _login_done:
+                return True
+            try:
+                ok = await self._do_login()
+            except Exception:
+                return False
+            if ok:
+                _login_done = True
+            return ok
 
     def _parse_rows(self, html):
         results = []
@@ -96,9 +139,9 @@ class RuTracker:
             size = ""
             if size_el:
                 size = size_el.get_text(" ", strip=True)
-                m = re.search(r"(\d+(?:[.,]\d+)?\s*(?:B|KB|MB|GB|TB))", size, re.I)
-                if m:
-                    size = m.group(1)
+                sm = re.search(r"(\d+(?:[.,]\d+)?\s*(?:B|KB|MB|GB|TB))", size, re.I)
+                if sm:
+                    size = sm.group(1)
             cat_el = tr.select_one(".row1 .f-name .gen")
             seeds_el = tr.select_one("b.seedmed")
             peers_el = tr.select_one("td.row4.leechmed.bold")
@@ -142,6 +185,9 @@ class RuTracker:
             return {"hash": m.group(1).upper(), "magnet": href}
 
     async def search(self, query, page, limit):
+        global _login_done
+        if not (await self._ensure_login()):
+            return None
         start_time = time.time()
         self.LIMIT = limit or None
         try:
@@ -157,6 +203,16 @@ class RuTracker:
             return None
         if not html:
             return None
+        if 'name="login_username"' in html:
+            _login_done = False
+            if not (await self._ensure_login()):
+                return None
+            try:
+                html = await self._fetch_html(url, _SEARCH_TIMEOUT)
+            except Exception:
+                return None
+            if not html:
+                return None
         raw = self._parse_rows(html)
         if self.LIMIT:
             raw = raw[: self.LIMIT]
