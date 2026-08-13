@@ -109,10 +109,14 @@ class RuTracker:
             "cmd": "request.get",
             "url": url,
             "maxTimeout": 55000,
-            "session": _SESSION,
         }
         if _RUTRACKER_COOKIE:
+            # Fresh browser per request: a shared Flaresolverr session keeps
+            # stale state and can return wrong pages/magnets. Explicit cookies
+            # are enough to stay logged in.
             payload["cookies"] = _cookie_list()
+        else:
+            payload["session"] = _SESSION
         return await self._flaresolverr(payload, timeout)
 
     async def _login_and_fetch(self, redirect_target, timeout):
