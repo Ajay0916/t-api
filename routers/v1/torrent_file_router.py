@@ -54,7 +54,8 @@ def _media_type(filename):
 
 @router.get("/")
 @router.get("")
-async def proxy_torrent(url: str, name: str = ""):
+@router.get("/{slug}")
+async def proxy_torrent(url: str, name: str = "", slug: str = ""):
     """Fetch a .torrent / book file through this server and stream it back.
 
     Lets WZML's Direct Link keep working even when the original CDN blocks
