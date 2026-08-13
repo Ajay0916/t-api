@@ -16,3 +16,4 @@ plugins/
 server.log
 nohup.out
 cache_data/
+rutracker_cookie.txt

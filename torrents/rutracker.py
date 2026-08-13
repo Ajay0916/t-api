@@ -13,10 +13,28 @@ FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rs
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
 _RUTRACKER_PASS = os.getenv("RUTRACKER_PASSWORD", "").strip()
-# Optional pre-authenticated session cookie ("bb_session=...; bb_guid=...; ...").
-# RuTracker gates logins behind a captcha from datacenter IPs, so when a cookie
-# is set we skip the login POST entirely and send it with every request.
-_RUTRACKER_COOKIE = os.getenv("RUTRACKER_COOKIE", "").strip()
+
+
+def _load_cookie():
+    # Pre-authenticated session cookie ("bb_session=...; bb_guid=...; ...").
+    # RuTracker gates logins behind a captcha from datacenter IPs, so when a
+    # cookie is set we skip the login POST entirely and send it with every
+    # request. Read from RUTRACKER_COOKIE env or rutracker_cookie.txt (repo
+    # root, gitignored) so restarts never lose it.
+    cookie = os.getenv("RUTRACKER_COOKIE", "").strip()
+    if cookie:
+        return cookie
+    try:
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "rutracker_cookie.txt"
+        )
+        with open(path, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+_RUTRACKER_COOKIE = _load_cookie()
 ENRICH_CAP = 6
 _SESSION = "rutracker-tapi"
 _SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
