@@ -18,8 +18,8 @@ async def get_category(
     limit: Optional[int] = 0,
     page: Optional[int] = 1,
 ):
-    all_sites = check_if_site_available(site)
     site = site.lower().strip()
+    all_sites = check_if_site_available(site)
     query = query.lower().strip()
     category = category.lower().strip()
     if all_sites:

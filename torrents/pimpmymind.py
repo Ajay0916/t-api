@@ -141,6 +141,32 @@ class PimpMyMind:
                 )
                 if self.LIMIT and len(my_dict["data"]) >= self.LIMIT:
                     break
+            if not my_dict["data"]:
+                # Current theme renders results as bare "[Free Download]"
+                # links instead of <article> cards; parse those as fallback.
+                for a in soup.find_all("a", href=True):
+                    txt = a.get_text(" ", strip=True)
+                    href = a["href"]
+                    if not txt.lower().startswith("[free download]"):
+                        continue
+                    if not href.startswith(self.BASE_URL):
+                        continue
+                    my_dict["data"].append(
+                        {
+                            "name": txt,
+                            "size": None,
+                            "date": "",
+                            "seeders": None,
+                            "leechers": None,
+                            "uploader": "",
+                            "hash": None,
+                            "magnet": None,
+                            "torrent": None,
+                            "url": href,
+                        }
+                    )
+                    if self.LIMIT and len(my_dict["data"]) >= self.LIMIT:
+                        break
             pages = []
             for a in soup.select("a.page-numbers"):
                 m = re.search(r"/page/(\d+)/", a.get("href", ""))

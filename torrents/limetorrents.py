@@ -117,7 +117,7 @@ class Limetorrent:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
-            path = "/search/all/{}//{}".format(quote(query), page)
+            path = "/search/all/{}//{}/".format(quote(query), page)
             return await self.parser_result(
                 start_time, path, session, idx=0, page=page, query=query
             )
@@ -143,7 +143,7 @@ class Limetorrent:
                     if page >= 25:
                         break
                     page += 1
-                    path = "/search/all/{}//{}".format(quote(query), page)
+                    path = "/search/all/{}//{}/".format(quote(query), page)
                     htmls = await self._fetch_page(session, path)
                     if htmls is None:
                         break

@@ -33,10 +33,14 @@ class Magnetdl:
                     if not name or not link:
                         continue
                     href = link["href"]
-                    if href.startswith("http"):
-                        # SEO-spam rows link to external pages - real rows are relative.
-                        continue
-                    href = self.BASE_URL + href
+                    if href.startswith(("http://", "https://")):
+                        # Real result links are same-site absolute URLs now;
+                        # SEO-spam rows link to external pages, so only
+                        # on-site links pass.
+                        if "magnetdl" not in href:
+                            continue
+                    else:
+                        href = self.BASE_URL + href
                     my_dict["data"].append(
                         {
                             "name": name,
