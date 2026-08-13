@@ -47,15 +47,58 @@ class HindiBooks:
                 html = await Scraper().get_all_results(session, url)
                 if not html or not html[0]:
                     return None
-                m = re.search(
+                # Collect every file link on the post in priority order so
+                # WZML gets a primary AND an alternate Direct Link (Google
+                # Drive quota/503s don't kill the result when another host
+                # exists on the same post).
+                links = []
+                am = re.search(
                     r'href="(https://archive\.org/download/[^"]+\.pdf)"', html[0]
                 )
-                if m:
-                    obj["torrent"] = m.group(1)
-                    obj["extension"] = "pdf"
+                if am:
+                    links.append(am.group(1))
+                zm = re.search(
+                    r'href="(https://[^"]*zohoexternal[^"]+)"', html[0]
+                )
+                if zm:
+                    links.append(zm.group(1).replace("&amp;", "&").replace(" ", "%20"))
+                dm = re.search(
+                    r'href="(https://[^"]*(?:drive\.usercontent\.google\.com|drive\.google\.com)[^"]+)"',
+                    html[0],
+                )
+                if dm:
+                    links.append(dm.group(1).replace("&amp;", "&").replace(" ", "%20"))
+                bm = re.search(
+                    r'href="(https://buy\.hindibook\.in/book\.php\?name=[^"]+)"',
+                    html[0],
+                )
+                if bm:
+                    links.append(bm.group(1).replace(" ", "%20"))
+                qm = re.search(
+                    r'href="(https://buy\.hindibook\.in/quick-download\.php\?ref=[^"]+)"',
+                    html[0],
+                )
+                if qm:
+                    links.append(qm.group(1).replace(" ", "%20"))
+                if links:
+                    obj["torrent"] = links[0]
+                    if len(links) > 1:
+                        obj["download"] = links[1]
+                    if am:
+                        obj["extension"] = "pdf"
+                    else:
+                        em = re.search(
+                            r"\.(pdf|epub|mobi|azw3|djvu|fb2)(?:[?#]|$)",
+                            links[0],
+                            re.I,
+                        )
+                        if em:
+                            obj["extension"] = em.group(1).lower()
                     try:
                         async with session.head(
-                            m.group(1), headers=HEADER_AIO, timeout=AIO_TIMEOUT,
+                            links[0],
+                            headers=HEADER_AIO,
+                            timeout=AIO_TIMEOUT,
                             allow_redirects=True,
                         ) as r:
                             length = r.headers.get("Content-Length")
@@ -63,62 +106,14 @@ class HindiBooks:
                                 obj["size"] = self._format_size(int(length))
                     except Exception:
                         pass
-                else:
-                    # File hosts (Zoho, Google Drive) still serve the actual
-                    # PDF; buy.hindibook.in backend is down on old posts.
-                    fm = re.search(
-                        r'href="(https://[^"]*(?:zohoexternal|drive\.usercontent\.google\.com)[^"]+)"',
-                        html[0],
-                    )
-                    if fm:
-                        obj["torrent"] = (
-                            fm.group(1).replace("&amp;", "&").replace(" ", "%20")
-                        )
+                    if not obj.get("extension"):
                         em = re.search(
-                            r"\.(pdf|epub|mobi|azw3|djvu|fb2)(?:[?#]|$)",
-                            fm.group(1),
+                            r"\b(PDF|EPUB|MOBI|AZW3|DJVU|FB2)\b",
+                            obj.get("name") or "",
                             re.I,
                         )
                         if em:
                             obj["extension"] = em.group(1).lower()
-                        try:
-                            async with session.head(
-                                fm.group(1),
-                                headers=HEADER_AIO,
-                                timeout=AIO_TIMEOUT,
-                                allow_redirects=True,
-                            ) as r:
-                                length = r.headers.get("Content-Length")
-                                if length:
-                                    obj["size"] = self._format_size(int(length))
-                        except Exception:
-                            pass
-                    else:
-                        # Prefer the current book.php format; the legacy
-                        # quick-download.php links are dead on old posts.
-                        dm = None
-                        bm = re.search(
-                            r'href="(https://buy\.hindibook\.in/book\.php\?name=[^"]+)"',
-                            html[0],
-                        )
-                        if bm:
-                            dm = bm
-                        else:
-                            qm = re.search(
-                                r'href="(https://buy\.hindibook\.in/quick-download\.php\?ref=[^"]+)"',
-                                html[0],
-                            )
-                            if qm:
-                                dm = qm
-                        if dm:
-                            obj["torrent"] = dm.group(1).replace(" ", "%20")
-                    em = re.search(
-                        r"\b(PDF|EPUB|MOBI|AZW3|DJVU|FB2)\b",
-                        obj.get("name") or "",
-                        re.I,
-                    )
-                    if em:
-                        obj["extension"] = em.group(1).lower()
             except Exception:
                 return None
 
