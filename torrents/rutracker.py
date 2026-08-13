@@ -58,6 +58,29 @@ def _cookie_list():
             cookies.append({"name": name.strip(), "value": value.strip()})
     return cookies
 
+# Warm Flaresolverr session, reused across flows so the Cloudflare challenge
+# is only solved occasionally (each fresh solve takes ~10-15s). Rotated on a
+# TTL and when a stale page is detected.
+_sid = None
+_sid_created = 0.0
+_SESSION_TTL = 300.0
+
+
+def _get_sid():
+    global _sid, _sid_created
+    now = time.time()
+    if not _sid or now - _sid_created > _SESSION_TTL:
+        _sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
+        _sid_created = now
+    return _sid
+
+
+def _rotate_sid():
+    global _sid, _sid_created
+    _sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
+    _sid_created = time.time()
+
+
 _RU_MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "июн": 6,
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
@@ -70,11 +93,11 @@ class RuTracker:
     RuTracker is behind a Cloudflare JS challenge AND requires login for
     search. Flaresolverr solves the challenge with a headless browser. If
     ``RUTRACKER_COOKIE`` is set (from a manual browser login), it is sent
-    with every request inside a fresh per-flow session — no login POST
-    needed (logins are captcha-gated from datacenter IPs). Otherwise the
-    login form's ``redirect`` field takes us straight to the search
-    results page in one Flaresolverr request. Top results are enriched
-    with magnet links from their topic pages.
+    with every request over a warm session — no login POST needed (logins
+    are captcha-gated from datacenter IPs). Otherwise the login form's
+    ``redirect`` field takes us straight to the search results page in one
+    Flaresolverr request. Top results are enriched with magnet links from
+    their topic pages.
     """
 
     _name = "RuTracker"
@@ -82,7 +105,6 @@ class RuTracker:
     def __init__(self):
         self.BASE_URL = "https://rutracker.org"
         self.LIMIT = None
-        self._sid = _SESSION
 
     @staticmethod
     def _int(value):
@@ -129,13 +151,11 @@ class RuTracker:
             "cmd": "request.get",
             "url": url,
             "maxTimeout": 55000,
-            "session": self._sid,
+            "session": _get_sid(),
         }
         if _RUTRACKER_COOKIE:
-            # A fresh session per search flow avoids the stale-state/wrong
-            # page problem of a long-lived shared session, while reusing the
-            # browser for enrichment (one Cloudflare challenge solve per flow,
-            # otherwise the 28s API deadline is exceeded). Explicit cookies
+            # Reuse a warm session across flows (challenge solves are slow,
+            # ~10-15s each, and the API deadline is 28s). Explicit cookies
             # keep us logged in without any login POST.
             payload["cookies"] = _cookie_list()
         return await self._flaresolverr(payload, timeout)
@@ -231,7 +251,6 @@ class RuTracker:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit or None
-        self._sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
         try:
             page = max(int(page or 1) - 1, 0)
         except (TypeError, ValueError):
@@ -259,6 +278,19 @@ class RuTracker:
             # Login page/captcha came back → auth failed (bad creds/blocked).
             return None
         raw = self._parse_rows(html)
+        if not raw and not self._is_login_page(html):
+            counter = re.search(r"Результатов поиска:\s*(\d+)", html)
+            if counter and int(counter.group(1)) > 0:
+                # Warm session served a stale/empty page — rotate and retry
+                # once before giving up.
+                _rotate_sid()
+                try:
+                    html = await self._fetch_html(url, _SEARCH_TIMEOUT)
+                except Exception:
+                    return None
+                if not html or self._is_login_page(html):
+                    return None
+                raw = self._parse_rows(html)
         if self.LIMIT:
             raw = raw[: self.LIMIT]
         extras = []
@@ -274,7 +306,7 @@ class RuTracker:
                         *(self._magnet(row["tid"], sem) for row in raw[:enrich_n]),
                         return_exceptions=True,
                     ),
-                    timeout=15.0,
+                    timeout=12.0,
                 )
             except asyncio.TimeoutError:
                 extras = []
