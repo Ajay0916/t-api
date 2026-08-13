@@ -30,6 +30,7 @@ async def _search_site(website, query, limit):
 @router.get("/search")
 async def get_search_combo(
     query: str,
+    sites: Optional[str] = "",
     limit: Optional[int] = 0,
     fresh: Optional[int] = 0,
     min_seeders: Optional[int] = 0,
@@ -54,7 +55,7 @@ async def get_search_combo(
     max_size = (max_size or "").strip().lower()
 
     cache_key = (
-        f"combo:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+        f"combo:{sites}:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
         f":{min_size}:{max_size}"
     )
@@ -65,11 +66,18 @@ async def get_search_combo(
             return clean_results(cached, sort=False)
 
     all_sites = check_if_site_available("1337x")
-    sites_list = [
-        site
-        for site in all_sites.keys()
-        if all_sites[site].get("combo_available", True)
-    ]
+    if sites:
+        sites_list = [
+            site
+            for site in (s.strip() for s in sites.split(","))
+            if site in all_sites
+        ]
+    else:
+        sites_list = [
+            site
+            for site in all_sites.keys()
+            if all_sites[site].get("combo_available", True)
+        ]
     # Sites whose results are pushed to the end of the combined list
     # (1337x search quality varies and the user wants its results last).
     LAST_SITES = {"1337x"}
@@ -251,16 +259,25 @@ async def get_search_combo(
 
 
 @router.get("/trending")
-async def get_all_trending(limit: Optional[int] = 0):
+async def get_all_trending(limit: Optional[int] = 0, sites: Optional[str] = ""):
     start_time = time.time()
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
-    sites_list = [
-        site
-        for site in all_sites.keys()
-        if all_sites[site].get("trending_available")
-        and all_sites[site].get("website")
-    ]
+    if sites:
+        sites_list = [
+            site
+            for site in (s.strip() for s in sites.split(","))
+            if site in all_sites
+            and all_sites[site].get("trending_available")
+            and all_sites[site].get("website")
+        ]
+    else:
+        sites_list = [
+            site
+            for site in all_sites.keys()
+            if all_sites[site].get("trending_available")
+            and all_sites[site].get("website")
+        ]
     COMBO = {"data": []}
     total_torrents_overall = 0
     tasks = []
@@ -317,16 +334,25 @@ async def get_all_trending(limit: Optional[int] = 0):
 
 
 @router.get("/recent")
-async def get_all_recent(limit: Optional[int] = 0):
+async def get_all_recent(limit: Optional[int] = 0, sites: Optional[str] = ""):
     start_time = time.time()
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
-    sites_list = [
-        site
-        for site in all_sites.keys()
-        if all_sites[site].get("recent_available")
-        and all_sites[site].get("website")
-    ]
+    if sites:
+        sites_list = [
+            site
+            for site in (s.strip() for s in sites.split(","))
+            if site in all_sites
+            and all_sites[site].get("recent_available")
+            and all_sites[site].get("website")
+        ]
+    else:
+        sites_list = [
+            site
+            for site in all_sites.keys()
+            if all_sites[site].get("recent_available")
+            and all_sites[site].get("website")
+        ]
     COMBO = {"data": []}
     total_torrents_overall = 0
     tasks = []
