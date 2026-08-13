@@ -13,6 +13,10 @@ FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rs
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
 _RUTRACKER_PASS = os.getenv("RUTRACKER_PASSWORD", "").strip()
+# Optional pre-authenticated session cookie ("bb_session=...; bb_guid=...; ...").
+# RuTracker gates logins behind a captcha from datacenter IPs, so when a cookie
+# is set we skip the login POST entirely and send it with every request.
+_RUTRACKER_COOKIE = os.getenv("RUTRACKER_COOKIE", "").strip()
 ENRICH_CAP = 6
 _SESSION = "rutracker-tapi"
 _SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
@@ -20,8 +24,20 @@ _ENRICH_TIMEOUT = aiohttp.ClientTimeout(total=45)
 
 # RuTracker shows a hidden quick-login form (with login_username input) in the
 # header DOM of every page, so that alone can never tell logged-in from guest.
-# A real login page instead contains this full-page form heading.
+# A real login page instead contains this full-page form heading; the
+# captcha variant shows a different heading on the same form.
 _LOGIN_PAGE_MARK = "Введите ваше имя и пароль"
+_CAPTCHA_MARK = "код подтверждения"
+
+
+def _cookie_list():
+    cookies = []
+    for part in _RUTRACKER_COOKIE.split(";"):
+        part = part.strip()
+        if "=" in part:
+            name, _, value = part.partition("=")
+            cookies.append({"name": name.strip(), "value": value.strip()})
+    return cookies
 
 _RU_MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "июн": 6,
@@ -33,11 +49,13 @@ class RuTracker:
     """RuTracker search via a self-hosted Flaresolverr instance.
 
     RuTracker is behind a Cloudflare JS challenge AND requires login for
-    search. Flaresolverr solves the challenge with a headless browser; the
-    login form's ``redirect`` field then takes us straight to the search
-    results page, so login + search happen inside one Flaresolverr request
-    and no cross-request cookie persistence is needed. Top results are
-    enriched with magnet links from their topic pages.
+    search. Flaresolverr solves the challenge with a headless browser. If
+    ``RUTRACKER_COOKIE`` is set (from a manual browser login), it is sent
+    with every request — no login POST needed (logins are captcha-gated
+    from datacenter IPs). Otherwise the login form's ``redirect`` field
+    takes us straight to the search results page in one Flaresolverr
+    request. Top results are enriched with magnet links from their topic
+    pages.
     """
 
     _name = "RuTracker"
@@ -66,6 +84,10 @@ class RuTracker:
             return raw
         return "20{}-{:02d}-{:02d}".format(yr, num, int(day))
 
+    @staticmethod
+    def _is_login_page(html):
+        return _LOGIN_PAGE_MARK in html or _CAPTCHA_MARK in html
+
     async def _flaresolverr(self, payload, timeout):
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
@@ -89,6 +111,8 @@ class RuTracker:
             "maxTimeout": 55000,
             "session": _SESSION,
         }
+        if _RUTRACKER_COOKIE:
+            payload["cookies"] = _cookie_list()
         return await self._flaresolverr(payload, timeout)
 
     async def _login_and_fetch(self, redirect_target, timeout):
@@ -157,16 +181,16 @@ class RuTracker:
                 html = await self._fetch_html(url, _ENRICH_TIMEOUT)
             except Exception:
                 return None
-            if html and _LOGIN_PAGE_MARK in html:
-                # Session cookies did not survive; log in and land on the
-                # topic page in one request instead.
+            if html and self._is_login_page(html) and not _RUTRACKER_COOKIE:
+                # Login did not carry over; log in and land on the topic
+                # page in one request instead.
                 try:
                     html = await self._login_and_fetch(
                         "viewtopic.php?t={}".format(tid), _ENRICH_TIMEOUT
                     )
                 except Exception:
                     return None
-            if not html:
+            if not html or self._is_login_page(html):
                 return None
             soup = BeautifulSoup(html, "html.parser")
             a = soup.select_one('a[href*="magnet:?xt=urn:btih:"]')
@@ -179,8 +203,6 @@ class RuTracker:
             return {"hash": m.group(1).upper(), "magnet": href}
 
     async def search(self, query, page, limit):
-        if not _RUTRACKER_USER or not _RUTRACKER_PASS:
-            return None
         start_time = time.time()
         self.LIMIT = limit or None
         try:
@@ -188,17 +210,26 @@ class RuTracker:
         except (TypeError, ValueError):
             page = 0
         start = page * 50
-        redirect = "tracker.php?nm={}".format(quote_plus(query))
+        url = "{}/forum/tracker.php?nm={}".format(self.BASE_URL, quote_plus(query))
         if start:
-            redirect += "&start={}".format(start)
-        try:
-            html = await self._login_and_fetch(redirect, _SEARCH_TIMEOUT)
-        except Exception:
-            return None
-        if not html:
-            return None
-        if _LOGIN_PAGE_MARK in html:
-            # Login page came back → login itself failed (bad creds/blocked).
+            url += "&start={}".format(start)
+        if _RUTRACKER_COOKIE:
+            try:
+                html = await self._fetch_html(url, _SEARCH_TIMEOUT)
+            except Exception:
+                return None
+        else:
+            if not _RUTRACKER_USER or not _RUTRACKER_PASS:
+                return None
+            redirect = "tracker.php?nm={}".format(quote_plus(query))
+            if start:
+                redirect += "&start={}".format(start)
+            try:
+                html = await self._login_and_fetch(redirect, _SEARCH_TIMEOUT)
+            except Exception:
+                return None
+        if not html or self._is_login_page(html):
+            # Login page/captcha came back → auth failed (bad creds/blocked).
             return None
         raw = self._parse_rows(html)
         if self.LIMIT:
