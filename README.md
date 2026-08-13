@@ -63,7 +63,7 @@
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `freecourseweb`, `rutracker` (RuTracker via a self-hosted [TorAPI](https://github.com/Lifailon/TorAPI) instance — set `TORAPI_URL` to its address, default `http://127.0.0.1:8443`; top results are enriched with magnet links via TorAPI's id endpoint)
+**Courses:** `freecourseweb`, `rutracker` (RuTracker — Cloudflare-protected, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance to solve the JS challenge; set `FLARESOLVERR_URL` to its address, default `http://127.0.0.1:8191`. Top results are enriched with magnet links from their topic pages)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `annasarchive`
 

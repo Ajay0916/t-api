@@ -1,32 +1,42 @@
 import asyncio
 import os
+import re
 import time
 from urllib.parse import quote
 
 import aiohttp
+from bs4 import BeautifulSoup
+
 from helper.session import get_connector
 
-TORAPI_URL = (os.getenv("TORAPI_URL") or "http://127.0.0.1:8443").rstrip("/")
-TORAPI_ENRICH = (os.getenv("TORAPI_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
-ENRICH_CAP = 8
-_SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=20)
-_ENRICH_TIMEOUT = aiohttp.ClientTimeout(total=8)
+FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
+ENRICH_CAP = 6
+_SESSION = "rutracker-tapi"
+_SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
+_ENRICH_TIMEOUT = aiohttp.ClientTimeout(total=45)
+
+_RU_MONTHS = {
+    "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "июн": 6,
+    "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
+}
 
 
 class RuTracker:
-    """Search results via a self-hosted TorAPI instance (Lifailon/TorAPI).
+    """RuTracker search via a self-hosted Flaresolverr instance.
 
-    TorAPI handles RuTracker mirrors and exposes title/id search endpoints.
-    The id endpoint is used to enrich the top results with magnet links,
-    since the plain title search does not include hashes.
+    RuTracker sits behind a Cloudflare JS challenge ("Just a moment..."),
+    which plain HTTP clients cannot pass. Flaresolverr solves it with a
+    headless browser and returns the final HTML, which we parse with the
+    same selectors the site uses for its search table. Top results are
+    enriched with magnet links from their topic pages.
     """
 
     _name = "RuTracker"
 
     def __init__(self):
-        self.BASE_URL = TORAPI_URL
+        self.BASE_URL = "https://rutracker.org"
         self.LIMIT = None
-        self.provider = "rutracker"
 
     @staticmethod
     def _int(value):
@@ -35,32 +45,101 @@ class RuTracker:
         except (TypeError, ValueError):
             return None
 
-    async def _get_json(self, url, timeout):
+    @staticmethod
+    def _format_date(raw):
+        raw = (raw or "").strip()
+        m = re.search(r"(\d{1,2})-([А-Яа-я]{3})-(\d{2})", raw)
+        if not m:
+            return raw
+        day, mon, yr = m.groups()
+        num = _RU_MONTHS.get(mon.lower(), 0)
+        if not num:
+            return raw
+        return "20{}-{:02d}-{:02d}".format(yr, num, int(day))
+
+    async def _fetch_html(self, url, timeout):
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 55000,
+            "session": _SESSION,
+        }
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
         ) as session:
-            async with session.get(url, timeout=timeout) as res:
-                return await res.json(content_type=None)
+            async with session.post(
+                f"{FLARESOLVERR_URL}/v1", json=payload, timeout=timeout
+            ) as res:
+                data = await res.json(content_type=None)
+        solution = data.get("solution") or {}
+        if solution.get("status") != 200:
+            return None
+        html = solution.get("response") or ""
+        if "Just a moment" in html or "cf-chl" in html:
+            return None
+        return html
+
+    def _parse_rows(self, html):
+        results = []
+        soup = BeautifulSoup(html, "html.parser")
+        for tr in soup.select("table.forumline tbody tr"):
+            name_el = tr.select_one(".row4 .wbr .med")
+            if not name_el:
+                continue
+            name = name_el.get_text(" ", strip=True)
+            link = name_el.get("href") or ""
+            m = re.search(r"t=(\d+)", link)
+            if not m or not name:
+                continue
+            tid = m.group(1)
+            size_el = tr.select_one("a.small.tr-dl.dl-stub")
+            size = ""
+            if size_el:
+                size = size_el.get_text(" ", strip=True)
+                m = re.search(r"(\d+(?:[.,]\d+)?\s*(?:B|KB|MB|GB|TB))", size, re.I)
+                if m:
+                    size = m.group(1)
+            cat_el = tr.select_one(".row1 .f-name .gen")
+            seeds_el = tr.select_one("b.seedmed")
+            peers_el = tr.select_one("td.row4.leechmed.bold")
+            date_el = tr.select_one("td.row4 p")
+            dl_el = tr.select_one("td.row4.small.number-format")
+            results.append(
+                {
+                    "tid": tid,
+                    "name": name,
+                    "size": size,
+                    "date": self._format_date(date_el.get_text(" ", strip=True) if date_el else ""),
+                    "seeders": self._int(seeds_el.get_text(strip=True) if seeds_el else ""),
+                    "leechers": self._int(peers_el.get_text(strip=True) if peers_el else ""),
+                    "downloads": self._int(dl_el.get_text(strip=True) if dl_el else ""),
+                    "category": cat_el.get_text(" ", strip=True) if cat_el else "",
+                    "url": "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid),
+                    "torrent": "{}/forum/dl.php?t={}".format(self.BASE_URL, tid),
+                }
+            )
+        return results
 
     async def _magnet(self, tid, sem):
         async with sem:
             try:
-                data = await self._get_json(
-                    f"{self.BASE_URL}/api/search/id/{self.provider}?id={quote(str(tid))}",
+                html = await self._fetch_html(
+                    "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid),
                     _ENRICH_TIMEOUT,
                 )
             except Exception:
                 return None
-            if not isinstance(data, list) or not data:
+            if not html:
                 return None
-            item = data[0]
-            if not isinstance(item, dict):
+            soup = BeautifulSoup(html, "html.parser")
+            a = soup.select_one('a[href*="magnet:?xt=urn:btih:"]')
+            if not a:
                 return None
-            magnet = str(item.get("Magnet") or "").strip()
-            info_hash = str(item.get("Hash") or "").strip()
-            if not magnet and not info_hash:
+            href = a.get("href") or ""
+            m = re.search(r"btih:([a-fA-F0-9]{40})", href)
+            if not m:
                 return None
-            return {"hash": info_hash or None, "magnet": magnet or None}
+            return {"hash": m.group(1).upper(), "magnet": href}
 
     async def search(self, query, page, limit):
         start_time = time.time()
@@ -69,43 +148,28 @@ class RuTracker:
             page = max(int(page or 1) - 1, 0)
         except (TypeError, ValueError):
             page = 0
-        url = (
-            f"{self.BASE_URL}/api/search/title/{self.provider}"
-            f"?query={quote(query)}&page={page}&year=0"
+        url = "{}/forum/tracker.php?nm={}&start={}".format(
+            self.BASE_URL, quote(query), page * 50
         )
         try:
-            data = await self._get_json(url, _SEARCH_TIMEOUT)
+            html = await self._fetch_html(url, _SEARCH_TIMEOUT)
         except Exception:
             return None
-        if not isinstance(data, list):
-            return {
-                "data": [],
-                "current_page": page + 1,
-                "total_pages": 1,
-                "time": time.time() - start_time,
-                "total": 0,
-            }
-        raw = []
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("Name") or "").strip()
-            tid = str(item.get("Id") or "").strip()
-            if not name or not tid:
-                continue
-            raw.append((tid, item))
-            if self.LIMIT and len(raw) >= self.LIMIT:
-                break
+        if not html:
+            return None
+        raw = self._parse_rows(html)
+        if self.LIMIT:
+            raw = raw[: self.LIMIT]
         extras = []
-        if raw and TORAPI_ENRICH:
-            sem = asyncio.Semaphore(4)
+        if raw and FLARESOLVERR_ENRICH:
+            sem = asyncio.Semaphore(2)
             enrich_n = min(len(raw), ENRICH_CAP)
             extras = await asyncio.gather(
-                *(self._magnet(tid, sem) for tid, _ in raw[:enrich_n]),
+                *(self._magnet(row["tid"], sem) for row in raw[:enrich_n]),
                 return_exceptions=True,
             )
         results = []
-        for idx, (tid, item) in enumerate(raw):
+        for idx, row in enumerate(raw):
             extra = (
                 extras[idx]
                 if idx < len(extras) and isinstance(extras[idx], dict)
@@ -113,17 +177,16 @@ class RuTracker:
             )
             results.append(
                 {
-                    "name": str(item.get("Name") or "").strip(),
-                    "size": str(item.get("Size") or "").strip(),
-                    "date": str(item.get("Date") or "").strip(),
-                    "seeders": self._int(item.get("Seeds")),
-                    "leechers": self._int(item.get("Peers")),
+                    "name": row["name"],
+                    "size": row["size"],
+                    "date": row["date"],
+                    "seeders": row["seeders"],
+                    "leechers": row["leechers"],
+                    "downloads": row["downloads"],
                     "uploader": "",
-                    "category": str(
-                        item.get("Category") or item.get("Type") or ""
-                    ).strip(),
-                    "url": item.get("Url") or None,
-                    "torrent": item.get("Torrent") or None,
+                    "category": row["category"],
+                    "url": row["url"],
+                    "torrent": row["torrent"],
                     "hash": (extra or {}).get("hash"),
                     "magnet": (extra or {}).get("magnet"),
                 }
