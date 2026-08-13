@@ -17,7 +17,7 @@ YOURBITTORRENT = "https://yourbittorrent.com"
 
 EXTO = "https://extto.com"
 TORRENTDOWNLOAD = "https://www.torrentdownload.info"
-AUDIOBOOKBAY = "http://theaudiobookbay.se"
+AUDIOBOOKBAY = "https://audiobookbay.lu"
 MAGNETZ = "https://magnetz.eu"
 
 FREECOURSEWEB = "https://freecourseweb.com"

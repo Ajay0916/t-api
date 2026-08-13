@@ -13,7 +13,7 @@ from constants.base_url import AUDIOBOOKBAY
 from constants.headers import HEADER_AIO
 from helper.trackers import build_magnet
 
-HOSTS = [AUDIOBOOKBAY, "https://audiobookbay.lu"]
+HOSTS = [AUDIOBOOKBAY]
 
 
 class AudiobookBay:
@@ -138,7 +138,7 @@ class AudiobookBay:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
-            path = "/?s={}".format(quote(query))
+            path = "/search/{}/".format(quote(query))
             return await self.parser_result(
                 start_time, path, session, page=page, query=query
             )
@@ -220,7 +220,7 @@ class AudiobookBay:
                     if page >= 25:
                         break
                     page += 1
-                    path = "/page/{}/?s={}".format(page, quote(query))
+                    path = "/search/{}/page/{}/".format(quote(query), page)
                     html = await self._fetch_page(session, path)
                     if html is None:
                         break

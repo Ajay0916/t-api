@@ -23,23 +23,27 @@ class ArchiveBooks:
             "language:(Hindi) AND mediatype:(texts) AND "
             "(title:({}) OR description:({}))"
         ).format(quote(query), quote(query))
-        url = self.BASE_URL + (
-            "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-            "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
-        ).format(quote(hindi_q), limit)
-        html = await Scraper().get_all_results(session, url)
-        docs = self._parse_docs(html)
-        if docs:
-            return docs
         general_q = "mediatype:(texts) AND (title:({}) OR description:({}))".format(
             quote(query), quote(query)
         )
-        url = self.BASE_URL + (
-            "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-            "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
-        ).format(quote(general_q), limit)
-        html = await Scraper().get_all_results(session, url)
-        return self._parse_docs(html)
+        # Run both queries in parallel: the Hindi query usually matches, and
+        # keeping the general fallback alongside avoids a second slow wait
+        # on archive.org when it doesn't.
+        urls = [
+            self.BASE_URL
+            + (
+                "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
+                "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
+            ).format(quote(q), limit)
+            for q in (hindi_q, general_q)
+        ]
+        htmls = await asyncio.gather(
+            *(Scraper().get_all_results(session, u) for u in urls)
+        )
+        docs = self._parse_docs(htmls[0])
+        if docs:
+            return docs
+        return self._parse_docs(htmls[1])
 
     @staticmethod
     def _parse_docs(html):
