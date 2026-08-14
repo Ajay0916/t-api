@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
+from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import MAGNETDL
 from helper.trackers import build_magnet, build_torrent_url
@@ -20,14 +21,21 @@ class Magnetdl:
     async def _fetch(self, session, url):
         # magnetdl's Cloudflare drops aiohttp's TLS fingerprint but serves
         # real browsers, so pages are fetched with curl_cffi impersonating
-        # Chrome (same TLS/JA3 profile curl uses).
-        try:
-            r = await session.get(url, timeout=20)
-            if r.status_code >= 400:
-                return None
-            return r.text
-        except Exception:
-            return None
+        # Chrome (same TLS/JA3 profile curl uses). IPv6 is forced off: the
+        # site has AAAA records and datacenter hosts with broken v6 routing
+        # hang until timeout instead of falling back to IPv4. It also
+        # temp-blocks IPs after bursts, so each page gets a few retries.
+        for attempt in range(3):
+            try:
+                r = await session.get(url, timeout=20)
+                if r.status_code >= 400:
+                    return None
+                return r.text
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(2)
+                    continue
+        return None
 
     def _parser(self, htmls):
         try:
@@ -138,7 +146,10 @@ class Magnetdl:
         return results
 
     async def search(self, query, page, limit):
-        async with AsyncSession(impersonate="chrome") as session:
+        async with AsyncSession(
+            impersonate="chrome",
+            curl_options={CurlOpt.IPRESOLVE: 1},
+        ) as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
