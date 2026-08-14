@@ -429,6 +429,11 @@ def sort_results(data, sort="seeders", order="desc"):
         data.sort(
             key=lambda i: parse_date(i.get("date")) or 0, reverse=reverse
         )
+    elif sort == "quality":
+        data.sort(
+            key=lambda i: max(_resolutions(str(i.get("name") or "")) or [0]),
+            reverse=reverse,
+        )
     else:
         data.sort(key=_seeders, reverse=reverse)
     return data
