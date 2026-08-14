@@ -112,18 +112,42 @@ class AnnasArchive:
     async def _individual_scrap(self, session, obj, sem):
         async with sem:
             try:
+                # Anna's Archive moved download links (and the md5) behind
+                # login, but the item page still exposes the ISBN in JSON-LD.
+                # Resolve the download link through libgen.li instead: ISBN
+                # search -> md5 -> ads.php -> get.php (same chain the Libgen
+                # site uses, verified working anonymously).
                 html = await Scraper().get_all_results(session, obj["url"])
                 if not html or not html[0]:
                     return None
-                m = re.search(
-                    r"cdnagesdb\.com/images/booksimages/([a-f0-9]{32})",
-                    html[0],
-                )
-                if not m:
-                    m = re.search(r"\b([a-f0-9]{32})\b", html[0])
-                if not m:
+                md5 = None
+                m = re.search(r'"isbn"\s*:\s*"([^"]+)"', html[0])
+                if m:
+                    for isbn in (i.strip() for i in m.group(1).split(",")):
+                        if not isbn:
+                            continue
+                        html2 = await Scraper().get_all_results(
+                            session,
+                            "https://libgen.li/index.php?req={}&res=100".format(
+                                quote(isbn)
+                            ),
+                        )
+                        if html2 and html2[0]:
+                            mm = re.search(r"ads\.php\?md5=([a-f0-9]{32})", html2[0])
+                            if mm:
+                                md5 = mm.group(1)
+                                break
+                if not md5:
+                    q = quote(re.split(r"\s*\|\s*", obj.get("name") or "")[0])
+                    html2 = await Scraper().get_all_results(
+                        session,
+                        "https://libgen.li/index.php?req={}&res=100".format(q),
+                    )
+                    if html2 and html2[0]:
+                        mm = re.search(r"ads\.php\?md5=([a-f0-9]{32})", html2[0])
+                        md5 = mm.group(1) if mm else None
+                if not md5:
                     return None
-                md5 = m.group(1)
                 html2 = await Scraper().get_all_results(
                     session, "https://libgen.li/ads.php?md5=" + md5
                 )
