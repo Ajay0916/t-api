@@ -206,6 +206,7 @@ all_sites = {
     },
     "downloadfreecourse": {
         "website": DownloadFreeCourse,
+        "enabled": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
