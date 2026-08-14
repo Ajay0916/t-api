@@ -361,7 +361,7 @@ all_sites = {
         "recent_available": False,
         "recent_category_available": False,
         "categories": [],
-        "limit": 15,
+        "limit": 10,
     },
     "archivebooks": {
         "website": ArchiveBooks,
@@ -372,7 +372,7 @@ all_sites = {
         "recent_available": False,
         "recent_category_available": False,
         "categories": [],
-        "limit": 20,
+        "limit": 10,
     },
     "audiobookbay": {
         "website": AudiobookBay,
