@@ -203,10 +203,9 @@ async def get_search_combo(
 
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
-    # No cross-site infohash dedup: every site keeps its own results so a
-    # search at any limit still shows all sites (same release appears once
-    # per tracker, letting users pick their preferred site).
-    unique_data = main_data + last_data
+    # Dedup by infohash BEFORE the limit cap so duplicate torrents from
+    # different sites never waste WZML result slots (best seeder wins).
+    unique_data = _dedup()
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
