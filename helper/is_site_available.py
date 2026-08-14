@@ -79,7 +79,7 @@ all_sites = {
         "recent_category_available": True,
         # e-books
         "categories": ["apps", "movies", "music", "games", "tv", "books"],
-        "limit": 40,
+        "limit": 8,
     },
     "tdp": {
         "website": TDP,
