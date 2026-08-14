@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>27 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>29 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **27 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **29 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
@@ -30,9 +30,9 @@
 - **Cloudflare-safe TGX** — TorrentGalaxy JSON API fetched over a proper SSL connector with host fallback (`.info` / `.one`) + retries, so it survives Cloudflare resets.
 - **Recent feeds** — new arrivals for Magnetz (native RSS), PimpMyMind & AudioBookBay (RSS), so `/all/recent` covers courses + audiobooks too.
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
-- **Combo merges every site** — `limit` caps how many results each site fetches, but the merged output returns everything collected (deduped by infohash, sorted by seeders).
-- **Group search** — `/all/search`, `/all/trending` & `/all/recent` accept `sites=site1,site2` to search a subset of sites (powers WZML's General/Courses/Books buttons); omitted = all sites.
-- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers) on both `/all/search` and `/search`.
+- **Combo merges every site** — `limit` caps how many results each site fetches; the merged output returns everything collected sorted by seeders (infohash dedup sirf `dedup=1` pe).
+- **Group search** — `/all/search`, `/all/trending` & `/all/recent` accept `sites=site1,site2` to search a subset of sites (powers WZML's General/Courses/Books buttons) aur `page` param bhi support karte hain; `sites` omitted = combo-available sites.
+- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers), `include=<word>` (sirf us word wale results — hard filter, language ki tarah kabhi relax nahi hota), aur `dedup=1` (duplicate protection ON; default off = raw results) — sab `/all/search` aur `/search` dono pe. `category=audiobook` ab Audio/ABook/Audiobook categories + audiobook naam wale results match karta hai (strict name match).
 - **Auto-detected metadata** — every result is enriched with `quality` (`480p/720p/1080p/4K`) and `language` (`Hindi, English, Tamil...`) for movies, and `format` (`PDF/EPUB/MOBI...`) for books, detected from the release name / extension / download URL — WZML and API clients can show them without parsing titles. Multi-quality releases (`720p 480p`) match either quality filter.
 - **Smart filter fallback** — if a strict filter combo finds nothing (e.g. Hindi + 1080p when the Hindi release is only 4K), the API relaxes quality → format → category and returns the best available results (marked `relaxed_filters: true`). The `language` filter is **never** relaxed: a Hindi search never silently returns English releases. Language-specific searches also retry only the sites that were slow/empty in the first pass before relaxing anything.
 - **Safe language detection** — language tags use word-start matching (`[Hin-Eng]`, `HinDub`, `[Tam+Tel]` all work) without false positives from substrings (`ben` in "Unbent", `mar` in "Driftmark", `tel` in "Hotel").
@@ -64,7 +64,7 @@
 
 **Audiobooks:** `audiobookbay`
 
-**Courses:** `downarchive` (active course DB — direct uploadgig/nitroflare links, no magnets), `freecourseweb` (back online — magnet links), `downloadfreecourse` (registered, currently unreachable), `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
+**Courses:** `downarchive` (active course DB — direct uploadgig/nitroflare links, no magnets), `freecourseweb` (back online — magnet links), `downloadfreecourse` (registered, currently unreachable), `freecoursesites`, `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`, `annasarchive` (Anna's Archive — direct Libgen.li links via md5 lookup), `oceanofpdf` (Cloudflare-protected — needs Flaresolverr)
 
@@ -111,15 +111,15 @@ docker compose up -d --build
 | `GET /api/v1/sites` | — returns `supported_sites` plus `sites[{site,name}]` |
 | `GET /api/v1/sites/config` | — |
 | `GET /api/v1/sites/status` | — every site's `enabled`/`manual_blocked`/`blocked`, cooldown, fail count, combo/trending/recent availability |
-| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
+| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
 | `GET /api/v1/trending` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/recent` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/category` | `site` ✅, `query` ✅, `category` ✅, `limit`, `page` |
-| `GET /api/v1/all/search` | `query` ✅, `limit`, `min_seeders`, `category`, `sort`, `order`, `fresh`, `quality`, `language`, `format`, `min_size`, `max_size` |
+| `GET /api/v1/all/search` | `query` ✅, `sites`, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
 | `GET /api/v1/torrent_file` | `url` ✅, `name` — proxies a .torrent file through this server |
 | `POST /api/v1/status/{site}/disable` · `/enable` | manually block/unblock a site without restart (disabled sites disappear from `/api/v1/sites` → WZML buttons) |
-| `GET /api/v1/all/trending` | `limit` |
-| `GET /api/v1/all/recent` | `limit` |
+| `GET /api/v1/all/trending` | `sites`, `limit`, `page` |
+| `GET /api/v1/all/recent` | `sites`, `limit`, `page` |
 
 **Example**
 
@@ -132,6 +132,14 @@ curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&language=hindi&q
 curl "http://localhost:8009/api/v1/search?site=libgen&query=python&limit=5&format=epub"
 # Small files only (under 1GB) without piratebay in the combo
 curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&max_size=1GB"
+# Page 2 of a combo search
+curl "http://localhost:8009/api/v1/all/search?query=kgf&limit=5&page=2"
+# Only results whose name contains "480p" (include filter, hard)
+curl "http://localhost:8009/api/v1/all/search?query=oppenheimer&limit=5&include=480p"
+# Duplicate protection ON (dedup=1); default returns raw results
+curl "http://localhost:8009/api/v1/all/search?query=oppenheimer&limit=10&dedup=1"
+# Audiobooks only (matches Audio/ABook/Audiobook categories + names)
+curl "http://localhost:8009/api/v1/all/search?query=atomic%20habit&limit=5&category=audiobook"
 ```
 
 **Response**
