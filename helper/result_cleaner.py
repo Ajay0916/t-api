@@ -11,7 +11,7 @@ CATEGORY_ALIASES = {
     "movie": ("movie", "film"),
     "tv": ("tv", "television"),
     "anime": ("anime",),
-    "audiobook": ("audiobook", "audio book", "audio"),
+    "audiobook": ("audiobook", "audio book", "audio", "abook"),
     "music": ("music", "audio", "flac", "mp3"),
     "game": ("game",),
     "app": ("app", "software"),
@@ -20,6 +20,13 @@ CATEGORY_ALIASES = {
 # Categories where the result name is also checked (sites often don't set a
 # category field, e.g. freecourseweb -> "The Complete Python Course 2024").
 NAME_MATCH_CATEGORIES = {"course", "book", "music", "audiobook"}
+
+# Name matching is looser than category matching for most filters, but for
+# audiobooks the broad "audio" alias would pull movie rips ("DTS-HD 5.1
+# Audio") when the site sets no category - keep the name check strict.
+NAME_MATCH_STRICT = {
+    "audiobook": ("audiobook", "audio book"),
+}
 
 
 _RES_RE = re.compile(r"(\d{3,4})p\b")
@@ -181,6 +188,9 @@ def category_matches(item, category):
         category.endswith("s") and category[:-1] in NAME_MATCH_CATEGORIES
     ):
         name = str(item.get("name") or "").lower()
+        strict = NAME_MATCH_STRICT.get(category)
+        if strict:
+            return any(a in name for a in strict)
         return any(a in name for a in aliases)
     return False
 
