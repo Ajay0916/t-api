@@ -25,18 +25,19 @@ def get_connector():
 
 
 async def close_flare_session(sid, flare_url="http://127.0.0.1:8191"):
-    """Delete a Flaresolverr session so its headless browser is closed.
+    """Destroy a Flaresolverr session so its headless browser is closed.
 
     t-api reuses one warm session per site and rotates it on a TTL; without
-    an explicit DELETE the old session's browser+chromedriver stays alive on
-    the Flaresolverr host forever and leaks memory/CPU."""
+    an explicit destroy the old session's browser+chromedriver stays alive on
+    the Flaresolverr host forever and leaks memory/CPU. Flaresolverr 3.5.0
+    has no DELETE /v1 route - sessions are destroyed via POST /v1."""
     if not sid:
         return
     try:
         async with aiohttp.ClientSession() as client:
-            await client.delete(
+            await client.post(
                 "{}/v1".format((flare_url or "").rstrip("/")),
-                json={"session": sid},
+                json={"cmd": "sessions.destroy", "session": sid},
                 timeout=aiohttp.ClientTimeout(total=5),
             )
     except Exception:

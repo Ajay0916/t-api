@@ -195,7 +195,9 @@ class AnnasArchive:
         if page > 1:
             url += "&page={}".format(page)
         try:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": 20000}
+            # Fixed session name: Flaresolverr reuses one warm browser instead
+            # of auto-creating (and leaking) a new one per fallback call.
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": 20000, "session": "annasarchive-tapi"}
             async with aiohttp.ClientSession(
                 connector=get_connector(), connector_owner=False, trust_env=True
             ) as session:

@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import time
+import uuid
 
 import aiohttp
 from urllib.parse import quote
@@ -11,7 +12,6 @@ from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-_SESSION = "oceanofpdf-tapi"
 _SESSION_TTL = 300.0
 _sid = None
 _sid_created = 0.0
@@ -19,16 +19,15 @@ _flare_lock = asyncio.Lock()
 
 
 def _get_sid():
-    return _sid
-
-
-def _set_sid(sid):
     global _sid, _sid_created
-    old = _sid
-    _sid = sid
-    _sid_created = time.time()
-    # Replacing the session leaks the old browser unless deleted.
-    close_flare_session_async(old, FLARESOLVERR_URL)
+    now = time.time()
+    if not _sid or now - _sid_created > _SESSION_TTL:
+        old = _sid
+        _sid = "oceanofpdf-{}".format(uuid.uuid4().hex[:10])
+        _sid_created = now
+        # Replacing the session leaks the old browser unless destroyed.
+        close_flare_session_async(old, FLARESOLVERR_URL)
+    return _sid
 
 
 class OceanofPDF:
@@ -57,16 +56,12 @@ class OceanofPDF:
         url = self.BASE_URL + "/?s=" + quote(query)
         if page > 1:
             url = self.BASE_URL + "/page/{}/?s={}".format(page, quote(query))
-        sid = _get_sid()
-        if not sid or time.time() - _sid_created > _SESSION_TTL:
-            sid = None
         payload = {
             "cmd": "request.get",
             "url": url,
             "maxTimeout": 60000,
+            "session": _get_sid(),
         }
-        if sid:
-            payload["session"] = sid
         sol = await self._flaresolverr(payload, aiohttp.ClientTimeout(total=65))
         if not sol:
             return None, None, None
@@ -77,9 +72,6 @@ class OceanofPDF:
             if c.get("name") and c.get("value")
         }
         ua = sol.get("userAgent") or ""
-        s = sol.get("session") or ""
-        if s and not sid:
-            _set_sid(s)
         return html, cookies, ua
 
     @staticmethod
