@@ -11,7 +11,7 @@ CATEGORY_ALIASES = {
     "movie": ("movie", "film"),
     "tv": ("tv", "television"),
     "anime": ("anime",),
-    "audiobook": ("audiobook", "audio book"),
+    "audiobook": ("audiobook", "audio book", "audio"),
     "music": ("music", "audio", "flac", "mp3"),
     "game": ("game",),
     "app": ("app", "software"),
