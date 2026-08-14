@@ -1,3 +1,5 @@
+import asyncio
+
 import aiohttp
 
 _connector = None
@@ -20,3 +22,34 @@ def get_connector():
             ttl_dns_cache=300,
         )
     return _connector
+
+
+async def close_flare_session(sid, flare_url="http://127.0.0.1:8191"):
+    """Delete a Flaresolverr session so its headless browser is closed.
+
+    t-api reuses one warm session per site and rotates it on a TTL; without
+    an explicit DELETE the old session's browser+chromedriver stays alive on
+    the Flaresolverr host forever and leaks memory/CPU."""
+    if not sid:
+        return
+    try:
+        async with aiohttp.ClientSession() as client:
+            await client.delete(
+                "{}/v1".format((flare_url or "").rstrip("/")),
+                json={"session": sid},
+                timeout=aiohttp.ClientTimeout(total=5),
+            )
+    except Exception:
+        pass
+
+
+def close_flare_session_async(sid, flare_url="http://127.0.0.1:8191"):
+    """Fire-and-forget variant for sync rotation helpers."""
+    if not sid:
+        return
+    try:
+        asyncio.get_running_loop().create_task(
+            close_flare_session(sid, flare_url)
+        )
+    except RuntimeError:
+        pass

@@ -8,7 +8,7 @@ from urllib.parse import quote_plus, urlencode
 import aiohttp
 from bs4 import BeautifulSoup
 
-from helper.session import get_connector
+from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
@@ -73,15 +73,20 @@ def _get_sid():
     global _sid, _sid_created
     now = time.time()
     if not _sid or now - _sid_created > _SESSION_TTL:
+        old = _sid
         _sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
         _sid_created = now
+        # Old Flaresolverr session keeps its browser alive until deleted.
+        close_flare_session_async(old, FLARESOLVERR_URL)
     return _sid
 
 
 def _rotate_sid():
     global _sid, _sid_created
+    old = _sid
     _sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
     _sid_created = time.time()
+    close_flare_session_async(old, FLARESOLVERR_URL)
 
 
 _RU_MONTHS = {

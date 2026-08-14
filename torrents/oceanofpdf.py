@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from constants.base_url import OCEANOFPDF
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.session import get_connector
+from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _SESSION = "oceanofpdf-tapi"
@@ -24,8 +24,11 @@ def _get_sid():
 
 def _set_sid(sid):
     global _sid, _sid_created
+    old = _sid
     _sid = sid
     _sid_created = time.time()
+    # Replacing the session leaks the old browser unless deleted.
+    close_flare_session_async(old, FLARESOLVERR_URL)
 
 
 class OceanofPDF:
