@@ -196,6 +196,7 @@ all_sites = {
     },
     "freecourseweb": {
         "website": FreeCourseWeb,
+        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
@@ -217,6 +218,7 @@ all_sites = {
     },
     "pimpmymind": {
         "website": PimpMyMind,
+        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
