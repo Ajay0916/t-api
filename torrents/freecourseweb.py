@@ -9,6 +9,7 @@ from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import FREECOURSEWEB
 from helper.trackers import build_torrent_url
+from helper.plain_curl import fetch_plain
 
 
 class FreeCourseWeb:
@@ -19,18 +20,22 @@ class FreeCourseWeb:
         self.LIMIT = None
 
     async def _fetch(self, session, url):
-        # Cloudflare challenges aiohttp's TLS fingerprint here (curl gets
-        # 200), so pages are fetched with curl_cffi impersonating Chrome.
-        # IPv6 forced off: AAAA records + hosts with broken v6 routing hang.
-        for attempt in range(3):
+        # Cloudflare serves plain curl but currently challenges/blackholes
+        # impersonated clients, so try the system curl binary first, then
+        # curl_cffi as a fallback. IPv6 is forced off everywhere (the site
+        # has AAAA records and this host's v6 routing hangs on them).
+        html = await fetch_plain(url, timeout=12)
+        if html:
+            return html
+        for attempt in range(2):
             try:
-                r = await session.get(url, timeout=20)
+                r = await session.get(url, timeout=12)
                 if r.status_code >= 400:
                     return None
                 return r.text
             except Exception:
-                if attempt < 2:
-                    await asyncio.sleep(2)
+                if attempt < 1:
+                    await asyncio.sleep(1)
                     continue
         return None
 

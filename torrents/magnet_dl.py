@@ -9,6 +9,7 @@ from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import MAGNETDL
 from helper.trackers import build_magnet, build_torrent_url
+from helper.plain_curl import fetch_plain
 
 
 class Magnetdl:
@@ -19,21 +20,22 @@ class Magnetdl:
         self.LIMIT = None
 
     async def _fetch(self, session, url):
-        # magnetdl's Cloudflare drops aiohttp's TLS fingerprint but serves
-        # real browsers, so pages are fetched with curl_cffi impersonating
-        # Chrome (same TLS/JA3 profile curl uses). IPv6 is forced off: the
-        # site has AAAA records and datacenter hosts with broken v6 routing
-        # hang until timeout instead of falling back to IPv4. It also
-        # temp-blocks IPs after bursts, so each page gets a few retries.
-        for attempt in range(3):
+        # Cloudflare serves plain curl but currently challenges/blackholes
+        # impersonated clients, so try the system curl binary first, then
+        # curl_cffi as a fallback. IPv6 is forced off everywhere (the site
+        # has AAAA records and this host's v6 routing hangs on them).
+        html = await fetch_plain(url, timeout=12)
+        if html:
+            return html
+        for attempt in range(2):
             try:
-                r = await session.get(url, timeout=20)
+                r = await session.get(url, timeout=12)
                 if r.status_code >= 400:
                     return None
                 return r.text
             except Exception:
-                if attempt < 2:
-                    await asyncio.sleep(2)
+                if attempt < 1:
+                    await asyncio.sleep(1)
                     continue
         return None
 
