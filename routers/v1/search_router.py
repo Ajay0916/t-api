@@ -26,13 +26,13 @@ async def _search_site(website, query, page, limit):
     return await website().search(query, page, limit)
 
 
-async def _search_with_retry(website, query, page, limit):
+async def _search_with_retry(website, query, page, limit, deadline):
     """Try once, retry once on hard errors (fast failures). Timeouts are not
     retried - the site is slow but alive, so results still come next time."""
     for attempt in range(2):
         task = asyncio.create_task(_search_site(website, query, page, limit))
         try:
-            return await asyncio.wait_for(task, timeout=SITE_DEADLINE)
+            return await asyncio.wait_for(task, timeout=deadline)
         except asyncio.TimeoutError:
             task.cancel()
             raise
@@ -63,6 +63,7 @@ async def search_for_torrents(
     format: Optional[str] = "",
     min_size: Optional[str] = "",
     max_size: Optional[str] = "",
+    timeout: Optional[float] = 0.0,
 ):
     site = site.lower().strip()
     query = query.lower().strip()
@@ -95,7 +96,7 @@ async def search_for_torrents(
 
     cache_key = (
         f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
-        f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}:{include}"
+        f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}:{include}:{timeout}"
     )
     if not fresh:
         cached = search_cache.get(cache_key)
@@ -103,8 +104,9 @@ async def search_for_torrents(
             return clean_results(cached, dedup=bool(dedup))
 
     try:
+        deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
         resp = await _search_with_retry(
-            all_sites[site]["website"], query, page, limit
+            all_sites[site]["website"], query, page, limit, deadline
         )
     except asyncio.TimeoutError:
         # Slow but alive: don't blacklist, retry next time (results matter).

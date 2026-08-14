@@ -45,9 +45,11 @@ async def get_search_combo(
     format: Optional[str] = "",
     min_size: Optional[str] = "",
     max_size: Optional[str] = "",
+    timeout: Optional[float] = 0.0,
 ):
     start_time = time.time()
     query = query.lower().strip()
+    deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
     category = (category or "").lower().strip()
     sort = (sort or "seeders").lower()
     order = (order or "desc").lower()
@@ -61,7 +63,7 @@ async def get_search_combo(
     cache_key = (
         f"combo:{sites}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
-        f":{min_size}:{max_size}:{dedup}:{include}"
+        f":{min_size}:{max_size}:{dedup}:{include}:{timeout}"
     )
     if not fresh:
         cached = combo_cache.get(cache_key)
@@ -170,7 +172,7 @@ async def get_search_combo(
         Returns the sites that produced no data (slow/alive/empty/error)."""
         nonlocal total_torrents_overall
         done, pending = await asyncio.wait(
-            [t for _, t in tasks], timeout=SITE_DEADLINE
+            [t for _, t in tasks], timeout=deadline
         )
         for t in pending:
             t.cancel()
@@ -286,9 +288,13 @@ async def get_search_combo(
 
 @router.get("/trending")
 async def get_all_trending(
-    limit: Optional[int] = 0, sites: Optional[str] = "", page: Optional[int] = 1
+    limit: Optional[int] = 0,
+    sites: Optional[str] = "",
+    page: Optional[int] = 1,
+    timeout: Optional[float] = 0.0,
 ):
     start_time = time.time()
+    deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
     if sites:
@@ -327,7 +333,7 @@ async def get_all_trending(
             )
         )
     done, pending = await asyncio.wait(
-        [t for _, t in tasks], timeout=SITE_DEADLINE
+        [t for _, t in tasks], timeout=deadline
     )
     for t in pending:
         t.cancel()
@@ -363,9 +369,13 @@ async def get_all_trending(
 
 @router.get("/recent")
 async def get_all_recent(
-    limit: Optional[int] = 0, sites: Optional[str] = "", page: Optional[int] = 1
+    limit: Optional[int] = 0,
+    sites: Optional[str] = "",
+    page: Optional[int] = 1,
+    timeout: Optional[float] = 0.0,
 ):
     start_time = time.time()
+    deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
     if sites:
@@ -404,7 +414,7 @@ async def get_all_recent(
             )
         )
     done, pending = await asyncio.wait(
-        [t for _, t in tasks], timeout=SITE_DEADLINE
+        [t for _, t in tasks], timeout=deadline
     )
     for t in pending:
         t.cancel()
