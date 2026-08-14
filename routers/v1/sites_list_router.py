@@ -13,7 +13,11 @@ async def get_all_supported_sites():
     sites_list = []
     sites = []
     for site, info in all_sites.items():
-        if not info["website"] or site_health.is_manually_blocked(site):
+        if (
+            not info["website"]
+            or info.get("enabled", True) is False
+            or site_health.is_manually_blocked(site)
+        ):
             continue
         sites_list.append(site)
         sites.append(

@@ -70,7 +70,7 @@ async def get_search_combo(
         sites_list = [
             site
             for site in (s.strip() for s in sites.split(","))
-            if site in all_sites
+            if site in all_sites and all_sites[site].get("enabled", True)
         ]
     else:
         sites_list = [

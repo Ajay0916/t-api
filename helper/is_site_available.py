@@ -72,6 +72,8 @@ all_sites = {
     },
     "magnetdl": {
         "website": Magnetdl,
+        "enabled": False,
+        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
@@ -417,5 +419,7 @@ sites_config = {
 
 def check_if_site_available(site):
     if site in all_sites.keys():
+        if all_sites[site].get("enabled", True) is False:
+            return False
         return all_sites
     return False
