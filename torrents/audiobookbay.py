@@ -140,14 +140,16 @@ class AudiobookBay:
                     if url.startswith("/"):
                         url = self.BASE_URL + url
                     size = ""
-                    category = ""
+                    category = "Audiobook"
                     date = ""
                     info = post.select_one(".postInfo")
                     if info:
                         text = info.get_text("\n", strip=True)
                         m = re.search(r"Category:\s*([^\n]+)", text)
                         if m:
-                            category = re.sub(r"\s+", " ", m.group(1)).strip()
+                            genre = re.sub(r"\s+", " ", m.group(1)).strip()
+                            if genre:
+                                category = f"Audiobook - {genre}"
                     content = post.select_one(".postContent")
                     if content:
                         text = content.get_text("\n", strip=True)

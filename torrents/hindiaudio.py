@@ -145,6 +145,7 @@ class HindiAudio:
                     {
                         "name": title,
                         "identifier": d.get("identifier"),
+                        "category": "Audiobook",
                         "date": d.get("date"),
                     }
                 )

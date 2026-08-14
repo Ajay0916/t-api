@@ -11,6 +11,7 @@ CATEGORY_ALIASES = {
     "movie": ("movie", "film"),
     "tv": ("tv", "television"),
     "anime": ("anime",),
+    "audiobook": ("audiobook", "audio book"),
     "music": ("music", "audio", "flac", "mp3"),
     "game": ("game",),
     "app": ("app", "software"),
@@ -18,7 +19,7 @@ CATEGORY_ALIASES = {
 
 # Categories where the result name is also checked (sites often don't set a
 # category field, e.g. freecourseweb -> "The Complete Python Course 2024").
-NAME_MATCH_CATEGORIES = {"course", "book", "music"}
+NAME_MATCH_CATEGORIES = {"course", "book", "music", "audiobook"}
 
 
 _RES_RE = re.compile(r"(\d{3,4})p\b")
