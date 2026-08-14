@@ -72,8 +72,6 @@ all_sites = {
     },
     "magnetdl": {
         "website": Magnetdl,
-        "enabled": False,
-        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,

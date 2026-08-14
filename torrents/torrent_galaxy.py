@@ -7,7 +7,7 @@ from urllib.parse import quote
 import aiohttp
 
 from constants.base_url import TGX
-from constants.headers import HEADER_AIO
+from constants.headers import HEADER_TGX
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet, build_torrent_url
 
@@ -73,7 +73,7 @@ class TorrentGalaxy:
                     ) as session:
                         async with session.get(
                             url,
-                            headers=HEADER_AIO,
+                            headers=HEADER_TGX,
                             timeout=aiohttp.ClientTimeout(total=20),
                         ) as res:
                             if res.status >= 400:
