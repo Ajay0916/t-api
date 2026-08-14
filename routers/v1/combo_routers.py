@@ -190,23 +190,13 @@ async def get_search_combo(
     active_sites = [site for site in sites_list if not site_health.is_blocked(site)]
     missed = await _collect(_build_tasks(active_sites))
 
-    def _dedup():
-        seen = set()
-        out = []
-        for item in main_data + last_data:
-            h = str(item.get("hash") or "").strip().lower()
-            if h and h in seen:
-                continue
-            if h:
-                seen.add(h)
-            out.append(item)
-        return out
-
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
-    # Dedup by infohash BEFORE the limit cap so duplicate torrents from
-    # different sites never waste WZML result slots (best seeder wins).
-    unique_data = _dedup()
+    # Every site keeps its own results: dedup by infohash across sites
+    # silently drops whole sites (same popular release on 5 sites = 4
+    # sites vanish), which breaks the "every site returns at any limit"
+    # contract the bot relies on.
+    unique_data = main_data + last_data
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
@@ -230,7 +220,7 @@ async def get_search_combo(
                         missed = retry_missed
                 main_data.sort(key=_seeders, reverse=True)
                 last_data.sort(key=_seeders, reverse=True)
-                unique_data = _dedup()
+                unique_data = main_data + last_data
                 filtered = _apply_filters(
                     unique_data, min_seeders, category, quality, language, format,
                     min_size, max_size,
