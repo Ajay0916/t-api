@@ -3,6 +3,7 @@ from torrents.hindiaudio import HindiAudio
 from torrents.archivebooks import ArchiveBooks
 from torrents.annasarchive import AnnasArchive
 from torrents.freecourseweb import FreeCourseWeb
+from torrents.freecoursesites import FreeCourseSites
 from torrents.downloadfreecourse import DownloadFreeCourse
 from torrents.audiobookbay import AudiobookBay
 from torrents.bitsearch import Bitsearch
@@ -201,6 +202,17 @@ all_sites = {
         "trending_category": False,
         "search_by_category": False,
         "recent_available": True,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 15,
+    },
+    "freecoursesites": {
+        "website": FreeCourseSites,
+        "combo_available": True,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
         "recent_category_available": False,
         "categories": [],
         "limit": 15,

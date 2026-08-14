@@ -21,6 +21,7 @@ AUDIOBOOKBAY = "https://audiobookbay.lu"
 MAGNETZ = "https://magnetz.eu"
 
 FREECOURSEWEB = "https://freecourseweb.com"
+FREECOURSESITES = "https://freecoursesites.com"
 DOWNARCHIVE = "https://downarchive.org"
 OCEANOFPDF = "https://oceanofpdf.com"
 DOWNLOADFREECOURSE = "https://downloadfreecourse.com"
