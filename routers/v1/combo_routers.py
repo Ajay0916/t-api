@@ -76,7 +76,8 @@ async def get_search_combo(
         sites_list = [
             site
             for site in all_sites.keys()
-            if all_sites[site].get("combo_available", True)
+            if all_sites[site].get("enabled", True)
+            and all_sites[site].get("combo_available", True)
         ]
     # Sites whose results are pushed to the end of the combined list
     # (1337x search quality varies and the user wants its results last).
