@@ -19,7 +19,7 @@ from helper.site_health import site_health
 
 router = APIRouter(tags=["Search"])
 
-SITE_DEADLINE = 28.0
+SITE_DEADLINE = 40.0
 
 
 async def _search_site(website, query, page, limit):

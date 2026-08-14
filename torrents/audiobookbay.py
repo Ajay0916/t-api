@@ -23,6 +23,12 @@ HOSTS = [
 ]
 
 
+# r.jina.ai is a free reader proxy that fetches pages from the origin's
+# network. audiobookbay.lu drops TCP from some datacenter IPs (Oracle etc),
+# so the proxy is tried first and direct fetch remains the fallback.
+JINA_PROXY = "https://r.jina.ai/"
+
+
 class AudiobookBay:
     _name = "Audiobook Bay"
 
@@ -30,7 +36,32 @@ class AudiobookBay:
         self.BASE_URL = AUDIOBOOKBAY
         self.LIMIT = None
 
+    async def _fetch_via_jina(self, session, url):
+        for attempt in range(2):
+            try:
+                async with session.get(
+                    JINA_PROXY + url,
+                    headers={"X-Return-Format": "html"},
+                    timeout=aiohttp.ClientTimeout(total=35),
+                ) as res:
+                    if res.status == 429:
+                        await asyncio.sleep(1.5)
+                        continue
+                    if res.status >= 400:
+                        return None
+                    return await res.text()
+            except Exception:
+                if attempt:
+                    return None
+                await asyncio.sleep(1)
+        return None
+
     async def _fetch_page(self, session, path):
+        # Proxy first: origin drops our datacenter IP, jina.ai does not.
+        text = await self._fetch_via_jina(session, HOSTS[0] + path)
+        if text and len(text) > 2000 and ("postTitle" in text or "<item>" in text):
+            self.BASE_URL = HOSTS[0]
+            return [text]
         for host in HOSTS:
             try:
                 async with session.get(
@@ -58,11 +89,14 @@ class AudiobookBay:
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                html = await Scraper().get_all_results(session, url)
-                if not html or not html[0]:
+                html = await self._fetch_via_jina(session, url)
+                if not html:
+                    direct = await Scraper().get_all_results(session, url)
+                    html = direct[0] if direct and direct[0] else None
+                if not html:
                     return None
                 m = re.search(
-                    r"Info Hash:\s*</td>\s*<td>([A-Fa-f0-9]{40})", html[0]
+                    r"Info Hash:\s*</td>\s*<td>([A-Fa-f0-9]{40})", html
                 )
                 if m:
                     info_hash = m.group(1)
@@ -73,7 +107,7 @@ class AudiobookBay:
 
     async def _get_torrent(self, result, session, urls):
         tasks = []
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(5)
         for idx, url in enumerate(urls):
             for obj in result["data"]:
                 if obj["url"] == url:
@@ -83,7 +117,7 @@ class AudiobookBay:
                     tasks.append(task)
                     # audiobookbay rate-limits rapid bursts; pacing keeps a
                     # full search from tripping Cloudflare mid-fetch.
-                    await asyncio.sleep(0.3)
+                    await asyncio.sleep(0.2)
         await asyncio.gather(*tasks)
         return result
 
