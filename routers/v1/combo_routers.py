@@ -23,8 +23,8 @@ router = APIRouter(tags=["Combo Routes"])
 SITE_DEADLINE = 40.0
 
 
-async def _search_site(website, query, limit):
-    return await website().search(query, page=1, limit=limit)
+async def _search_site(website, query, limit, page=1):
+    return await website().search(query, page=page, limit=limit)
 
 
 @router.get("/search")
@@ -32,6 +32,7 @@ async def get_search_combo(
     query: str,
     sites: Optional[str] = "",
     limit: Optional[int] = 0,
+    page: Optional[int] = 1,
     fresh: Optional[int] = 0,
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
@@ -55,7 +56,7 @@ async def get_search_combo(
     max_size = (max_size or "").strip().lower()
 
     cache_key = (
-        f"combo:{sites}:{query}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+        f"combo:{sites}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
         f":{min_size}:{max_size}"
     )
@@ -145,7 +146,7 @@ async def get_search_combo(
             (
                 site,
                 asyncio.create_task(
-                    _search_site(all_sites[site]["website"], query, _site_limit(site))
+                    _search_site(all_sites[site]["website"], query, _site_limit(site), page)
                 ),
             )
             for site in site_list
@@ -269,7 +270,9 @@ async def get_search_combo(
 
 
 @router.get("/trending")
-async def get_all_trending(limit: Optional[int] = 0, sites: Optional[str] = ""):
+async def get_all_trending(
+    limit: Optional[int] = 0, sites: Optional[str] = "", page: Optional[int] = 1
+):
     start_time = time.time()
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
@@ -303,7 +306,7 @@ async def get_all_trending(limit: Optional[int] = 0, sites: Optional[str] = ""):
                 site,
                 asyncio.create_task(
                     all_sites[site]["website"]().trending(
-                        category=None, page=1, limit=site_limit
+                        category=None, page=page, limit=site_limit
                     )
                 ),
             )
@@ -344,7 +347,9 @@ async def get_all_trending(limit: Optional[int] = 0, sites: Optional[str] = ""):
 
 
 @router.get("/recent")
-async def get_all_recent(limit: Optional[int] = 0, sites: Optional[str] = ""):
+async def get_all_recent(
+    limit: Optional[int] = 0, sites: Optional[str] = "", page: Optional[int] = 1
+):
     start_time = time.time()
     # * just getting all_sites dictionary
     all_sites = check_if_site_available("1337x")
@@ -378,7 +383,7 @@ async def get_all_recent(limit: Optional[int] = 0, sites: Optional[str] = ""):
                 site,
                 asyncio.create_task(
                     all_sites[site]["website"]().recent(
-                        category=None, page=1, limit=site_limit
+                        category=None, page=page, limit=site_limit
                     )
                 ),
             )
