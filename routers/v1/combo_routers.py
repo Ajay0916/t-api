@@ -35,6 +35,7 @@ async def get_search_combo(
     page: Optional[int] = 1,
     fresh: Optional[int] = 0,
     dedup: Optional[int] = 0,
+    include: Optional[str] = "", 
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
@@ -53,13 +54,14 @@ async def get_search_combo(
     quality = (quality or "").lower().strip()
     language = (language or "").lower().strip()
     format = (format or "").lower().strip()
+    include = (include or "").strip().lower()
     min_size = (min_size or "").strip().lower()
     max_size = (max_size or "").strip().lower()
 
     cache_key = (
         f"combo:{sites}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
-        f":{min_size}:{max_size}:{dedup}"
+        f":{min_size}:{max_size}:{dedup}:{include}"
     )
     if not fresh:
         cached = combo_cache.get(cache_key)
@@ -92,12 +94,15 @@ async def get_search_combo(
             return -1
 
     def _apply_filters(
-        items, min_seeders, category, quality, language, format_, min_size="", max_size=""
+        items, min_seeders, category, quality, language, format_, min_size="", max_size="",
+        include="",
     ):
         """Apply every active filter; returns the filtered list."""
         out = items
         if min_seeders > 0:
             out = [i for i in out if _seeders(i) >= min_seeders]
+        if include:
+            out = [i for i in out if include in str(i.get("name") or "").lower()]
         if category:
             out = [i for i in out if category_matches(i, category)]
         if quality:
@@ -110,13 +115,16 @@ async def get_search_combo(
             out = [i for i in out if size_matches(i, min_size, max_size)]
         return out
 
-    def _relax_filters(items, min_seeders, category, quality, language, format_):
+    def _relax_filters(
+        items, min_seeders, category, quality, language, format_, min_size="", max_size="", include=""
+    ):
         """When a strict filter combo leaves nothing (e.g. Hindi is only
         available in 4K but the user asked 1080p), relax filters in
         importance order - quality, then size, then format, then category.
         The language filter is NEVER relaxed away: a Hindi search must never
-        silently return English releases. If nothing survives, return what
-        keeps language (possibly empty)."""
+        silently return English releases. include is a hard filter too: the
+        user asked for it explicitly. If nothing survives, return what
+        keeps language + include (possibly empty)."""
         for drop in ("quality", "size", "format", "category"):
             relaxed = _apply_filters(
                 items,
@@ -127,10 +135,14 @@ async def get_search_combo(
                 "" if drop == "format" else format,
                 "" if drop == "size" else min_size,
                 "" if drop == "size" else max_size,
+                include,
             )
             if relaxed:
                 return relaxed, True
-        return _apply_filters(items, min_seeders, "", "", language, "", "", ""), True
+        return (
+            _apply_filters(items, min_seeders, "", "", language, "", "", "", include),
+            True,
+        )
 
     main_data = []
     last_data = []
@@ -223,7 +235,7 @@ async def get_search_combo(
     if unique_data:
         filtered = _apply_filters(
             unique_data, min_seeders, category, quality, language, format,
-            min_size, max_size,
+            min_size, max_size, include,
         )
         if not filtered and (category or quality or language or format or min_size or max_size):
             # Language-specific results live on a few sites (e.g. Hindi on
@@ -251,7 +263,7 @@ async def get_search_combo(
             if not filtered:
                 filtered, relaxed = _relax_filters(
                     unique_data, min_seeders, category, quality, language, format,
-                    min_size, max_size,
+                    min_size, max_size, include,
                 )
         unique_data = filtered
     sort_results(unique_data, sort=sort, order=order)

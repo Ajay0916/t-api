@@ -53,6 +53,7 @@ async def search_for_torrents(
     page: Optional[int] = 1,
     fresh: Optional[int] = 0,
     dedup: Optional[int] = 0,
+    include: Optional[str] = "", 
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
@@ -71,6 +72,7 @@ async def search_for_torrents(
     quality = (quality or "").lower().strip()
     language = (language or "").lower().strip()
     format = (format or "").lower().strip()
+    include = (include or "").strip().lower()
     min_size = (min_size or "").strip().lower()
     max_size = (max_size or "").strip().lower()
     all_sites = check_if_site_available(site)
@@ -93,7 +95,7 @@ async def search_for_torrents(
 
     cache_key = (
         f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
-        f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}"
+        f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}:{include}"
     )
     if not fresh:
         cached = search_cache.get(cache_key)
@@ -135,6 +137,8 @@ async def search_for_torrents(
         out = items
         if min_seeders > 0:
             out = [i for i in out if _seeders(i) >= min_seeders]
+        if include:
+            out = [i for i in out if include in str(i.get("name") or "").lower()]
         if category:
             out = [i for i in out if category_matches(i, category)]
         if quality:
@@ -166,6 +170,7 @@ async def search_for_torrents(
                 item
                 for item in resp["data"]
                 if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                and (not include or include in str(item.get("name") or "").lower())
                 and (not c2 or category_matches(item, c2))
                 and (not q2 or quality_matches(item, q2))
                 and (not language or language_matches(item, language))
@@ -181,6 +186,7 @@ async def search_for_torrents(
                 item
                 for item in resp["data"]
                 if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                and (not include or include in str(item.get("name") or "").lower())
                 and (not language or language_matches(item, language))
             ]
             relaxed = True
