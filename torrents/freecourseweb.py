@@ -9,7 +9,7 @@ from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import FREECOURSEWEB
 from helper.trackers import build_torrent_url
-from helper.plain_curl import fetch_plain
+from helper.plain_curl import fetch_jina, fetch_plain
 
 
 class FreeCourseWeb:
@@ -20,23 +20,20 @@ class FreeCourseWeb:
         self.LIMIT = None
 
     async def _fetch(self, session, url):
-        # Cloudflare serves plain curl but currently challenges/blackholes
-        # impersonated clients, so try the system curl binary first, then
-        # curl_cffi as a fallback. IPv6 is forced off everywhere (the site
-        # has AAAA records and this host's v6 routing hangs on them).
-        html = await fetch_plain(url, timeout=12)
+        # Cloudflare intermittently blackholes this host's direct requests
+        # (curl included, TCP 000) while serving other IPs, so the chain is:
+        # system curl -> curl_cffi -> r.jina.ai proxy (same HTML back). Each
+        # leg is timeboxed to stay inside the router's 40s per-site deadline.
+        html = await fetch_plain(url, timeout=6)
         if html:
             return html
-        for attempt in range(2):
-            try:
-                r = await session.get(url, timeout=12)
-                if r.status_code >= 400:
-                    return None
+        try:
+            r = await session.get(url, timeout=8)
+            if r.status_code < 400:
                 return r.text
-            except Exception:
-                if attempt < 1:
-                    await asyncio.sleep(1)
-                    continue
+        except Exception:
+            pass
+        return await fetch_jina(url, timeout=12)
         return None
 
     @decorator_asyncio_fix

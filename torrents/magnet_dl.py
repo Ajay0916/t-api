@@ -9,7 +9,7 @@ from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import MAGNETDL
 from helper.trackers import build_magnet, build_torrent_url
-from helper.plain_curl import fetch_plain
+from helper.plain_curl import fetch_jina, fetch_plain
 
 
 class Magnetdl:
@@ -20,23 +20,20 @@ class Magnetdl:
         self.LIMIT = None
 
     async def _fetch(self, session, url):
-        # Cloudflare serves plain curl but currently challenges/blackholes
-        # impersonated clients, so try the system curl binary first, then
-        # curl_cffi as a fallback. IPv6 is forced off everywhere (the site
-        # has AAAA records and this host's v6 routing hangs on them).
-        html = await fetch_plain(url, timeout=12)
+        # Cloudflare intermittently blackholes this host's direct requests
+        # (curl included, TCP 000) while serving other IPs, so the chain is:
+        # system curl -> curl_cffi -> r.jina.ai proxy (same HTML back). Each
+        # leg is timeboxed to stay inside the router's 40s per-site deadline.
+        html = await fetch_plain(url, timeout=6)
         if html:
             return html
-        for attempt in range(2):
-            try:
-                r = await session.get(url, timeout=12)
-                if r.status_code >= 400:
-                    return None
+        try:
+            r = await session.get(url, timeout=8)
+            if r.status_code < 400:
                 return r.text
-            except Exception:
-                if attempt < 1:
-                    await asyncio.sleep(1)
-                    continue
+        except Exception:
+            pass
+        return await fetch_jina(url, timeout=12)
         return None
 
     def _parser(self, htmls):
@@ -90,10 +87,15 @@ class Magnetdl:
                     return
                 soup = BeautifulSoup(html, "html.parser")
                 dt = soup.find("dt", string=re.compile(r"Info Hash", re.I))
-                if not dt:
-                    return
-                dd = dt.find_next_sibling("dd")
-                info_hash = dd.get_text(strip=True) if dd else None
+                info_hash = None
+                if dt:
+                    dd = dt.find_next_sibling("dd")
+                    info_hash = dd.get_text(strip=True) if dd else None
+                if not info_hash:
+                    # jina's proxy HTML keeps the raw 40-hex info hash even
+                    # though the dt/dd structure is rewritten.
+                    m = re.search(r"[0-9a-fA-F]{40}", html)
+                    info_hash = m.group(0) if m else None
                 if info_hash:
                     obj["hash"] = info_hash
                     obj["magnet"] = build_magnet(info_hash, obj["name"])
