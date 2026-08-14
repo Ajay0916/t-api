@@ -190,13 +190,32 @@ async def get_search_combo(
     active_sites = [site for site in sites_list if not site_health.is_blocked(site)]
     missed = await _collect(_build_tasks(active_sites))
 
+    def _site_guaranteed_dedup(items):
+        """Every site keeps its top result so no site ever vanishes (the
+        same popular release on 5 sites still shows all 5 sites), while
+        extra results beyond the first-per-site are deduped by infohash
+        so high limits don't fill the list with identical torrents."""
+        guaranteed = {}
+        seen = set()
+        extras = []
+        for item in items:
+            site = item.get("site")
+            h = str(item.get("hash") or "").strip().lower()
+            if site not in guaranteed:
+                guaranteed[site] = item
+                if h:
+                    seen.add(h)
+            elif h and h in seen:
+                continue
+            else:
+                if h:
+                    seen.add(h)
+                extras.append(item)
+        return list(guaranteed.values()) + extras
+
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
-    # Every site keeps its own results: dedup by infohash across sites
-    # silently drops whole sites (same popular release on 5 sites = 4
-    # sites vanish), which breaks the "every site returns at any limit"
-    # contract the bot relies on.
-    unique_data = main_data + last_data
+    unique_data = _site_guaranteed_dedup(main_data + last_data)
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
@@ -220,7 +239,7 @@ async def get_search_combo(
                         missed = retry_missed
                 main_data.sort(key=_seeders, reverse=True)
                 last_data.sort(key=_seeders, reverse=True)
-                unique_data = main_data + last_data
+                unique_data = _site_guaranteed_dedup(main_data + last_data)
                 filtered = _apply_filters(
                     unique_data, min_seeders, category, quality, language, format,
                     min_size, max_size,
