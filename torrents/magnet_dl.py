@@ -3,11 +3,9 @@ import re
 import time
 from urllib.parse import quote
 
-import aiohttp
-from helper.session import get_connector
 from bs4 import BeautifulSoup
+from curl_cffi.requests import AsyncSession
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.html_scraper import Scraper
 from constants.base_url import MAGNETDL
 from helper.trackers import build_magnet, build_torrent_url
 
@@ -18,6 +16,18 @@ class Magnetdl:
     def __init__(self):
         self.BASE_URL = MAGNETDL
         self.LIMIT = None
+
+    async def _fetch(self, session, url):
+        # magnetdl's Cloudflare drops aiohttp's TLS fingerprint but serves
+        # real browsers, so pages are fetched with curl_cffi impersonating
+        # Chrome (same TLS/JA3 profile curl uses).
+        try:
+            r = await session.get(url, timeout=20)
+            if r.status_code >= 400:
+                return None
+            return r.text
+        except Exception:
+            return None
 
     def _parser(self, htmls):
         try:
@@ -65,10 +75,10 @@ class Magnetdl:
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                html = await Scraper().get_all_results(session, url)
-                if not html or not html[0]:
+                html = await self._fetch(session, url)
+                if not html:
                     return
-                soup = BeautifulSoup(html[0], "html.parser")
+                soup = BeautifulSoup(html, "html.parser")
                 dt = soup.find("dt", string=re.compile(r"Info Hash", re.I))
                 if not dt:
                     return
@@ -95,8 +105,8 @@ class Magnetdl:
         return result
 
     async def parser_result(self, start_time, url, session, page=1, query=None):
-        htmls = await Scraper().get_all_results(session, url)
-        results = self._parser(htmls)
+        html = await self._fetch(session, url)
+        results = self._parser([html]) if html else None
         if results is not None:
             urls = [item["url"] for item in results["data"]]
             results = await self._get_torrent(results, session, urls)
@@ -109,8 +119,8 @@ class Magnetdl:
                     url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
                         quote(query), page
                     )
-                    htmls = await Scraper().get_all_results(session, url)
-                    res = self._parser(htmls)
+                    html = await self._fetch(session, url)
+                    res = self._parser([html]) if html else None
                     if res is None or len(res["data"]) == 0:
                         break
                     urls = [item["url"] for item in res["data"]]
@@ -128,7 +138,7 @@ class Magnetdl:
         return results
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
+        async with AsyncSession(impersonate="chrome") as session:
             start_time = time.time()
             self.LIMIT = limit
             url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
