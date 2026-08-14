@@ -52,6 +52,7 @@ async def search_for_torrents(
     limit: Optional[int] = 0,
     page: Optional[int] = 1,
     fresh: Optional[int] = 0,
+    dedup: Optional[int] = 0,
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
@@ -92,12 +93,12 @@ async def search_for_torrents(
 
     cache_key = (
         f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
-        f":{quality}:{language}:{format}:{min_size}:{max_size}"
+        f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}"
     )
     if not fresh:
         cached = search_cache.get(cache_key)
         if cached is not None:
-            return clean_results(cached)
+            return clean_results(cached, dedup=bool(dedup))
 
     try:
         resp = await _search_with_retry(
@@ -191,7 +192,7 @@ async def search_for_torrents(
     if len(resp["data"]) > 0:
         site_health.mark_success(site)
         search_cache.set(cache_key, resp)
-        return clean_results(resp)
+        return clean_results(resp, dedup=bool(dedup))
 
     return error_handler(
         status_code=status.HTTP_404_NOT_FOUND,

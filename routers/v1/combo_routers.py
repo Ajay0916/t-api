@@ -34,6 +34,7 @@ async def get_search_combo(
     limit: Optional[int] = 0,
     page: Optional[int] = 1,
     fresh: Optional[int] = 0,
+    dedup: Optional[int] = 0,
     min_seeders: Optional[int] = 0,
     category: Optional[str] = None,
     sort: Optional[str] = "seeders",
@@ -58,7 +59,7 @@ async def get_search_combo(
     cache_key = (
         f"combo:{sites}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}"
-        f":{min_size}:{max_size}"
+        f":{min_size}:{max_size}:{dedup}"
     )
     if not fresh:
         cached = combo_cache.get(cache_key)
@@ -216,7 +217,8 @@ async def get_search_combo(
 
     main_data.sort(key=_seeders, reverse=True)
     last_data.sort(key=_seeders, reverse=True)
-    unique_data = _site_guaranteed_dedup(main_data + last_data)
+    merged = main_data + last_data
+    unique_data = _site_guaranteed_dedup(merged) if dedup else merged
     relaxed = False
     if unique_data:
         filtered = _apply_filters(
@@ -240,7 +242,8 @@ async def get_search_combo(
                         missed = retry_missed
                 main_data.sort(key=_seeders, reverse=True)
                 last_data.sort(key=_seeders, reverse=True)
-                unique_data = _site_guaranteed_dedup(main_data + last_data)
+                merged = main_data + last_data
+                unique_data = _site_guaranteed_dedup(merged) if dedup else merged
                 filtered = _apply_filters(
                     unique_data, min_seeders, category, quality, language, format,
                     min_size, max_size,
