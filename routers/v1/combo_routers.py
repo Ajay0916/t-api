@@ -63,7 +63,7 @@ async def get_search_combo(
         cached = combo_cache.get(cache_key)
         if cached is not None:
             cached["time"] = time.time() - start_time
-            return clean_results(cached, sort=False)
+            return clean_results(cached, sort=False, dedup=False)
 
     all_sites = check_if_site_available("1337x")
     if sites:
@@ -265,7 +265,7 @@ async def get_search_combo(
     # serving "No result found" from disk until its TTL expires.
     if COMBO["total"] > 0:
         combo_cache.set(cache_key, COMBO)
-    return clean_results(COMBO, sort=False)
+    return clean_results(COMBO, sort=False, dedup=False)
 
 
 @router.get("/trending")
@@ -340,7 +340,7 @@ async def get_all_trending(limit: Optional[int] = 0, sites: Optional[str] = ""):
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    return clean_results(COMBO)
+    return clean_results(COMBO, dedup=False)
 
 
 @router.get("/recent")
@@ -415,4 +415,4 @@ async def get_all_recent(limit: Optional[int] = 0, sites: Optional[str] = ""):
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Result not found."},
         )
-    return clean_results(COMBO)
+    return clean_results(COMBO, dedup=False)
