@@ -13,7 +13,8 @@ async def fetch_plain(url, timeout=12):
     while challenging or blackholing impersonated TLS clients, so the plain
     curl path is the primary fetcher for those sites. IPv4 is forced because
     the sites publish AAAA records and this host's v6 routing is broken (v6
-    attempts hang until timeout).
+    attempts hang until timeout). Only HTTP 200 bodies count as success so the
+    caller's fallback chain (curl_cffi) engages on challenges/blocks.
     """
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -23,6 +24,8 @@ async def fetch_plain(url, timeout=12):
             "--compressed",
             "-A",
             CHROME_UA,
+            "-w",
+            "\n%{http_code}",
             "--max-time",
             str(timeout),
             url,
@@ -34,4 +37,11 @@ async def fetch_plain(url, timeout=12):
         return None
     if proc.returncode != 0 or not out:
         return None
-    return out.decode("utf-8", errors="replace")
+    body, _, code = out.rpartition(b"\n")
+    try:
+        code = int(code)
+    except ValueError:
+        return None
+    if code != 200:
+        return None
+    return body.decode("utf-8", errors="replace")
