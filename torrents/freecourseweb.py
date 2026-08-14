@@ -3,11 +3,10 @@ import re
 import time
 from urllib.parse import quote
 
-import aiohttp
-from helper.session import get_connector
 from bs4 import BeautifulSoup
+from curl_cffi.requests import AsyncSession
+from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.html_scraper import Scraper
 from constants.base_url import FREECOURSEWEB
 from helper.trackers import build_torrent_url
 
@@ -19,14 +18,30 @@ class FreeCourseWeb:
         self.BASE_URL = FREECOURSEWEB
         self.LIMIT = None
 
+    async def _fetch(self, session, url):
+        # Cloudflare challenges aiohttp's TLS fingerprint here (curl gets
+        # 200), so pages are fetched with curl_cffi impersonating Chrome.
+        # IPv6 forced off: AAAA records + hosts with broken v6 routing hang.
+        for attempt in range(3):
+            try:
+                r = await session.get(url, timeout=20)
+                if r.status_code >= 400:
+                    return None
+                return r.text
+            except Exception:
+                if attempt < 2:
+                    await asyncio.sleep(2)
+                    continue
+        return None
+
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                html = await Scraper().get_all_results(session, url)
-                if not html or not html[0]:
+                html = await self._fetch(session, url)
+                if not html:
                     return None
-                m = re.search(r'href="(magnet:\?xt=[^"]+)"', html[0])
+                m = re.search(r'href="(magnet:\?xt=[^"]+)"', html)
                 if not m:
                     return None
                 magnet = m.group(1)
@@ -79,7 +94,10 @@ class FreeCourseWeb:
             return None
 
     async def search(self, query, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
+        async with AsyncSession(
+            impersonate="chrome",
+            curl_options={CurlOpt.IPRESOLVE: 1},
+        ) as session:
             start_time = time.time()
             self.LIMIT = limit
             return await self._collect(
@@ -94,7 +112,10 @@ class FreeCourseWeb:
             )
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
+        async with AsyncSession(
+            impersonate="chrome",
+            curl_options={CurlOpt.IPRESOLVE: 1},
+        ) as session:
             start_time = time.time()
             self.LIMIT = limit
             return await self._collect(
@@ -113,8 +134,8 @@ class FreeCourseWeb:
         total_pages = page
         current = page
         while True:
-            html = await Scraper().get_all_results(session, url_fn(current))
-            results = self._parser(html)
+            html = await self._fetch(session, url_fn(current))
+            results = self._parser([html]) if html else None
             if results is None or len(results["data"]) == 0:
                 break
             seen = {obj["url"] for obj in all_data}
