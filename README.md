@@ -32,7 +32,7 @@
 - **Faster detail scraping** — ExtraTorrent, MagnetDL & TorLock concurrency tuned; ExtraTorrent went from ~24s to ~5s for 10 results, TorLock from ~12s to ~4s.
 - **Combo merges every site** — `limit` caps how many results each site fetches; the merged output returns everything collected sorted by seeders (infohash dedup sirf `dedup=1` pe).
 - **Group search** — `/all/search`, `/all/trending` & `/all/recent` accept `sites=site1,site2` to search a subset of sites (powers WZML's General/Courses/Books buttons) aur `page` param bhi support karte hain; `sites` omitted = combo-available sites.
-- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers), `include=<word>` (sirf us word wale results — hard filter, language ki tarah kabhi relax nahi hota), aur `dedup=1` (duplicate protection ON; default off = raw results) — sab `/all/search` aur `/search` dono pe. `category=audiobook` ab Audio/ABook/Audiobook categories + audiobook naam wale results match karta hai (strict name match).
+- **Result filters & sort** — `min_seeders`, `category`, `sort=seeders|size|date`, `order=asc|desc`, movie filters `quality=480|720|1080|4k` & `language=hindi|english|tamil|...`, book filter `format=pdf|epub|mobi|azw3|...`, size range `min_size`/`max_size` (`500MB`, `2GB`, or bare MB numbers), `include=<word>` (sirf us word wale results — hard filter, language ki tarah kabhi relax nahi hota), aur `dedup=1` (duplicate protection ON; default off = raw results) — sab `/all/search` aur `/search` dono pe. `timeout=<sec>` per-site deadline override karta hai (default 18s) — slow-site searches ke liye bada rakho (`timeout=600` = 10 min/site). `min_seeders` sirf un results ko filter karta hai jinme seeders data hai — books/courses (non-seeder) results hamesha pass hote hain, drop nahi hote. `category=audiobook` ab Audio/ABook/Audiobook categories + audiobook naam wale results match karta hai (strict name match).
 - **Auto-detected metadata** — every result is enriched with `quality` (`480p/720p/1080p/4K`) and `language` (`Hindi, English, Tamil...`) for movies, and `format` (`PDF/EPUB/MOBI...`) for books, detected from the release name / extension / download URL — WZML and API clients can show them without parsing titles. Multi-quality releases (`720p 480p`) match either quality filter.
 - **Smart filter fallback** — if a strict filter combo finds nothing (e.g. Hindi + 1080p when the Hindi release is only 4K), the API relaxes quality → format → category and returns the best available results (marked `relaxed_filters: true`). The `language` filter is **never** relaxed: a Hindi search never silently returns English releases. Language-specific searches also retry only the sites that were slow/empty in the first pass before relaxing anything.
 - **Safe language detection** — language tags use word-start matching (`[Hin-Eng]`, `HinDub`, `[Tam+Tel]` all work) without false positives from substrings (`ben` in "Unbent", `mar` in "Driftmark", `tel` in "Hotel").
@@ -43,10 +43,11 @@
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
 - **GZip responses** — API responses are gzip-compressed automatically (big combo payloads reach WZML faster).
 - **API key auth** — optional `PYTORRENT_API_KEY` via `x-api-key` header. ⚠️ WZML-X doesn't send headers, so **don't enable the key if WZML-X uses this API** (keep it unset for public/WZML use).
+- **API PIN auth** — optional `API_PIN` (env) — har API route pe `X-API-Pin` header ya `?pin=` query chahiye, nahi to `403` (jab set ho). `/health` aur home page public rehte hain; short-token `/api/v1/torrent_file/<token>` aur `/api/v1/magnet/<token>` links bhi public (shared bot links), lekin full-URL proxy form (`/api/v1/torrent_file?url=...`) PIN maangta hai.
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
-- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites under one hard 18s cap (true deadline, results never drag); slow-but-alive sites are retried next round instead of being blacklisted; hard-failed/down sites auto-skip; 1337x pushed to the end of combo results.
+- **Combo search + health tracking** — `/all/search`, `/all/trending`, `/all/recent` run all sites under one hard 18s per-site cap (overridable with `timeout=<sec>`; true deadline, results never drag); slow-but-alive sites are retried next round instead of being blacklisted; hard-failed/down sites auto-skip; 1337x pushed to the end of combo results.
 - **Concurrency caps** — bounded detail-page scraping so the VPS IP doesn't get blocked.
 - **Query encoding fixes** — multi-word queries (`bob proctor`) work on every site.
 - **Cleaner output** — seeders/leechers/downloads normalized to int.
@@ -83,10 +84,32 @@ pip install -r requirements.txt
 python main.py                  # → http://localhost:8009
 ```
 
-VPS par 24×7 chalane ke liye:
+VPS par 24×7 chalane ke liye (systemd — PIN ke saath, auto-restart):
+
+```sh
+cat > /etc/systemd/system/t-api.service <<'EOF'
+[Unit]
+Description=Torrents API
+After=network.target
+
+[Service]
+WorkingDirectory=/home/ubuntu/t-api
+Environment=API_PIN=mysecret
+ExecStart=/home/ubuntu/t-api/venv/bin/python main.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload && systemctl enable --now t-api
+```
+
+Systemd nahi chahiye to simple:
 
 ```sh
 nohup ./venv/bin/python main.py > server.log 2>&1 &
+# PIN ke saath: env API_PIN=mysecret ./venv/bin/python main.py
 ```
 
 IP block hote par proxy/Tor se chalane ke liye (sab sites support karti hain):
@@ -111,11 +134,11 @@ docker compose up -d --build
 | `GET /api/v1/sites` | — returns `supported_sites` plus `sites[{site,name}]` |
 | `GET /api/v1/sites/config` | — |
 | `GET /api/v1/sites/status` | — every site's `enabled`/`manual_blocked`/`blocked`, cooldown, fail count, combo/trending/recent availability |
-| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
+| `GET /api/v1/search` | `site` ✅, `query` ✅, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size`, `timeout` |
 | `GET /api/v1/trending` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/recent` | `site` ✅, `limit`, `category`, `page` |
 | `GET /api/v1/category` | `site` ✅, `query` ✅, `category` ✅, `limit`, `page` |
-| `GET /api/v1/all/search` | `query` ✅, `sites`, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size` |
+| `GET /api/v1/all/search` | `query` ✅, `sites`, `limit`, `page`, `fresh`, `dedup`, `include`, `min_seeders`, `category`, `sort`, `order`, `quality`, `language`, `format`, `min_size`, `max_size`, `timeout` |
 | `GET /api/v1/torrent_file` | `url` ✅, `name` — proxies a .torrent file through this server |
 | `POST /api/v1/status/{site}/disable` · `/enable` | manually block/unblock a site without restart (disabled sites disappear from `/api/v1/sites` → WZML buttons) |
 | `GET /api/v1/all/trending` | `sites`, `limit`, `page` |
