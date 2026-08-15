@@ -135,10 +135,17 @@ async def search_for_torrents(
         except (TypeError, ValueError):
             return -1
 
+    def _has_seeders(item):
+        try:
+            float(str(item.get("seeders")).replace(",", "").strip())
+            return True
+        except (TypeError, ValueError):
+            return False
+
     def _apply_filters(items):
         out = items
         if min_seeders > 0:
-            out = [i for i in out if _seeders(i) >= min_seeders]
+            out = [i for i in out if not _has_seeders(i) or _seeders(i) >= min_seeders]
         if include:
             out = [i for i in out if include in str(i.get("name") or "").lower()]
         if category:
@@ -171,7 +178,7 @@ async def search_for_torrents(
             relaxed_data = [
                 item
                 for item in resp["data"]
-                if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                if (min_seeders <= 0 or not _has_seeders(item) or _seeders(item) >= min_seeders)
                 and (not include or include in str(item.get("name") or "").lower())
                 and (not c2 or category_matches(item, c2))
                 and (not q2 or quality_matches(item, q2))
@@ -187,7 +194,7 @@ async def search_for_torrents(
             data = [
                 item
                 for item in resp["data"]
-                if (min_seeders <= 0 or _seeders(item) >= min_seeders)
+                if (min_seeders <= 0 or not _has_seeders(item) or _seeders(item) >= min_seeders)
                 and (not include or include in str(item.get("name") or "").lower())
                 and (not language or language_matches(item, language))
             ]

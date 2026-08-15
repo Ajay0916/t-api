@@ -95,6 +95,13 @@ async def get_search_combo(
         except (TypeError, ValueError):
             return -1
 
+    def _has_seeders(item):
+        try:
+            float(str(item.get("seeders")).replace(",", "").strip())
+            return True
+        except (TypeError, ValueError):
+            return False
+
     def _apply_filters(
         items, min_seeders, category, quality, language, format_, min_size="", max_size="",
         include="",
@@ -102,7 +109,7 @@ async def get_search_combo(
         """Apply every active filter; returns the filtered list."""
         out = items
         if min_seeders > 0:
-            out = [i for i in out if _seeders(i) >= min_seeders]
+            out = [i for i in out if not _has_seeders(i) or _seeders(i) >= min_seeders]
         if include:
             out = [i for i in out if include in str(i.get("name") or "").lower()]
         if category:
