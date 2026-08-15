@@ -1,15 +1,35 @@
 import asyncio
+import os
 import re
 import time
+import uuid
 from urllib.parse import quote
 
 import aiohttp
-from helper.session import get_connector
+from helper.session import close_flare_session_async, get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORLOCK
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+
+FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+_SESSION_TTL = 300.0
+_sid = None
+_sid_created = 0.0
+_flare_lock = asyncio.Lock()
+
+
+def _get_sid():
+    global _sid, _sid_created
+    now = time.time()
+    if not _sid or now - _sid_created > _SESSION_TTL:
+        old = _sid
+        _sid = "torlock-{}".format(uuid.uuid4().hex[:10])
+        _sid_created = now
+        # Replacing the session leaks the old browser unless destroyed.
+        close_flare_session_async(old, FLARESOLVERR_URL)
+    return _sid
 
 
 class Torlock:
@@ -17,12 +37,55 @@ class Torlock:
     def __init__(self):
         self.BASE_URL = TORLOCK
         self.LIMIT = None
+        self._flare_cookies = {}
+        self._flare_ua = ""
+
+    @decorator_asyncio_fix
+    async def _flaresolverr(self, payload, timeout):
+        async with _flare_lock:
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as session:
+                async with session.post(
+                    f"{FLARESOLVERR_URL}/v1", json=payload, timeout=timeout
+                ) as res:
+                    data = await res.json(content_type=None)
+        solution = data.get("solution") or {}
+        if solution.get("status") != 200:
+            return None
+        return solution
+
+    async def _flare_page(self, url):
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 60000,
+            "session": _get_sid(),
+        }
+        sol = await self._flaresolverr(payload, aiohttp.ClientTimeout(total=65))
+        if not sol:
+            return None
+        self._flare_cookies = {
+            c.get("name"): c.get("value")
+            for c in (sol.get("cookies") or [])
+            if c.get("name") and c.get("value")
+        }
+        self._flare_ua = sol.get("userAgent") or ""
+        return sol.get("response") or None
 
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                async with session.get(url, headers=HEADER_AIO, timeout=AIO_TIMEOUT) as res:
+                headers = (
+                    {**HEADER_AIO, "User-Agent": self._flare_ua}
+                    if self._flare_ua
+                    else HEADER_AIO
+                )
+                kwargs = {"headers": headers, "timeout": AIO_TIMEOUT}
+                if self._flare_cookies:
+                    kwargs["cookies"] = self._flare_cookies
+                async with session.get(url, **kwargs) as res:
                     html = await res.text(encoding="ISO-8859-1")
                     soup = BeautifulSoup(html, "html.parser")
                     try:
@@ -159,6 +222,15 @@ class Torlock:
     async def parser_result(self, start_time, url, session, idx=0):
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls, idx)
+        if result is None or not result.get("data"):
+            # torlock2.com is Cloudflare-fronted; the VPS IP often gets a
+            # JS-challenge page (HTTP 200, zero rows). Solve it via
+            # FlareSolverr and reparse before giving up.
+            flare_html = await self._flare_page(url)
+            if flare_html:
+                fresult, furls = self._parser([flare_html], idx)
+                if fresult and fresult.get("data"):
+                    result, urls = fresult, furls
         if result is not None:
             results = await self._get_torrent(result, session, urls)
             results["time"] = time.time() - start_time
