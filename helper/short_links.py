@@ -83,3 +83,8 @@ def lookup(token):
             _save()
             return None
         return info
+
+
+def register_magnet(magnet):
+    """Store a magnet and return a short token for it ("" if none)."""
+    return register(magnet)

@@ -3,7 +3,7 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 
 from helper.trackers import build_magnet, build_torrent_url
-from helper.short_links import register
+from helper.short_links import register, register_magnet
 
 
 CATEGORY_ALIASES = {
@@ -361,6 +361,8 @@ def clean_results(resp, sort=True, dedup=True):
                 item["short"] = register(
                     item["torrent"], item.get("name") or "", item.get("extension") or ""
                 )
+            if item.get("magnet") and not item.get("magnet_short"):
+                item["magnet_short"] = register_magnet(item["magnet"])
         cleaned.append(item)
 
     if dedup:

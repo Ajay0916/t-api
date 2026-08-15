@@ -13,6 +13,7 @@ from routers.home_router import router as home_router
 from routers.v1.search_url_router import router as search_url_router
 from routers.v1.status_router import router as status_router
 from routers.v1.torrent_file_router import router as torrent_file_router
+from routers.v1.magnet_router import router as magnet_router
 from helper.uptime import getUptime
 from helper.dependencies import authenticate_request
 from mangum import Mangum
@@ -70,6 +71,7 @@ app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depen
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends(authenticate_request)])
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file", dependencies=[Depends(authenticate_request)])
+app.include_router(magnet_router, prefix="/api/v1/magnet", dependencies=[Depends(authenticate_request)])
 app.include_router(home_router, prefix="")
 
 handler = Mangum(app)
