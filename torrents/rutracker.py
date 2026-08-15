@@ -611,8 +611,10 @@ class RuTracker:
             url = "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid)
             try:
                 html = await self._fetch_html(url, _ENRICH_TIMEOUT)
-            except Exception:
+            except Exception as e:
+                _rt_debug("magnet", tid, "fetch exception:", repr(e))
                 return None
+            _rt_debug("magnet", tid, "fetch", bool(html), "login", self._is_login_page(html or ""))
             if html and self._is_login_page(html) and not _RUTRACKER_COOKIE:
                 # Login did not carry over; log in and land on the topic
                 # page in one request instead.
@@ -620,12 +622,14 @@ class RuTracker:
                     html = await self._login_and_fetch(
                         "viewtopic.php?t={}".format(tid), _ENRICH_TIMEOUT
                     )
+                    _rt_debug("magnet", tid, "login-fallback", bool(html), "login", self._is_login_page(html or ""))
                 except Exception:
                     return None
             if not html or self._is_login_page(html):
                 return None
             soup = BeautifulSoup(html, "html.parser")
             a = soup.select_one('a[href*="magnet:?xt=urn:btih:"]')
+            _rt_debug("magnet", tid, "anchor", bool(a))
             if not a:
                 return None
             href = a.get("href") or ""
@@ -697,6 +701,7 @@ class RuTracker:
             elapsed = time.time() - start_time
             enrich_budget = max(8.0, min(22.0, 38.0 - elapsed))
             done, pending = await asyncio.wait(tasks, timeout=enrich_budget)
+            _rt_debug("enrich", enrich_n, "budget", round(enrich_budget, 1), "done", len(done))
             for t in pending:
                 t.cancel()
             extras = []
