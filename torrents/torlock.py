@@ -142,9 +142,19 @@ class Torlock:
                     td = tr.find_all("td")
                     if len(td) == 0:
                         continue
-                    name = td[0].get_text(strip=True)
+                    # New layout: the row's name link is a.tl-name; the first
+                    # <a> in the cell is the category badge (e.g. /movies.html).
+                    # Fall back to any /torrent/ link for the older layout.
+                    name_a = td[0].find("a", class_="tl-name")
+                    if name_a is None:
+                        name_a = td[0].find(
+                            "a", href=lambda h: h and "/torrent/" in h
+                        )
+                    if name_a is None:
+                        continue
+                    name = name_a.get_text(strip=True)
                     if name != "":
-                        url = td[0].find("a")["href"]
+                        url = name_a["href"]
                         if url == "":
                             break
                         if not url.startswith("http"):
