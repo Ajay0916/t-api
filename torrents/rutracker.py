@@ -229,6 +229,17 @@ def _cookie_list():
             cookies.append({"name": name.strip(), "value": value.strip()})
     return cookies
 
+
+def _cookie_dict():
+    """Configured rutracker cookie as a plain {name: value} dict."""
+    out = {}
+    for part in _cookie_list():
+        name = (part.get("name") or "").strip()
+        value = (part.get("value") or "").strip()
+        if name and value:
+            out[name] = value
+    return out
+
 # Warm Flaresolverr session, reused across flows so the Cloudflare challenge
 # is only solved occasionally (each fresh solve takes ~10-15s). Rotated on a
 # TTL and when a stale page is detected.
@@ -287,7 +298,7 @@ def _cache_solution(solution):
 
 
 def _auth_cookies():
-    """Best available rutracker login cookies.
+    """Best available rutracker login cookies as a plain {name: value} dict.
 
     Prefer the cached Flaresolverr solve cookies - after the search login
     POST they hold cf_clearance AND bb_session, so enrichment topic fetches
@@ -295,7 +306,7 @@ def _auth_cookies():
     captcha-gated from datacenter IPs). Falls back to the manual cookie."""
     if _plain_cookies:
         return _merge_cookie_list(_plain_cookies)
-    return _cookie_list()
+    return _cookie_dict()
 
 
 def _merge_cookie_list(cookies):
@@ -303,12 +314,17 @@ def _merge_cookie_list(cookies):
     Flaresolverr session cookies; the manual cookie keeps us logged in even
     when the session browser only solved Cloudflare."""
     merged = dict(cookies)
-    for part in _cookie_list():
-        k, _, v = part.partition("=")
-        k = k.strip()
-        if k and v:
-            merged[k] = v
+    merged.update(_cookie_dict())
     return merged
+
+
+def _flare_cookie_list(cookies):
+    """Plain {name: value} -> FlareSolverr [{"name": .., "value": ..}]."""
+    return [
+        {"name": k, "value": v}
+        for k, v in (cookies or {}).items()
+        if k and v
+    ]
 
 
 def _dl_filename(headers):
@@ -371,7 +387,7 @@ async def fetch_dl_torrent(url):
 
     # Stage B - FlareSolverr browser fallback
     for attempt in (1, 2):
-        cookies = _auth_cookies()
+        cookies = _flare_cookie_list(_auth_cookies())
         if cookies:
             payload = {
                 "cmd": "request.get",
@@ -542,7 +558,7 @@ class RuTracker:
             "maxTimeout": 55000,
             "session": _get_sid(),
         }
-        cookies = _auth_cookies()
+        cookies = _flare_cookie_list(_auth_cookies())
         if cookies:
             # Reuse a warm session across flows (challenge solves are slow,
             # ~10-15s each, and the API deadline is 28s). Explicit cookies
