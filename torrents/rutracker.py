@@ -4,7 +4,7 @@ import os
 import re
 import time
 import uuid
-from urllib.parse import quote, quote_plus, urlencode
+from urllib.parse import quote, quote_plus, urlencode, urlsplit
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -13,6 +13,7 @@ from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
+_RUTRACKER_BASE = "https://rutracker.org"
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
 _RUTRACKER_PASS = os.getenv("RUTRACKER_PASSWORD", "").strip()
 
@@ -259,57 +260,103 @@ def _rotate_sid():
     close_flare_session_async(old, FLARESOLVERR_URL)
 
 
+def _rt_debug(*args):
+    if (os.getenv("RUTRACKER_DEBUG") or "1").strip().lower() not in ("0", "false", "no"):
+        print("[rutracker]", *args, flush=True)
+
+
 async def fetch_dl_torrent(url):
     """Fetch a rutracker dl.php .torrent through FlareSolverr (plain
-    fetches 403 behind Cloudflare) using the same warm session + cookie as
-    search. Returns (torrent_bytes, upstream_filename) or None."""
-    sid = _get_sid()
-    payload = {
-        "cmd": "request.get",
-        "session": sid,
-        "url": url,
-        "maxTimeout": 60000,
-    }
-    cookies = _cookie_list()
-    if cookies:
-        payload["cookies"] = cookies
-    try:
-        async with _flare_lock:
-            async with aiohttp.ClientSession(
-                connector=get_connector(), connector_owner=False, trust_env=True
-            ) as session:
-                async with session.post(
-                    f"{FLARESOLVERR_URL}/v1",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=75),
-                ) as res:
-                    data = await res.json(content_type=None)
-        solution = data.get("solution") or {}
-        if solution.get("status") != 200:
+    fetches 403 behind Cloudflare). Uses the warm session + cookie when
+    available, otherwise logs in via the POST flow like search. Returns
+    (torrent_bytes, upstream_filename) or None."""
+    for attempt in (1, 2):
+        cookies = _cookie_list()
+        if cookies:
+            payload = {
+                "cmd": "request.get",
+                "session": _get_sid(),
+                "url": url,
+                "maxTimeout": 60000,
+                "cookies": cookies,
+            }
+        elif _RUTRACKER_USER and _RUTRACKER_PASS:
+            parts = urlsplit(url)
+            redirect = parts.path.lstrip("/")
+            if parts.query:
+                redirect += "?" + parts.query
+            payload = {
+                "cmd": "request.post",
+                "url": "{}/forum/login.php".format(_RUTRACKER_BASE),
+                "postData": urlencode(
+                    {
+                        "login_username": _RUTRACKER_USER,
+                        "login_password": _RUTRACKER_PASS,
+                        "login": "Вход",
+                        "redirect": redirect,
+                    }
+                ),
+                "maxTimeout": 60000,
+                "session": _SESSION,
+            }
+        else:
             return None
-        raw = solution.get("response") or ""
-        body = raw.encode("utf-8", "replace")
-        # FlareSolverr base64-encodes binary bodies; bencode dicts start
-        # with 'd', so detect that and decode back to the real .torrent.
         try:
-            dec = base64.b64decode(raw, validate=True)
-            if dec[:1] == b"d":
-                body = dec
-        except Exception:
-            pass
-        if not body.startswith(b"d"):
-            return None
-        headers = solution.get("headers") or {}
-        up_name = ""
-        cd = headers.get("content-disposition") or ""
-        m = re.search(r'filename\*\s*=\s*"?([^";]+)', cd, re.I)
-        if m:
-            up_name = m.group(1).strip().strip('"')
-        return body, up_name
-    except Exception:
-        return None
-
-
+            async with _flare_lock:
+                async with aiohttp.ClientSession(
+                    connector=get_connector(), connector_owner=False, trust_env=True
+                ) as session:
+                    async with session.post(
+                        f"{FLARESOLVERR_URL}/v1",
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=75),
+                    ) as res:
+                        data = await res.json(content_type=None)
+            solution = data.get("solution") or {}
+            status = solution.get("status")
+            headers = solution.get("headers") or {}
+            ctype = str(headers.get("content-type") or "").lower()
+            _rt_debug("dl.php attempt", attempt, "status", status, "ct", ctype)
+            if status != 200:
+                _rt_debug("dl.php non-200 -> rotate")
+                _rotate_sid()
+                continue
+            raw = solution.get("response") or ""
+            low = raw[:400].lower()
+            if (
+                "just a moment" in low
+                or "cf-chl" in low
+                or "<!doctype html" in low
+            ):
+                _rt_debug("dl.php challenge page -> rotate")
+                _rotate_sid()
+                continue
+            body = raw.encode("utf-8", "replace")
+            # FlareSolverr base64-encodes binary bodies; bencode dicts start
+            # with 'd', so detect that and decode back to the real .torrent.
+            try:
+                dec = base64.b64decode(re.sub(r"\s+", "", raw), validate=True)
+                if dec[:1] == b"d":
+                    body = dec
+            except Exception:
+                pass
+            if not body.startswith(b"d"):
+                _rt_debug("dl.php not a torrent (head:", body[:50], ") -> rotate")
+                _rotate_sid()
+                continue
+            up_name = ""
+            m = re.search(
+                r'filename\*\s*=\s*"?([^";]+)',
+                headers.get("content-disposition") or "",
+                re.I,
+            )
+            if m:
+                up_name = m.group(1).strip().strip('"')
+            return body, up_name
+        except Exception as e:
+            _rt_debug("dl.php exception:", repr(e))
+            _rotate_sid()
+    return None
 _RU_MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "июн": 6,
     "июл": 7, "авг": 8, "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
