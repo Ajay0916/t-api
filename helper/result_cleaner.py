@@ -363,6 +363,10 @@ def clean_results(resp, sort=True, dedup=True):
                 )
             if item.get("magnet") and not item.get("magnet_short"):
                 item["magnet_short"] = register_magnet(item["magnet"])
+            if item.get("download") and not item.get("download_short"):
+                item["download_short"] = register(
+                    item["download"], item.get("name") or "", item.get("extension") or ""
+                )
         cleaned.append(item)
 
     if dedup:
