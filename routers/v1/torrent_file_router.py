@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from constants.headers import HEADER_AIO
 from helper.session import get_connector
+from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
 
 router = APIRouter(tags=["Torrent File Proxy"])
@@ -56,7 +57,7 @@ def _media_type(filename):
 @router.get("/")
 @router.get("")
 @router.get("/{slug}")
-async def proxy_torrent(url: str, name: str = "", slug: str = ""):
+async def proxy_torrent(url: str = "", name: str = "", slug: str = "", ext: str = ""):
     """Fetch a .torrent / book file through this server and stream it back.
 
     Lets WZML's Direct Link keep working even when the original CDN blocks
@@ -65,6 +66,19 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
     """
     if not url.lower().startswith(("http://", "https://")):
         return JSONResponse(status_code=400, content={"error": "Invalid URL."})
+
+    # Short-link form: /torrent_file/<token> without url=...&name=...
+    if not url and slug:
+        info = lookup(slug)
+        if not info:
+            return JSONResponse(
+                status_code=404, content={"error": "Link not found."}
+            )
+        url = info.get("url") or ""
+        if not name:
+            name = info.get("name") or ""
+        if not ext:
+            ext = info.get("ext") or ""
 
     # RuTracker dl.php is behind Cloudflare and 403s plain fetches; get the
     # real .torrent through FlareSolverr with the search session cookie.
@@ -124,10 +138,12 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
     up_name = _upstream_filename(res.headers.get("Content-Disposition") or "")
     filename = name or up_name or _safe_filename(url)
     if not re.search(r"\.[a-zA-Z0-9]{2,5}$", filename, re.I):
-        ext = ""
+        chosen = ""
         up_ext = up_name.rsplit(".", 1)[-1] if "." in up_name else ""
         if up_ext and re.fullmatch(r"[a-z0-9]{2,5}", up_ext, re.I):
-            ext = up_ext.lower()
+            chosen = up_ext.lower()
+        elif ext and re.fullmatch(r"[a-z0-9]{2,8}", ext, re.I):
+            chosen = ext.lower()
         else:
             # The slug in the request path carries the extension the bot
             # picked (gutenberg .../xxx.epub), so borrow it when the name
@@ -138,7 +154,7 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
                 and slug_ext.lower() != "dl"
                 and re.fullmatch(r"[a-z0-9]{2,8}", slug_ext, re.I)
             ):
-                ext = slug_ext.lower()
+                chosen = slug_ext.lower()
             else:
                 m = re.search(
                     r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
@@ -146,9 +162,9 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
                     re.I,
                 )
                 if m:
-                    ext = m.group(1).lower()
-        if ext:
-            filename = filename.strip() + "." + ext
+                    chosen = m.group(1).lower()
+        if chosen:
+            filename = filename.strip() + "." + chosen
 
     # Hindi/Tamil/etc. titles can't go into the latin-1 Content-Disposition
     # header; send an ASCII fallback plus RFC 5987 filename* so browsers

@@ -3,6 +3,7 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 
 from helper.trackers import build_magnet, build_torrent_url
+from helper.short_links import register
 
 
 CATEGORY_ALIASES = {
@@ -356,6 +357,10 @@ def clean_results(resp, sort=True, dedup=True):
                     item["size_bytes"] = size_bytes
             if "size" not in item:
                 item["size"] = ""
+            if item.get("torrent") and not item.get("short"):
+                item["short"] = register(
+                    item["torrent"], item.get("name") or "", item.get("extension") or ""
+                )
         cleaned.append(item)
 
     if dedup:
