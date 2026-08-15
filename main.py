@@ -23,13 +23,6 @@ import time
 
 startTime = time.time()
 
-@app.on_event("startup")
-async def _startup_cleanup():
-    # Kill Flaresolverr sessions orphaned by the previous pkill -9 restart;
-    # leaked headless browsers make every challenge solve slower over time.
-    sweep_flare_sessions_async()
-
-
 app = FastAPI(
     title="Torrents-Api",
     version="1.6.10",
@@ -40,6 +33,13 @@ app = FastAPI(
         "url": "https://github.com/Ajay0916",
     },
 )
+
+@app.on_event("startup")
+async def _startup_cleanup():
+    # Kill Flaresolverr sessions orphaned by the previous pkill -9 restart;
+    # leaked headless browsers make every challenge solve slower over time.
+    sweep_flare_sessions_async()
+
 
 origins = ["*"]
 
