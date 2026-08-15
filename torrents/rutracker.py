@@ -286,6 +286,18 @@ def _cache_solution(solution):
         _plain_ua = solution.get("userAgent")
 
 
+def _auth_cookies():
+    """Best available rutracker login cookies.
+
+    Prefer the cached Flaresolverr solve cookies - after the search login
+    POST they hold cf_clearance AND bb_session, so enrichment topic fetches
+    and dl.php stay logged in without re-logging-in per request (logins are
+    captcha-gated from datacenter IPs). Falls back to the manual cookie."""
+    if _plain_cookies:
+        return _merge_cookie_list(_plain_cookies)
+    return _cookie_list()
+
+
 def _merge_cookie_list(cookies):
     """Layer the configured rutracker cookie (bb_session=...) over the
     Flaresolverr session cookies; the manual cookie keeps us logged in even
@@ -359,7 +371,7 @@ async def fetch_dl_torrent(url):
 
     # Stage B - FlareSolverr browser fallback
     for attempt in (1, 2):
-        cookies = _cookie_list()
+        cookies = _auth_cookies()
         if cookies:
             payload = {
                 "cmd": "request.get",
@@ -436,6 +448,9 @@ async def fetch_dl_torrent(url):
                 pass
             if not body.startswith(b"d"):
                 _rt_debug("dl.php not a torrent (head:", body[:50], ") -> rotate")
+                if _plain_cookies:
+                    _plain_cookies.clear()
+                    _rt_debug("dl.php stale solve cookies cleared")
                 _rotate_sid()
                 continue
             return body, _dl_filename(headers)
@@ -520,11 +535,14 @@ class RuTracker:
             "maxTimeout": 55000,
             "session": _get_sid(),
         }
-        if _RUTRACKER_COOKIE:
+        cookies = _auth_cookies()
+        if cookies:
             # Reuse a warm session across flows (challenge solves are slow,
             # ~10-15s each, and the API deadline is 28s). Explicit cookies
-            # keep us logged in without any login POST.
-            payload["cookies"] = _cookie_list()
+            # keep us logged in without any login POST - the cached solve
+            # cookies (cf_clearance + bb_session from the search login)
+            # make enrich/dl.php fast and captcha-free.
+            payload["cookies"] = cookies
         return await self._flaresolverr(payload, timeout)
 
     async def _login_and_fetch(self, redirect_target, timeout):

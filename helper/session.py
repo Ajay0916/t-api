@@ -54,3 +54,39 @@ def close_flare_session_async(sid, flare_url="http://127.0.0.1:8191"):
         )
     except RuntimeError:
         pass
+
+
+async def sweep_flare_sessions(flare_url="http://127.0.0.1:8191"):
+    """Destroy every Flaresolverr session (run at API startup).
+
+    t-api is restarted with pkill -9, which orphans the sessions of the
+    killed process - each one keeps a headless Chromium alive on the
+    Flaresolverr host. Over restarts they pile up and starve the host, so
+    challenge solves crawl (search deadlines hit, enrichment magnets are
+    skipped, dl.php falls back to slow browser fetches). On boot the new
+    process owns no sessions yet, so destroying all of them is safe.
+    """
+    flare_url = (flare_url or "http://127.0.0.1:8191").rstrip("/")
+    try:
+        async with aiohttp.ClientSession() as client:
+            async with client.post(
+                "{}/v1".format(flare_url),
+                json={"cmd": "sessions.list"},
+                timeout=aiohttp.ClientTimeout(total=8),
+            ) as res:
+                data = await res.json(content_type=None)
+        for sid in data.get("sessions") or []:
+            if isinstance(sid, str) and sid:
+                await close_flare_session(sid, flare_url)
+    except Exception:
+        pass
+
+
+def sweep_flare_sessions_async(flare_url="http://127.0.0.1:8191"):
+    """Fire-and-forget startup sweep; never blocks or crashes boot."""
+    try:
+        asyncio.get_running_loop().create_task(
+            sweep_flare_sessions(flare_url)
+        )
+    except RuntimeError:
+        pass

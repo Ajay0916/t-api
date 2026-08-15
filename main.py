@@ -15,12 +15,20 @@ from routers.v1.status_router import router as status_router
 from routers.v1.torrent_file_router import router as torrent_file_router
 from routers.v1.magnet_router import router as magnet_router
 from helper.uptime import getUptime
+from helper.session import sweep_flare_sessions_async
 from helper.dependencies import authenticate_request
 from mangum import Mangum
 from math import ceil
 import time
 
 startTime = time.time()
+
+@app.on_event("startup")
+async def _startup_cleanup():
+    # Kill Flaresolverr sessions orphaned by the previous pkill -9 restart;
+    # leaked headless browsers make every challenge solve slower over time.
+    sweep_flare_sessions_async()
+
 
 app = FastAPI(
     title="Torrents-Api",
