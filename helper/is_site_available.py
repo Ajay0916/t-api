@@ -423,6 +423,17 @@ all_sites = {
         "categories": [],
         "limit": 15,
     },
+    "gutenberg": {
+        "website": Gutenberg,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 15,
+    },
     "rutracker": {
         "combo_available": False,
         "website": RuTracker,
