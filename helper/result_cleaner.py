@@ -61,7 +61,7 @@ _LANG_PATTERNS = {
 # and "docx" over "doc".
 _EBOOK_FORMATS = (
     "azw3", "djvu", "fb2", "epub", "mobi", "cbz", "cbr", "docx",
-    "azw", "pdf", "txt", "doc", "lit", "rtf",
+    "azw", "pdf", "txt", "doc", "lit", "rtf", "mp3", "m4b",
 )
 
 
@@ -306,17 +306,36 @@ def clean_results(resp, sort=True, dedup=True):
             # missing link from the infohash so hash-bearing results always
             # give WZML a Direct Link (.torrent) AND a magnet.
             info_hash = str(item.get("hash") or "").strip()
+            built_torrent = False
             if info_hash and _BTIH_RE.match(info_hash):
                 if not item.get("torrent"):
                     item["torrent"] = build_torrent_url(
                         info_hash, item.get("name") or ""
                     )
+                    built_torrent = True
                 if not item.get("magnet"):
                     item["magnet"] = build_magnet(
                         info_hash, item.get("name") or ""
                     )
             if not (item.get("magnet") or item.get("torrent")):
                 continue
+            # Scrapers often leave the format unset; derive it from the
+            # download link (oceanofpdf ...pdf, hindiaudio ...mp3) or mark
+            # hash-built .torrent links so bot filenames get a real
+            # extension instead of the .dl fallback.
+            if item.get("extension") is None:
+                _link_text = (
+                    str(item.get("torrent") or "") + " "
+                    + str(item.get("download") or "")
+                )
+                _fm = re.search(
+                    r"\.(azw3|djvu|fb2|epub|mobi|cbz|cbr|docx|azw|pdf|txt|doc|lit|rtf|mp3|m4b|torrent)(?:[?#]|$)",
+                    _link_text, re.I,
+                )
+                if _fm:
+                    item["extension"] = _fm.group(1).lower()
+                elif built_torrent:
+                    item["extension"] = "torrent"
             # Enrich with detected metadata so WZML and API clients can show
             # quality/language (movies) and format (books) without parsing names.
             for _key, _detect in (
