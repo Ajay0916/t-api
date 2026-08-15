@@ -59,10 +59,88 @@ def _transliterate(text):
     return str(text or "").translate(_TRANS_TABLE)
 
 
-class _TitleTranslator:
+# Common RuTracker forum categories -> English, so the category shown in
+# results is readable without spending a translation call (and stays stable).
+_RU_CAT_MAP = {
+    "программирование": "Programming",
+    "книги и журналы": "Books & Magazines",
+    "книги": "Books",
+    "журналы": "Magazines",
+    "учебники": "Textbooks",
+    "учебная литература": "Study Literature",
+    "научная литература": "Scientific Literature",
+    "техническая литература": "Technical Books",
+    "художественная литература": "Fiction",
+    "фильмы": "Movies",
+    "сериалы": "TV Series",
+    "мультфильмы": "Cartoons",
+    "аниме": "Anime",
+    "игры": "Games",
+    "музыка": "Music",
+    "аудиокниги": "Audiobooks",
+    "аудиокнига": "Audiobook",
+    "обучающие видео": "Educational Videos",
+    "видеоуроки": "Video Tutorials",
+    "спорт": "Sports",
+    "хобби и ремесла": "Hobbies & Crafts",
+    "справочные материалы": "Reference Materials",
+    "документалистика": "Documentaries",
+    "софт": "Software",
+    "программы": "Software",
+    "мобильные приложения": "Mobile Apps",
+    "радиолюбительство": "Amateur Radio",
+    "фото": "Photography",
+    "дизайн и графика": "Design & Graphics",
+    "веб-дизайн": "Web Design",
+    "экономика": "Economics",
+    "бизнес": "Business",
+    "маркетинг": "Marketing",
+    "медицина": "Medicine",
+    "психология": "Psychology",
+    "иностранные языки": "Foreign Languages",
+    "русский язык": "Russian Language",
+    "литература": "Literature",
+    "поэзия": "Poetry",
+    "детективы": "Detectives",
+    "фантастика": "Science Fiction",
+    "фэнтези": "Fantasy",
+    "история": "History",
+    "философия": "Philosophy",
+    "наука": "Science",
+    "техника": "Engineering",
+    "электроника": "Electronics",
+    "ремонт": "Repair",
+    "строительство": "Construction",
+    "авто": "Automotive",
+    "путешествия": "Travel",
+    "кулинария": "Cooking",
+    "сад и огород": "Garden",
+    "детям": "Children",
+    "школьникам": "School",
+    "студентам": "Students",
+    "егэ": "Unified State Exam",
+}
+
+
+def _map_category(cat):
+    """Best-effort static RU category -> EN, checking the full string, then
+    its last '»' segment (subforum), then the first segment."""
+    key = str(cat or "").strip().lower()
+    if not key:
+        return None
+    if key in _RU_CAT_MAP:
+        return _RU_CAT_MAP[key]
+    segs = [x.strip() for x in re.split(r"[»|]", key) if x.strip()]
+    for seg in (segs[-1:] + segs[:1]):
+        if seg in _RU_CAT_MAP:
+            return _RU_CAT_MAP[seg]
+    return None
+
+
+class _RuTranslator:
     """RU -> EN via MyMemory's free endpoint (no key), cached in memory.
-    Falls back to Latin transliteration on any failure so titles are always
-    at least readable."""
+    Translates titles and categories; falls back to Latin transliteration on
+    any failure so results are always at least readable."""
     _URL = "https://api.mymemory.translated.net/get"
 
     def __init__(self):
@@ -79,12 +157,22 @@ class _TitleTranslator:
                     title = item.get("name") or ""
                     if title in _TRANS_CACHE:
                         item["name"] = _TRANS_CACHE[title]
-                        return
-                    if not _CYRILLIC_RE.search(title):
-                        return
-                    translated = await self._translate(session, title)
-                    item["name"] = translated
-                    _TRANS_CACHE[title] = translated
+                    elif _CYRILLIC_RE.search(title):
+                        translated = await self._translate(session, title)
+                        item["name"] = translated
+                        _TRANS_CACHE[title] = translated
+                    cat = item.get("category") or ""
+                    if cat in _TRANS_CACHE:
+                        item["category"] = _TRANS_CACHE[cat]
+                    elif _CYRILLIC_RE.search(cat):
+                        mapped = _map_category(cat)
+                        if mapped:
+                            item["category"] = mapped
+                            _TRANS_CACHE[cat] = mapped
+                        else:
+                            translated = await self._translate(session, cat)
+                            item["category"] = translated
+                            _TRANS_CACHE[cat] = translated
 
             try:
                 await asyncio.wait_for(
@@ -98,6 +186,9 @@ class _TitleTranslator:
             title = item.get("name") or ""
             if _CYRILLIC_RE.search(title):
                 item["name"] = _transliterate(title)
+            cat = item.get("category") or ""
+            if _CYRILLIC_RE.search(cat):
+                item["category"] = _transliterate(cat)
         return results
 
     async def _translate(self, session, title):
@@ -478,7 +569,7 @@ class RuTracker:
                 }
             )
         if results:
-            results = await _TitleTranslator().run(results)
+            results = await _RuTranslator().run(results)
         return {
             "data": results,
             "current_page": page + 1,
