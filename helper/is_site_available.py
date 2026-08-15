@@ -28,6 +28,7 @@ from torrents.pimpmymind import PimpMyMind
 from torrents.oceanofpdf import OceanofPDF
 from torrents.downarchive import DownArchive
 from torrents.rutracker import RuTracker
+from torrents.gutenberg import Gutenberg
 
 all_sites = {
     "1337x": {

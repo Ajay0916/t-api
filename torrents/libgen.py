@@ -13,6 +13,7 @@ from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 HOSTS = [
     LIBGEN,
+    "https://libgen.vg",
     "https://libgen.is",
     "https://libgen.rs",
     "https://libgen.st",
