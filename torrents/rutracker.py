@@ -3,12 +3,13 @@ import os
 import re
 import time
 import uuid
-from urllib.parse import quote_plus, urlencode
+from urllib.parse import quote, quote_plus, urlencode
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 from helper.session import close_flare_session_async, get_connector
+from helper.trackers import build_torrent_url
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
@@ -37,6 +38,84 @@ def _load_cookie():
 
 _RUTRACKER_COOKIE = _load_cookie()
 ENRICH_CAP = 6
+# Cyrillic -> Latin fallback so untranslated titles stay readable.
+_TRANS_TABLE = str.maketrans({
+    "А": "A", "Б": "B", "В": "V", "Г": "G", "Д": "D", "Е": "E", "Ё": "Yo",
+    "Ж": "Zh", "З": "Z", "И": "I", "Й": "Y", "К": "K", "Л": "L", "М": "M",
+    "Н": "N", "О": "O", "П": "P", "Р": "R", "С": "S", "Т": "T", "У": "U",
+    "Ф": "F", "Х": "Kh", "Ц": "Ts", "Ч": "Ch", "Ш": "Sh", "Щ": "Shch",
+    "Ъ": "", "Ы": "Y", "Ь": "", "Э": "E", "Ю": "Yu", "Я": "Ya",
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+})
+_TRANS_CACHE = {}
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def _transliterate(text):
+    return str(text or "").translate(_TRANS_TABLE)
+
+
+class _TitleTranslator:
+    """RU -> EN via MyMemory's free endpoint (no key), cached in memory.
+    Falls back to Latin transliteration on any failure so titles are always
+    at least readable."""
+    _URL = "https://api.mymemory.translated.net/get"
+
+    def __init__(self):
+        self._sem = asyncio.Semaphore(5)
+
+    async def run(self, results):
+        if not results:
+            return results
+        async with aiohttp.ClientSession(
+            connector=get_connector(), connector_owner=False, trust_env=True
+        ) as session:
+            async def one(item):
+                async with self._sem:
+                    title = item.get("name") or ""
+                    if title in _TRANS_CACHE:
+                        item["name"] = _TRANS_CACHE[title]
+                        return
+                    if not _CYRILLIC_RE.search(title):
+                        return
+                    translated = await self._translate(session, title)
+                    item["name"] = translated
+                    _TRANS_CACHE[title] = translated
+
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*(one(item) for item in results)),
+                    timeout=10.0,
+                )
+            except asyncio.TimeoutError:
+                pass
+        # Anything still Cyrillic (timed out / quota) -> transliterate now.
+        for item in results:
+            title = item.get("name") or ""
+            if _CYRILLIC_RE.search(title):
+                item["name"] = _transliterate(title)
+        return results
+
+    async def _translate(self, session, title):
+        try:
+            url = "{0}?q={1}&langpair=ru|en".format(self._URL, quote(title[:480]))
+            async with session.get(
+                url, timeout=aiohttp.ClientTimeout(total=6)
+            ) as res:
+                data = await res.json(content_type=None)
+            out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
+            out = str(out).strip()
+            if out and out.lower() != title.lower() and "QUERY LENGTH" not in out.upper():
+                return out
+        except Exception:
+            pass
+        return _transliterate(title)
+
+
 _SESSION = "rutracker-tapi"
 _SEARCH_TIMEOUT = aiohttp.ClientTimeout(total=60)
 _ENRICH_TIMEOUT = aiohttp.ClientTimeout(total=45)
@@ -327,6 +406,7 @@ class RuTracker:
                 if idx < len(extras) and isinstance(extras[idx], dict)
                 else None
             )
+            info_hash = (extra or {}).get("hash")
             results.append(
                 {
                     "name": row["name"],
@@ -338,11 +418,18 @@ class RuTracker:
                     "uploader": "",
                     "category": row["category"],
                     "url": row["url"],
-                    "torrent": row["torrent"],
-                    "hash": (extra or {}).get("hash"),
+                    # dl.php is Cloudflare-fronted and 403s plain fetches;
+                    # prefer a hash-built .torrent so leech links actually work.
+                    "torrent": build_torrent_url(info_hash, row["name"])
+                    if info_hash
+                    else row["torrent"],
+                    "extension": "torrent" if info_hash else None,
+                    "hash": info_hash,
                     "magnet": (extra or {}).get("magnet"),
                 }
             )
+        if results:
+            results = await _TitleTranslator().run(results)
         return {
             "data": results,
             "current_page": page + 1,
