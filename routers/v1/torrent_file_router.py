@@ -6,7 +6,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from constants.headers import HEADER_AIO
-from helper.dependencies import api_pin, api_pin_required
 from helper.session import get_connector
 from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
@@ -72,8 +71,8 @@ async def proxy_torrent(
     slow CDNs (libgen/booksdl, archive.org) download reliably.
     """
     # Short-link form: /torrent_file/<token> without url=...&name=... stays
-    # open (shared links in the bot are public); the full-URL proxy form is
-    # an open proxy, so it requires the API_PIN when one is configured.
+    # open (shared links in the bot are public); the full-URL proxy form
+    # is an open proxy too - the API is public by design.
     if not url and slug:
         info = lookup(slug)
         if not info:
@@ -85,13 +84,6 @@ async def proxy_torrent(
             name = info.get("name") or ""
         if not ext:
             ext = info.get("ext") or ""
-
-    if api_pin and api_pin_required:
-        supplied = request.headers.get("X-API-Pin") or request.query_params.get("pin") or ""
-        if supplied != api_pin:
-            return JSONResponse(
-                status_code=403, content={"error": "Access forbidden: Incorrect PIN."}
-            )
 
     if not url.lower().startswith(("http://", "https://")):
         return JSONResponse(status_code=400, content={"error": "Invalid URL."})

@@ -43,7 +43,7 @@
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
 - **GZip responses** — API responses are gzip-compressed automatically (big combo payloads reach WZML faster).
 - **API key auth** — optional `PYTORRENT_API_KEY` via `x-api-key` header. ⚠️ WZML-X doesn't send headers, so **don't enable the key if WZML-X uses this API** (keep it unset for public/WZML use).
-- **API PIN auth (optional)** — `API_PIN` (env) accepted via `X-API-Pin` header ya `?pin=` query, **lekin force nahi** — bina PIN ke bhi public access chalta hai. PIN ko wapas force karne ke liye `API_PIN_REQUIRED=1` bhi set karo. `/health` aur home page hamesha public; short-token `/api/v1/torrent_file/<token>` aur `/api/v1/magnet/<token>` links bhi public (shared bot links).
+- **API PIN (optional)** — `API_PIN` (env) accepted via `X-API-Pin` header ya `?pin=` query, lekin kabhi enforce nahi hota — bina PIN ke bhi public access chalta hai. `/health` aur home page hamesha public; short-token `/api/v1/torrent_file/<token>` aur `/api/v1/magnet/<token>` links bhi public (shared bot links).
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
