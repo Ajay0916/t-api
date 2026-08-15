@@ -6,6 +6,7 @@ import uuid
 from urllib.parse import quote
 
 import aiohttp
+from helper.plain_curl import fetch_plain
 from helper.session import close_flare_session_async, get_connector
 from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
@@ -233,9 +234,17 @@ class Torlock:
         htmls = await Scraper().get_all_results(session, url)
         result, urls = self._parser(htmls, idx)
         if result is None or not result.get("data"):
-            # torlock2.com is Cloudflare-fronted; the VPS IP often gets a
-            # JS-challenge page (HTTP 200, zero rows). Solve it via
-            # FlareSolverr and reparse before giving up.
+            # torlock serves full pages over IPv6 (VPS has IPv6 now) while the
+            # v4 identity gets anti-bot stripped pages (HTTP 200, zero rows),
+            # so try a v6 curl before paying for a FlareSolverr solve.
+            v6_html = await fetch_plain(url, timeout=10, family=6)
+            if v6_html:
+                fresult, furls = self._parser([v6_html], idx)
+                if fresult and fresult.get("data"):
+                    result, urls = fresult, furls
+        if result is None or not result.get("data"):
+            # Last resort: torlock2.com is Cloudflare-fronted; solve any
+            # remaining JS challenge via FlareSolverr and reparse.
             flare_html = await self._flare_page(url)
             if flare_html:
                 fresult, furls = self._parser([flare_html], idx)

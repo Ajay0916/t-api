@@ -33,6 +33,18 @@ class FreeCourseWeb:
                 return r.text
         except Exception:
             pass
+        try:
+            # IPv6 leg: the VPS has working IPv6 now; when the v4 identity is
+            # CF-blackholed, the v6 identity usually serves the real page.
+            async with AsyncSession(
+                impersonate="chrome",
+                curl_options={CurlOpt.IPRESOLVE: 2},
+            ) as s6:
+                r = await s6.get(url, timeout=8)
+                if r.status_code < 400:
+                    return r.text
+        except Exception:
+            pass
         return await fetch_jina(url, timeout=12)
         return None
 

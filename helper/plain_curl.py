@@ -19,12 +19,12 @@ def _is_cf_challenge(html):
     return any(m in low for m in CF_CHALLENGE_MARKERS)
 
 
-async def _curl(args, timeout):
+async def _curl(args, timeout, family="-4"):
     try:
         proc = await asyncio.create_subprocess_exec(
             "curl",
             "-sL",
-            "-4",
+            family,
             "-A",
             CHROME_UA,
             "-w",
@@ -50,17 +50,25 @@ async def _curl(args, timeout):
     return body.decode("utf-8", errors="replace")
 
 
-async def fetch_plain(url, timeout=8):
+async def fetch_plain(url, timeout=8, family=None):
     """Fetch a page with the system curl binary.
 
     Cloudflare serves plain curl (no cookies, no JS) on magnetdl/freecourseweb
     while challenging or blackholing impersonated TLS clients, so the plain
-    curl path is the primary fetcher for those sites. IPv4 is forced because
-    the sites publish AAAA records and this host's v6 routing is broken (v6
-    attempts hang until timeout). Only HTTP 200 bodies count as success so the
+    curl path is the primary fetcher for those sites. IPv4 is tried first,
+    then IPv6: the VPS has working IPv6 now and several CF-fronted hosts
+    (torlock/freecourseweb) serve real pages over v6 while blackholing or
+    stripping v4. Only HTTP 200 bodies count as success so the
     caller's fallback chain engages on challenges/blocks.
     """
-    return await _curl([url], timeout)
+    if family == 4:
+        return await _curl([url], timeout, "-4")
+    if family == 6:
+        return await _curl([url], timeout, "-6")
+    body = await _curl([url], timeout, "-4")
+    if body:
+        return body
+    return await _curl([url], timeout, "-6")
 
 
 async def fetch_jina(url, timeout=12):
