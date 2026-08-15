@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **29 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **30 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
 - **Generic Torznab client** — `torznab` site auto-appears when `TORZNAB_URL`/`TORZNAB_API_KEY` are set, so any Jackett/Prowlarr/Newznab indexer (private trackers, usenet, custom indexers...) works without writing a scraper. `TORZNAB_INDEXERS` filters to specific Prowlarr indexer IDs. No config = site stays hidden.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
@@ -69,6 +69,8 @@
 **Courses:** `downarchive` (active course DB — direct uploadgig/nitroflare links, no magnets), `freecourseweb` (back online — magnet links), `downloadfreecourse` (registered, currently unreachable), `freecoursesites`, `pimpmymind`, `rutracker` (RuTracker — Cloudflare-protected and login-gated, so it needs a self-hosted [Flaresolverr](https://github.com/flaresolverr/Flaresolverr) instance (`FLARESOLVERR_URL`, default `http://127.0.0.1:8191`) plus a free RuTracker account (`RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD`). Logins are captcha-gated from datacenter IPs, so the recommended way is to log in once in a browser and pass the session cookie via `RUTRACKER_COOKIE='bb_session=...; bb_guid=...'` (or drop it in a `rutracker_cookie.txt` file in the repo root, gitignored, so restarts never lose it) — the bot then skips the login POST and uses the cookie on every request (fallback: one-shot login via the form's `redirect` field). Top results are enriched with magnet links)
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`, `annasarchive` (Anna's Archive — direct Libgen.li links via md5 lookup), `oceanofpdf` (Cloudflare-protected — needs Flaresolverr)
+
+**Media / General:** `archive` (Internet Archive — title-search over books/movies/audio/software, `_archive.torrent` links, size + authors included)
 
 **Dynamic:** `torznab` — generic Jackett/Prowlarr hook. Set `TORZNAB_URL` (e.g. `http://127.0.0.1:9117` for Jackett, `http://127.0.0.1:9696` for Prowlarr) and `TORZNAB_API_KEY`, and the site is automatically added to `/api/v1/sites` + `/search`. Prowlarr ke har enabled indexer ka apna `/`<code>id</code>`/api` endpoint hota hai, isliye client saare enabled indexers ko concurrently query karke merge karta hai; `TORZNAB_INDEXERS=id1,id2` se sirf specific wale (Jackett me koi indexer param nahi hota). Prowlarr ke `/download` proxy links wapas real URL me decode ho jaate hain aur `infohash` se magnet + `.torrent` dono milte hain. Seeders/leechers, category, size, language — sab real. Slow indexers (1337x+FlareSolverr) ho to `/search` pe `timeout=120` laga lo.
 

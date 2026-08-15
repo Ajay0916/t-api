@@ -32,6 +32,7 @@ from torrents.rutracker import RuTracker
 from torrents.gutenberg import Gutenberg
 from torrents.thedownloadly import TheDownloadly
 from torrents.torznab import Torznab
+from torrents.internetarchive import InternetArchive
 
 all_sites = {
     "1337x": {
@@ -446,6 +447,16 @@ all_sites = {
         "recent_category_available": False,
         "categories": [],
         "limit": 50,
+    },
+    "archive": {
+        "website": InternetArchive,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": ["books", "movies", "music", "apps"],
+        "limit": 15,
     },
 }
 
