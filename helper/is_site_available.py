@@ -1,3 +1,4 @@
+import os
 from torrents.hindibooks import HindiBooks
 from torrents.hindiaudio import HindiAudio
 from torrents.archivebooks import ArchiveBooks
@@ -30,6 +31,7 @@ from torrents.downarchive import DownArchive
 from torrents.rutracker import RuTracker
 from torrents.gutenberg import Gutenberg
 from torrents.thedownloadly import TheDownloadly
+from torrents.torznab import Torznab
 
 all_sites = {
     "1337x": {
@@ -446,6 +448,21 @@ all_sites = {
         "limit": 50,
     },
 }
+
+# Generic Torznab (Jackett/Prowlarr) client - only exposed when configured,
+# so an unconfigured API never shows a dead "torznab" site button.
+if os.environ.get("TORZNAB_URL"):
+    all_sites["torznab"] = {
+        "website": Torznab,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 100,
+    }
 
 sites_config = {
     key: {

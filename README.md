@@ -23,6 +23,7 @@
 ## ✨ What's Unique Here
 
 - **29 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks.
+- **Generic Torznab client** — `torznab` site auto-appears when `TORZNAB_URL`/`TORZNAB_API_KEY` are set, so any Jackett/Prowlarr/Newznab indexer (private trackers, usenet, custom indexers...) works without writing a scraper. `TORZNAB_INDEXERS` filters to specific Prowlarr indexer IDs. No config = site stays hidden.
 - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
@@ -69,6 +70,8 @@
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`, `annasarchive` (Anna's Archive — direct Libgen.li links via md5 lookup), `oceanofpdf` (Cloudflare-protected — needs Flaresolverr)
 
+**Dynamic:** `torznab` — generic Jackett/Prowlarr hook. Set `TORZNAB_URL` (e.g. `http://127.0.0.1:9117` for Jackett, `http://127.0.0.1:9696` for Prowlarr) and `TORZNAB_API_KEY`, and the site is automatically added to `/api/v1/sites` + `/search`. `TORZNAB_INDEXERS=id1,id2` limits to specific Prowlarr indexers (leave empty for all/default). Results carry real seeders/leechers, category, size, and both magnet + `.torrent` links when the indexer exposes them.
+
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 
 ---
@@ -95,6 +98,9 @@ After=network.target
 [Service]
 WorkingDirectory=/home/ubuntu/t-api
 Environment=API_PIN=mysecret
+Environment=TORZNAB_URL=http://127.0.0.1:9696
+Environment=TORZNAB_API_KEY=your-prowlarr-apikey
+# Environment=TORZNAB_INDEXERS=5,8   # optional Prowlarr indexer IDs
 ExecStart=/home/ubuntu/t-api/venv/bin/python main.py
 Restart=always
 RestartSec=3
