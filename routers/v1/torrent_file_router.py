@@ -2,10 +2,11 @@ import re
 from urllib.parse import quote, unquote, urlsplit
 
 import aiohttp
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from constants.headers import HEADER_AIO
+from helper.dependencies import api_pin
 from helper.session import get_connector
 from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
@@ -57,14 +58,22 @@ def _media_type(filename):
 @router.get("/")
 @router.get("")
 @router.get("/{slug}")
-async def proxy_torrent(url: str = "", name: str = "", slug: str = "", ext: str = ""):
+async def proxy_torrent(
+    request: Request,
+    url: str = "",
+    name: str = "",
+    slug: str = "",
+    ext: str = "",
+):
     """Fetch a .torrent / book file through this server and stream it back.
 
     Lets WZML's Direct Link keep working even when the original CDN blocks
     the requester's IP. Streams instead of buffering so large book files on
     slow CDNs (libgen/booksdl, archive.org) download reliably.
     """
-    # Short-link form: /torrent_file/<token> without url=...&name=...
+    # Short-link form: /torrent_file/<token> without url=...&name=... stays
+    # open (shared links in the bot are public); the full-URL proxy form is
+    # an open proxy, so it requires the API_PIN when one is configured.
     if not url and slug:
         info = lookup(slug)
         if not info:
@@ -76,6 +85,13 @@ async def proxy_torrent(url: str = "", name: str = "", slug: str = "", ext: str 
             name = info.get("name") or ""
         if not ext:
             ext = info.get("ext") or ""
+
+    if api_pin:
+        supplied = request.headers.get("X-API-Pin") or request.query_params.get("pin") or ""
+        if supplied != api_pin:
+            return JSONResponse(
+                status_code=403, content={"error": "Access forbidden: Incorrect PIN."}
+            )
 
     if not url.lower().startswith(("http://", "https://")):
         return JSONResponse(status_code=400, content={"error": "Invalid URL."})

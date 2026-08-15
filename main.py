@@ -78,8 +78,11 @@ app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(aut
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends(authenticate_request)])
-app.include_router(torrent_file_router, prefix="/api/v1/torrent_file", dependencies=[Depends(authenticate_request)])
-app.include_router(magnet_router, prefix="/api/v1/magnet", dependencies=[Depends(authenticate_request)])
+# torrent_file/magnet stay open so shared short links (Direct Link / Share
+# Magnet in the bot) work for anyone who clicks them; the full-URL proxy
+# form inside torrent_file_router still requires the PIN.
+app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
+app.include_router(magnet_router, prefix="/api/v1/magnet")
 app.include_router(home_router, prefix="")
 
 handler = Mangum(app)
