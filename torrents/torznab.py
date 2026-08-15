@@ -312,7 +312,7 @@ class Torznab:
             url = "{}/{}/api?apikey={}&{}".format(
                 self.BASE_URL, indexer_id, _TORZNAB_API_KEY, params
             )
-            xml_text = await self._fetch(url, timeout=30)
+            xml_text = await self._fetch(url, timeout=25)
             if not xml_text:
                 return []
             try:
@@ -340,14 +340,21 @@ class Torznab:
                 "total": 0,
             }
         sem = asyncio.Semaphore(4)
-        chunks = await asyncio.gather(
-            *[
-                asyncio.create_task(
-                    self._search_indexer(i, query, per, page, sem)
-                )
-                for i in ids
-            ]
-        )
+        tasks = [
+            asyncio.create_task(self._search_indexer(i, query, per, page, sem))
+            for i in ids
+        ]
+        done, pending = await asyncio.wait(tasks, timeout=22)
+        for t in pending:
+            t.cancel()
+        chunks = []
+        for t in done:
+            try:
+                res = t.result()
+            except Exception:
+                continue
+            if res:
+                chunks.append(res)
         rows = []
         seen = set()
         for chunk in chunks:
