@@ -16,6 +16,7 @@ _FORMAT_RE = re.compile(r'href="(/ebooks/\d+\.(?:epub[^"]*|kindle[^"]*|txt[^"]*)
 
 
 def _pick_format(page):
+    """Return (format key, href) of the best downloadable format, or None."""
     links = {}
     for m in _FORMAT_RE.finditer(page):
         href = m.group(1)
@@ -27,7 +28,7 @@ def _pick_format(page):
             links.setdefault("txt", href)
     for key in ("epub", "kindle", "txt"):
         if key in links:
-            return links[key]
+            return key, links[key]
     return None
 
 
@@ -49,11 +50,13 @@ class Gutenberg:
             page = await self._fetch(url)
             if not page:
                 return
-            href = _pick_format(page)
-            if not href:
+            picked = _pick_format(page)
+            if not picked:
                 return
+            key, href = picked
             obj["torrent"] = self.BASE_URL + href
             obj["download"] = obj["torrent"]
+            obj["extension"] = {"epub": "epub", "kindle": "azw3", "txt": "txt"}[key]
             soup = BeautifulSoup(page, "html.parser")
             h1 = soup.select_one("h1")
             if h1:
