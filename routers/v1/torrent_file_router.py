@@ -98,19 +98,30 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
 
     up_name = _upstream_filename(res.headers.get("Content-Disposition") or "")
     filename = name or up_name or _safe_filename(url)
-    if "." not in filename.rsplit("/", 1)[-1]:
+    if not re.search(r"\.[a-zA-Z0-9]{2,5}$", filename, re.I):
         ext = ""
         up_ext = up_name.rsplit(".", 1)[-1] if "." in up_name else ""
         if up_ext and re.fullmatch(r"[a-z0-9]{2,5}", up_ext, re.I):
             ext = up_ext.lower()
         else:
-            m = re.search(
-                r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
-                filename,
-                re.I,
-            )
-            if m:
-                ext = m.group(1).lower()
+            # The slug in the request path carries the extension the bot
+            # picked (gutenberg .../xxx.epub), so borrow it when the name
+            # has none and upstream sends no Content-Disposition.
+            slug_ext = slug.rsplit(".", 1)[-1] if "." in slug else ""
+            if (
+                slug_ext
+                and slug_ext.lower() != "dl"
+                and re.fullmatch(r"[a-z0-9]{2,8}", slug_ext, re.I)
+            ):
+                ext = slug_ext.lower()
+            else:
+                m = re.search(
+                    r"\b(pdf|epub|mobi|azw3|djvu|fb2|zip|rar|mp3|m4b|torrent)\b",
+                    filename,
+                    re.I,
+                )
+                if m:
+                    ext = m.group(1).lower()
         if ext:
             filename = filename.strip() + "." + ext
 
