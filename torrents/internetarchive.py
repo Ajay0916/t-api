@@ -11,6 +11,10 @@ from constants.base_url import INTERNETARCHIVE
 # proxy that relays to archive.org (see docs/archive_proxy_worker.js) to
 # bypass Oracle/datacenter IP throttling.
 _INTERNETARCHIVE_URL = (os.environ.get("INTERNETARCHIVE_URL") or "").strip().rstrip("/") or INTERNETARCHIVE
+# ARCHIVE_PROXY_URL env override: HTTP proxy used ONLY for archive.org
+# requests (e.g. http://127.0.0.1:8118 for a local Tor proxy) - the rest
+# of the API keeps its normal direct/fast path.
+_ARCHIVE_PROXY = (os.environ.get("ARCHIVE_PROXY_URL") or "").strip()
 from helper.author_utils import clean_archive_creators
 from helper.session import get_connector
 
@@ -73,7 +77,9 @@ class InternetArchive:
                     connector=get_connector(), connector_owner=False, trust_env=True
                 ) as session:
                     async with session.get(
-                        url, timeout=aiohttp.ClientTimeout(total=12)
+                        url,
+                        proxy=_ARCHIVE_PROXY or None,
+                        timeout=aiohttp.ClientTimeout(total=20),
                     ) as res:
                         if res.status != 200:
                             return None
