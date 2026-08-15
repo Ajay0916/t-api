@@ -70,7 +70,7 @@
 
 **Books / Indian content:** `hindibooks`, `hindiaudio`, `archivebooks`, `libgen`, `annasarchive` (Anna's Archive — direct Libgen.li links via md5 lookup), `oceanofpdf` (Cloudflare-protected — needs Flaresolverr)
 
-**Dynamic:** `torznab` — generic Jackett/Prowlarr hook. Set `TORZNAB_URL` (e.g. `http://127.0.0.1:9117` for Jackett, `http://127.0.0.1:9696` for Prowlarr) and `TORZNAB_API_KEY`, and the site is automatically added to `/api/v1/sites` + `/search`. `TORZNAB_INDEXERS=id1,id2` limits to specific Prowlarr indexers (leave empty for all/default). Results carry real seeders/leechers, category, size, and both magnet + `.torrent` links when the indexer exposes them.
+**Dynamic:** `torznab` — generic Jackett/Prowlarr hook. Set `TORZNAB_URL` (e.g. `http://127.0.0.1:9117` for Jackett, `http://127.0.0.1:9696` for Prowlarr) and `TORZNAB_API_KEY`, and the site is automatically added to `/api/v1/sites` + `/search`. Prowlarr ke har enabled indexer ka apna `/`<code>id</code>`/api` endpoint hota hai, isliye client saare enabled indexers ko concurrently query karke merge karta hai; `TORZNAB_INDEXERS=id1,id2` se sirf specific wale (Jackett me koi indexer param nahi hota). Prowlarr ke `/download` proxy links wapas real URL me decode ho jaate hain aur `infohash` se magnet + `.torrent` dono milte hain. Seeders/leechers, category, size, language — sab real. Slow indexers (1337x+FlareSolverr) ho to `/search` pe `timeout=120` laga lo.
 
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 

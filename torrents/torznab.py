@@ -1,8 +1,9 @@
+import asyncio
 import os
 import re
 import time
 import xml.etree.ElementTree as ET
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import aiohttp
 
@@ -16,8 +17,14 @@ from helper.session import get_connector
 #                        or http://127.0.0.1:9696 (Prowlarr)
 #   TORZNAB_API_KEY    - indexer API key
 #   TORZNAB_INDEXERS   - optional comma-separated indexer IDs (Prowlarr);
-#                        empty = query the default/all configured indexers
+#                        empty = auto-discover all enabled Prowlarr indexers
 #                        (Jackett ignores the indexers param entirely)
+#
+# Prowlarr exposes each indexer at /{id}/api (id=0 is only a test stub), so
+# one query per indexer is fired concurrently and merged. Prowlarr rewrites
+# download/magnet links to its own /{id}/download?link=... proxy - those are
+# decoded back to the real URL, and the torznab "infohash" attr is used to
+# build working magnet + .torrent links.
 
 _TORZNAB_URL = (os.environ.get("TORZNAB_URL") or "").strip().rstrip("/")
 _TORZNAB_API_KEY = (os.environ.get("TORZNAB_API_KEY") or "").strip()
@@ -29,6 +36,7 @@ _TORZNAB_INDEXERS = [
 
 _BTIH_HEX = re.compile(r"^[a-fA-F0-9]{40}$")
 _BTIH_B32 = re.compile(r"^[A-Z2-7]{32}$")
+_DL_PROXY_RE = re.compile(r"/\d+/download\b")
 
 # Standard Newznab/Torznab numeric categories -> t-api categories.
 _CAT_RANGES = [
@@ -70,6 +78,15 @@ def _clean_hash(raw):
     if _BTIH_HEX.match(raw) or _BTIH_B32.match(raw):
         return raw
     return None
+
+
+def _magnet_hash(raw):
+    if not raw or not raw.lower().startswith("magnet:"):
+        return None
+    m = re.search(r"xt=urn:btih:([a-fA-F0-9]{40}|[A-Z2-7]{32})", raw)
+    if not m:
+        return None
+    return m.group(1).upper()
 
 
 def _format_size(num):
@@ -115,6 +132,28 @@ def _attrs(children):
     return out
 
 
+def _unproxy(url):
+    """Decode a Prowlarr /{id}/download?link=... proxy URL back to the real
+    magnet or download URL. Plain magnet:/http(s) URLs pass through."""
+    if not url:
+        return None, None
+    u = urlparse(url)
+    if u.scheme == "magnet":
+        return "magnet", url
+    if _DL_PROXY_RE.search(u.path) and u.query:
+        q = parse_qs(u.query)
+        target = q.get("link", [None])[0]
+        if target:
+            target = unquote(target)
+            if target.lower().startswith("magnet:"):
+                return "magnet", target
+            if target.lower().startswith(("http://", "https://")):
+                return "torrent", target
+    if u.scheme in ("http", "https"):
+        return "torrent", url
+    return None, None
+
+
 def _parse(xml_text):
     root = ET.fromstring(xml_text)
     channel = root
@@ -128,6 +167,9 @@ def _parse(xml_text):
             continue
         row = {"name": "", "size": "", "seeders": 0, "leechers": 0, "url": ""}
         enclosure = ""
+        link = ""
+        comments = ""
+        guid = ""
         category_text = []
         attrs = _attrs(list(it))
         for child in it:
@@ -139,25 +181,31 @@ def _parse(xml_text):
                 row["size_bytes"] = child.text
             elif tag.endswith("pubdate"):
                 row["date"] = text
+            elif tag.endswith("comments"):
+                comments = text
             elif tag.endswith("link"):
-                if text and not row.get("url") and not text.startswith("magnet:"):
-                    row["url"] = text
+                link = text
             elif tag.endswith("category"):
                 if text:
                     category_text.append(text)
             elif tag.endswith("guid"):
-                h = _clean_hash(text)
-                if h:
-                    row["hash"] = h
+                guid = text
             elif tag.endswith("enclosure"):
                 enclosure = child.get("url") or ""
         if not row["name"]:
             continue
-        for key in ("infohash", "guid", "infoHash", "magnet"):
+        for key in ("infohash", "guid", "infoHash"):
             for v in attrs.get(key, []):
                 h = _clean_hash(v)
                 if h:
                     row["hash"] = h
+                    break
+            if row.get("hash"):
+                break
+        if not row.get("hash"):
+            h = _clean_hash(guid) or _magnet_hash(guid)
+            if h:
+                row["hash"] = h
         for key, field in (
             ("seeders", "seeders"),
             ("seed", "seeders"),
@@ -178,18 +226,28 @@ def _parse(xml_text):
                     row["leechers"] = v - row["seeders"]
             else:
                 row[field] = v
-        link = row.get("url") or ""
-        if enclosure.startswith("magnet:"):
-            row["magnet"] = enclosure
-        elif enclosure:
-            row["torrent"] = enclosure
-        elif link.startswith("magnet:"):
-            row["magnet"] = link
+        download = enclosure or link
+        kind, real = _unproxy(download)
+        if kind == "magnet":
+            row["magnet"] = real
+            if not row.get("hash"):
+                h = _magnet_hash(real)
+                if h:
+                    row["hash"] = h
+        elif kind == "torrent":
+            row["torrent"] = real
+        if comments and comments.startswith("http"):
+            row["url"] = comments
+        elif link.startswith("http") and link != real:
+            row["url"] = link
         if row.get("size_bytes") is not None:
             row["size"] = _format_size(row["size_bytes"])
         cat = _map_category(" ".join(category_text), attrs)
         if cat:
             row["category"] = cat
+        langs = attrs.get("language")
+        if langs:
+            row["languages"] = [l for l in langs if l]
         if not row.get("magnet") and row.get("hash"):
             row["magnet"] = "magnet:?xt=urn:btih:{}".format(row["hash"])
         if row.get("magnet") or row.get("torrent"):
@@ -204,7 +262,13 @@ class Torznab:
         self.BASE_URL = _TORZNAB_URL
         self.LIMIT = None
 
-    async def _fetch(self, url):
+    def _headers(self):
+        return {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) t-api",
+            "X-Api-Key": _TORZNAB_API_KEY,
+        }
+
+    async def _fetch(self, url, timeout=30):
         try:
             async with aiohttp.ClientSession(
                 connector=get_connector(),
@@ -213,11 +277,8 @@ class Torznab:
             ) as session:
                 async with session.get(
                     url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) t-api",
-                        "X-Api-Key": _TORZNAB_API_KEY,
-                    },
-                    timeout=aiohttp.ClientTimeout(total=30),
+                    headers=self._headers(),
+                    timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as res:
                     if res.status != 200:
                         return None
@@ -225,45 +286,87 @@ class Torznab:
         except Exception:
             return None
 
+    async def _discover_ids(self):
+        """List of enabled Prowlarr indexer IDs, or None on request failure."""
+        data = await self._fetch(
+            "{}/api/v1/indexer".format(self.BASE_URL), timeout=10
+        )
+        if not data:
+            return None
+        try:
+            import json
+            indexers = json.loads(data)
+        except Exception:
+            return None
+        return [
+            int(i["id"])
+            for i in indexers
+            if i.get("enable", True) and not i.get("isReadOnly")
+        ]
+
+    async def _search_indexer(self, indexer_id, query, per, page, sem):
+        async with sem:
+            params = "t=search&q={}&limit={}&offset={}".format(
+                quote(query), per, (page - 1) * per
+            )
+            url = "{}/{}/api?apikey={}&{}".format(
+                self.BASE_URL, indexer_id, _TORZNAB_API_KEY, params
+            )
+            xml_text = await self._fetch(url, timeout=30)
+            if not xml_text:
+                return []
+            try:
+                return _parse(xml_text)
+            except Exception:
+                return []
+
     async def search(self, query, page, limit):
         start_time = time.time()
         if not self.BASE_URL or not _TORZNAB_API_KEY:
             return None
         per = limit or 50
-        params = "t=search&q={}&limit={}&offset={}".format(
-            quote(query), per, (page - 1) * per
-        )
         if _TORZNAB_INDEXERS:
-            params += "&indexers=" + ",".join(_TORZNAB_INDEXERS)
-        url = "{}/api?apikey={}&{}".format(
-            self.BASE_URL, _TORZNAB_API_KEY, params
+            ids = [int(i) for i in _TORZNAB_INDEXERS if i.isdigit()]
+        else:
+            ids = await self._discover_ids()
+        if ids is None:
+            return None
+        if not ids:
+            return {
+                "data": [],
+                "current_page": page,
+                "total_pages": 1,
+                "time": time.time() - start_time,
+                "total": 0,
+            }
+        sem = asyncio.Semaphore(4)
+        chunks = await asyncio.gather(
+            *[
+                asyncio.create_task(
+                    self._search_indexer(i, query, per, page, sem)
+                )
+                for i in ids
+            ]
         )
-        xml_text = await self._fetch(url)
-        if not xml_text:
-            return None
-        try:
-            rows = _parse(xml_text)
-        except Exception:
-            return None
-        total = len(rows)
-        total_pages = 1
-        if isinstance(xml_text, bytes):
-            xml_text = xml_text.decode("utf-8", "ignore")
-        m = re.search(r"<totalresults>\s*(\d+)", xml_text)
-        if m:
-            try:
-                t = int(m.group(1))
-                if t > total:
-                    total = t
-                    total_pages = max(1, -(-t // per))
-            except ValueError:
-                pass
+        rows = []
+        seen = set()
+        for chunk in chunks:
+            for r in chunk:
+                key = r.get("hash") or "{}|{}".format(
+                    r.get("name", "").lower(), r.get("torrent") or r.get("url")
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append(r)
+        rows.sort(key=lambda r: r.get("seeders") or 0, reverse=True)
+        rows = rows[:per]
         return {
-            "data": rows[:per] if per else rows,
+            "data": rows,
             "current_page": page,
-            "total_pages": total_pages,
+            "total_pages": 1,
             "time": time.time() - start_time,
-            "total": total,
+            "total": len(rows),
         }
 
     async def trending(self, category, page, limit):
