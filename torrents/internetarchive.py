@@ -1,3 +1,4 @@
+import os
 import re
 import time
 from urllib.parse import quote
@@ -5,6 +6,11 @@ from urllib.parse import quote
 import aiohttp
 
 from constants.base_url import INTERNETARCHIVE
+
+# INTERNETARCHIVE_URL env override: point this at a Cloudflare Worker /
+# proxy that relays to archive.org (see docs/archive_proxy_worker.js) to
+# bypass Oracle/datacenter IP throttling.
+_INTERNETARCHIVE_URL = (os.environ.get("INTERNETARCHIVE_URL") or "").strip().rstrip("/") or INTERNETARCHIVE
 from helper.author_utils import clean_archive_creators
 from helper.session import get_connector
 
@@ -36,7 +42,7 @@ class InternetArchive:
     _name = "Internet Archive"
 
     def __init__(self):
-        self.BASE_URL = INTERNETARCHIVE
+        self.BASE_URL = _INTERNETARCHIVE_URL
         self.LIMIT = None
 
     @staticmethod
