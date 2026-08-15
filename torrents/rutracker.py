@@ -225,6 +225,7 @@ class RuTracker:
                     "category": cat_el.get_text(" ", strip=True) if cat_el else "",
                     "url": "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid),
                     "torrent": "{}/forum/dl.php?t={}".format(self.BASE_URL, tid),
+                    "extension": "torrent",
                 }
             )
         return results
