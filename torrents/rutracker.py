@@ -519,9 +519,16 @@ class RuTracker:
                     data = await res.json(content_type=None)
         solution = data.get("solution") or {}
         if solution.get("status") != 200:
+            _rt_debug(
+                "flare", payload.get("cmd"), str(payload.get("url") or "")[:60],
+                "flare_status", data.get("status"),
+                "http", solution.get("status"),
+                "msg", str(data.get("message") or "")[:90],
+            )
             return None
         html = solution.get("response") or ""
         if "Just a moment" in html or "cf-chl" in html:
+            _rt_debug("flare challenge page", str(payload.get("url") or "")[:60])
             return None
         # Keep cookies/UA from every successful solve: the next dl.php
         # download then skips the browser round-trip (see fetch_dl_torrent).
