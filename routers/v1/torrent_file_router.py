@@ -3,10 +3,11 @@ from urllib.parse import quote, unquote, urlsplit
 
 import aiohttp
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from constants.headers import HEADER_AIO
 from helper.session import get_connector
+from torrents.rutracker import fetch_dl_torrent
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
@@ -64,6 +65,30 @@ async def proxy_torrent(url: str, name: str = "", slug: str = ""):
     """
     if not url.lower().startswith(("http://", "https://")):
         return JSONResponse(status_code=400, content={"error": "Invalid URL."})
+
+    # RuTracker dl.php is behind Cloudflare and 403s plain fetches; get the
+    # real .torrent through FlareSolverr with the search session cookie.
+    if "rutracker.org/forum/dl.php" in url.lower():
+        fetched = await fetch_dl_torrent(url)
+        if fetched is None:
+            return JSONResponse(
+                status_code=502, content={"error": "Failed to fetch torrent."}
+            )
+        body, up_name = fetched
+        filename = (name or up_name or "rutracker").strip()
+        if not re.search(r"\.torrent$", filename, re.I):
+            filename = filename.strip() + ".torrent"
+        ascii_name = filename.encode("latin-1", "ignore").decode("latin-1") or "download"
+        ascii_name = ascii_name.replace('"', "_").replace("\\", "_")
+        disposition = 'attachment; filename="{}"'.format(ascii_name)
+        if ascii_name != filename:
+            disposition += "; filename*=UTF-8''" + quote(filename)
+        return Response(
+            content=body,
+            media_type="application/x-bittorrent",
+            headers={"Content-Disposition": disposition},
+        )
+
     try:
         session = aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True

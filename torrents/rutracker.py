@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import os
 import re
 import time
@@ -9,7 +10,6 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from helper.session import close_flare_session_async, get_connector
-from helper.trackers import build_torrent_url
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
@@ -166,6 +166,57 @@ def _rotate_sid():
     _sid = "rutracker-{}".format(uuid.uuid4().hex[:10])
     _sid_created = time.time()
     close_flare_session_async(old, FLARESOLVERR_URL)
+
+
+async def fetch_dl_torrent(url):
+    """Fetch a rutracker dl.php .torrent through FlareSolverr (plain
+    fetches 403 behind Cloudflare) using the same warm session + cookie as
+    search. Returns (torrent_bytes, upstream_filename) or None."""
+    sid = _get_sid()
+    payload = {
+        "cmd": "request.get",
+        "session": sid,
+        "url": url,
+        "maxTimeout": 60000,
+    }
+    cookies = _cookie_list()
+    if cookies:
+        payload["cookies"] = cookies
+    try:
+        async with _flare_lock:
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as session:
+                async with session.post(
+                    f"{FLARESOLVERR_URL}/v1",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=75),
+                ) as res:
+                    data = await res.json(content_type=None)
+        solution = data.get("solution") or {}
+        if solution.get("status") != 200:
+            return None
+        raw = solution.get("response") or ""
+        body = raw.encode("utf-8", "replace")
+        # FlareSolverr base64-encodes binary bodies; bencode dicts start
+        # with 'd', so detect that and decode back to the real .torrent.
+        try:
+            dec = base64.b64decode(raw, validate=True)
+            if dec[:1] == b"d":
+                body = dec
+        except Exception:
+            pass
+        if not body.startswith(b"d"):
+            return None
+        headers = solution.get("headers") or {}
+        up_name = ""
+        cd = headers.get("content-disposition") or ""
+        m = re.search(r'filename\*\s*=\s*"?([^";]+)', cd, re.I)
+        if m:
+            up_name = m.group(1).strip().strip('"')
+        return body, up_name
+    except Exception:
+        return None
 
 
 _RU_MONTHS = {
@@ -418,12 +469,10 @@ class RuTracker:
                     "uploader": "",
                     "category": row["category"],
                     "url": row["url"],
-                    # dl.php is Cloudflare-fronted and 403s plain fetches;
-                    # prefer a hash-built .torrent so leech links actually work.
-                    "torrent": build_torrent_url(info_hash, row["name"])
-                    if info_hash
-                    else row["torrent"],
-                    "extension": "torrent" if info_hash else None,
+                    # dl.php is Cloudflare-fronted; the torrent_file proxy
+                    # fetches it through FlareSolverr so leech links work.
+                    "torrent": row["torrent"],
+                    "extension": "torrent",
                     "hash": info_hash,
                     "magnet": (extra or {}).get("magnet"),
                 }
