@@ -64,9 +64,6 @@ async def proxy_torrent(url: str = "", name: str = "", slug: str = "", ext: str 
     the requester's IP. Streams instead of buffering so large book files on
     slow CDNs (libgen/booksdl, archive.org) download reliably.
     """
-    if not url.lower().startswith(("http://", "https://")):
-        return JSONResponse(status_code=400, content={"error": "Invalid URL."})
-
     # Short-link form: /torrent_file/<token> without url=...&name=...
     if not url and slug:
         info = lookup(slug)
@@ -79,6 +76,9 @@ async def proxy_torrent(url: str = "", name: str = "", slug: str = "", ext: str 
             name = info.get("name") or ""
         if not ext:
             ext = info.get("ext") or ""
+
+    if not url.lower().startswith(("http://", "https://")):
+        return JSONResponse(status_code=400, content={"error": "Invalid URL."})
 
     # RuTracker dl.php is behind Cloudflare and 403s plain fetches; get the
     # real .torrent through FlareSolverr with the search session cookie.
