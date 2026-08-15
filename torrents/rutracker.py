@@ -681,21 +681,33 @@ class RuTracker:
             raw = raw[: self.LIMIT]
         extras = []
         if raw and FLARESOLVERR_ENRICH:
-            # Same-session fetches must stay sequential to avoid races, and a
-            # hard cap keeps the whole flow under the API's 28s deadline
-            # (timeout → results without magnets instead of a 504).
+            # Same-session fetches must stay sequential (shared Flaresolverr
+            # session), and the window fits under the API's 40s deadline.
+            # A warm viewtopic fetch is ~3s, so 6 topics need ~20s - keep
+            # whatever finished on a slow day instead of dropping them all.
             sem = asyncio.Semaphore(1)
             enrich_n = min(len(raw), ENRICH_CAP)
-            try:
-                extras = await asyncio.wait_for(
-                    asyncio.gather(
-                        *(self._magnet(row["tid"], sem) for row in raw[:enrich_n]),
-                        return_exceptions=True,
-                    ),
-                    timeout=12.0,
-                )
-            except asyncio.TimeoutError:
-                extras = []
+            tasks = [
+                asyncio.ensure_future(self._magnet(row["tid"], sem))
+                for row in raw[:enrich_n]
+            ]
+            # Adaptive window: keep at least 8s for enrichment, give it up
+            # to 22s, but never push the whole flow past ~38s (API deadline
+            # is 40s - a cold session burns ~15s on the challenge solve).
+            elapsed = time.time() - start_time
+            enrich_budget = max(8.0, min(22.0, 38.0 - elapsed))
+            done, pending = await asyncio.wait(tasks, timeout=enrich_budget)
+            for t in pending:
+                t.cancel()
+            extras = []
+            for t in tasks:
+                if t in done and not t.cancelled():
+                    try:
+                        extras.append(t.result())
+                    except Exception:
+                        extras.append(None)
+                else:
+                    extras.append(None)
         results = []
         for idx, row in enumerate(raw):
             extra = (
