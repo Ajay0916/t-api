@@ -450,6 +450,7 @@ all_sites = {
     },
     "archive": {
         "website": InternetArchive,
+        "combo_available": False,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,

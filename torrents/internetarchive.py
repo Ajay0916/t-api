@@ -60,17 +60,23 @@ class InternetArchive:
             "&fl[]=mediatype&fl[]=date&fl[]=creator&fl[]=item_size"
             "&rows={}&page={}&output=json&sort[]=downloads+desc"
         ).format(quote(q), per, page)
-        try:
-            async with aiohttp.ClientSession(
-                connector=get_connector(), connector_owner=False, trust_env=True
-            ) as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=25)
-                ) as res:
-                    if res.status != 200:
-                        return None
-                    data = await res.json(content_type=None)
-        except Exception:
+        data = None
+        for _attempt in range(2):
+            try:
+                async with aiohttp.ClientSession(
+                    connector=get_connector(), connector_owner=False, trust_env=True
+                ) as session:
+                    async with session.get(
+                        url, timeout=aiohttp.ClientTimeout(total=12)
+                    ) as res:
+                        if res.status != 200:
+                            return None
+                        data = await res.json(content_type=None)
+                if data:
+                    break
+            except Exception:
+                data = None
+        if data is None:
             return None
         response = data.get("response") or {}
         docs = response.get("docs") or []
