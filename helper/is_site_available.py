@@ -31,7 +31,6 @@ from torrents.downarchive import DownArchive
 from torrents.rutracker import RuTracker
 from torrents.gutenberg import Gutenberg
 from torrents.thedownloadly import TheDownloadly
-from torrents.torznab import Torznab
 from torrents.internetarchive import InternetArchive
 
 all_sites = {
@@ -460,21 +459,6 @@ all_sites = {
         "limit": 15,
     },
 }
-
-# Generic Torznab (Jackett/Prowlarr) client - only exposed when configured,
-# so an unconfigured API never shows a dead "torznab" site button.
-if os.environ.get("TORZNAB_URL"):
-    all_sites["torznab"] = {
-        "website": Torznab,
-        "combo_available": False,
-        "trending_available": False,
-        "trending_category": False,
-        "search_by_category": False,
-        "recent_available": False,
-        "recent_category_available": False,
-        "categories": [],
-        "limit": 100,
-    }
 
 sites_config = {
     key: {
