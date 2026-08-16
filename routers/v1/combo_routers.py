@@ -13,6 +13,7 @@ from helper.result_cleaner import (
     size_matches,
     sort_results,
 )
+from routers.v1.search_router import _parse_page
 from helper.is_site_available import check_if_site_available
 from helper.error_messages import error_handler
 from helper.search_cache import combo_cache
@@ -27,12 +28,40 @@ async def _search_site(website, query, limit, page=1):
     return await website().search(query, page=page, limit=limit)
 
 
+async def _search_site_pages(website, query, limit, start_page, end_page):
+    """Fetch pages start..end for one site, deduped across pages (sites that
+    ignore the page param safely stop after the first duplicate page)."""
+    rows, seen = [], set()
+    for p in range(start_page, end_page + 1):
+        try:
+            res = await _search_site(website, query, limit, p)
+        except Exception:
+            break
+        if not isinstance(res, dict):
+            break
+        data = res.get("data") or []
+        if not data:
+            break
+        new = 0
+        for it in data:
+            key = it.get("url") or it.get("hash") or it.get("magnet") or it.get("name") or ""
+            if key:
+                if key in seen:
+                    continue
+                seen.add(key)
+            rows.append(it)
+            new += 1
+        if new == 0:
+            break
+    return {"data": rows, "total": len(rows)}
+
+
 @router.get("/search")
 async def get_search_combo(
     query: str,
     sites: Optional[str] = "",
     limit: Optional[int] = 0,
-    page: Optional[int] = 1,
+    page: Optional[str] = "1",
     fresh: Optional[int] = 0,
     dedup: Optional[int] = 0,
     include: Optional[str] = "", 
@@ -49,7 +78,12 @@ async def get_search_combo(
 ):
     start_time = time.time()
     query = query.lower().strip()
-    deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
+    start_page, end_page = _parse_page(page)
+    if timeout and timeout > 0:
+        deadline = timeout
+    else:
+        # -p N / A-B / 0 wants every page: give each page its own budget.
+        deadline = SITE_DEADLINE * (end_page - start_page + 1)
     category = (category or "").lower().strip()
     sort = (sort or "seeders").lower()
     order = (order or "desc").lower()
@@ -164,15 +198,20 @@ async def get_search_combo(
         return site_limit
 
     def _build_tasks(site_list):
-        return [
-            (
-                site,
-                asyncio.create_task(
-                    _search_site(all_sites[site]["website"], query, _site_limit(site), page)
-                ),
+        def _run(site):
+            if start_page == end_page:
+                return _search_site(
+                    all_sites[site]["website"], query, _site_limit(site), start_page
+                )
+            return _search_site_pages(
+                all_sites[site]["website"],
+                query,
+                _site_limit(site),
+                start_page,
+                end_page,
             )
-            for site in site_list
-        ]
+
+        return [(site, asyncio.create_task(_run(site))) for site in site_list]
 
     async def _collect(tasks):
         """Run site tasks under one deadline and merge their rows.
