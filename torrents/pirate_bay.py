@@ -6,7 +6,6 @@ from urllib.parse import quote
 import aiohttp
 
 from constants.base_url import PIRATEBAY
-from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.html_scraper import Scraper
 from helper.plain_curl import fetch_plain
 from helper.session import get_connector

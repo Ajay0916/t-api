@@ -5,10 +5,8 @@ from urllib.parse import quote
 
 import aiohttp
 from helper.session import get_connector
-from bs4 import BeautifulSoup
 
 from constants.base_url import HINDIAUDIO
-from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.author_utils import clean_archive_creators
 from helper.html_scraper import Scraper

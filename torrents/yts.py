@@ -1,10 +1,8 @@
 import asyncio
-import re
 import time
 import aiohttp
 from helper.session import get_connector
 from urllib.parse import quote
-from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import YTS
 from constants.headers import HEADER_AIO, AIO_TIMEOUT

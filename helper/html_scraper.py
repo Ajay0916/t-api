@@ -1,6 +1,5 @@
 import os
 import asyncio
-import aiohttp
 from .asyncioPoliciesFix import decorator_asyncio_fix
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 

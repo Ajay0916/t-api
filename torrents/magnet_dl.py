@@ -34,7 +34,6 @@ class Magnetdl:
         except Exception:
             pass
         return await fetch_jina(url, timeout=12)
-        return None
 
     def _parser(self, htmls):
         try:
@@ -164,7 +163,10 @@ class Magnetdl:
             )
 
     async def recent(self, category, page, limit):
-        async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
+        async with AsyncSession(
+            impersonate="chrome",
+            curl_options={CurlOpt.IPRESOLVE: 1},
+        ) as session:
             start_time = time.time()
             self.LIMIT = limit
             if not category:

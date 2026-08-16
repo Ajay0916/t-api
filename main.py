@@ -14,6 +14,7 @@ from routers.v1.search_url_router import router as search_url_router
 from routers.v1.status_router import router as status_router
 from routers.v1.torrent_file_router import router as torrent_file_router
 from routers.v1.magnet_router import router as magnet_router
+from helper.is_site_available import all_sites
 from helper.uptime import getUptime
 from helper.session import sweep_flare_sessions_async
 from helper.dependencies import authenticate_request
@@ -26,7 +27,7 @@ startTime = time.time()
 app = FastAPI(
     title="Torrents-Api",
     version="1.6.10",
-    description="Unofficial Torrents / Books / Courses API — 25 sites, mirror rotation, combo search",
+    description="Unofficial Torrents / Books / Courses API — {} sites, mirror rotation, combo search".format(len(all_sites)),
     docs_url="/docs",
     contact={
         "name": "Ajay",

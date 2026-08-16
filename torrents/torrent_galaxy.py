@@ -10,25 +10,11 @@ from constants.base_url import TGX
 from constants.headers import HEADER_AIO
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet, build_torrent_url
+from helper.utils import format_size
 
 PAGE_SIZE = 50
 
 HOSTS = [TGX, "https://torrentgalaxy.one"]
-
-
-def format_size(size):
-    try:
-        size = float(size)
-    except (TypeError, ValueError):
-        return str(size)
-    if size <= 0:
-        return "0"
-    units = ["B", "KB", "MB", "GB", "TB"]
-    i = 0
-    while size >= 1024 and i < len(units) - 1:
-        size /= 1024
-        i += 1
-    return "{:.2f} {}".format(size, units[i])
 
 
 def format_date(ts):
