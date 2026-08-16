@@ -169,7 +169,7 @@ class Libgen:
             htmls = None
             for host in HOSTS:
                 self.BASE_URL = host
-                url = host + "/index.php?req={}&res=100".format(quote(query))
+                url = host + "/index.php?req={}&res=100&page={}".format(quote(query), max(int(page or 1), 1))
                 htmls = await Scraper().get_all_results(session, url)
                 if htmls and htmls[0]:
                     break

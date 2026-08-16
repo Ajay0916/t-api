@@ -19,7 +19,7 @@ class ArchiveBooks:
         self.BASE_URL = ARCHIVEBOOKS
         self.LIMIT = None
 
-    async def _search_items(self, session, query, limit):
+    async def _search_items(self, session, query, limit, page=1):
         hindi_q = (
             "language:(Hindi) AND mediatype:(texts) AND "
             "(title:({}) OR description:({}))"
@@ -34,8 +34,8 @@ class ArchiveBooks:
             self.BASE_URL
             + (
                 "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-                "&fl[]=downloads&fl[]=date&rows={}&output=json&sort[]=downloads+desc"
-            ).format(quote(q), limit)
+                "&fl[]=downloads&fl[]=date&rows={}&page={}&output=json&sort[]=downloads+desc"
+            ).format(quote(q), limit, max(int(page or 1), 1))
             for q in (hindi_q, general_q)
         ]
         htmls = await asyncio.gather(
@@ -118,7 +118,7 @@ class ArchiveBooks:
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
-            docs = await self._search_items(session, query, limit)
+            docs = await self._search_items(session, query, limit, page)
             if not docs:
                 return None
             results = {"data": []}

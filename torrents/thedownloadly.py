@@ -71,7 +71,7 @@ class TheDownloadly:
 
     async def search(self, query, page, limit):
         start_time = time.time()
-        url = "{}/?s={}".format(self.BASE_URL, quote(query))
+        url = "{}/?s={}&paged={}".format(self.BASE_URL, quote(query), max(int(page or 1), 1))
         html = await self._fetch(url)
         if not html:
             return None

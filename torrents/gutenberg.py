@@ -72,7 +72,7 @@ class Gutenberg:
 
     async def search(self, query, page, limit):
         start_time = time.time()
-        url = "{}/ebooks/search/?query={}".format(self.BASE_URL, quote(query))
+        url = "{}/ebooks/search/?query={}&page={}".format(self.BASE_URL, quote(query), max(int(page or 1), 1))
         html = await self._fetch(url)
         if not html:
             return None
