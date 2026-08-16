@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import APIRouter, status
 from typing import Optional
@@ -20,6 +21,8 @@ from helper.site_health import site_health
 router = APIRouter(tags=["Search"])
 
 SITE_DEADLINE = 40.0
+MAX_AUTO_LIMIT = 300
+MAX_PAGES = 6
 
 
 async def _search_site(website, query, page, limit):
@@ -42,6 +45,60 @@ async def _search_with_retry(website, query, page, limit, deadline):
                 await asyncio.sleep(1)
                 continue
             raise
+
+
+async def _search_paginated(website, query, start_page, per_page, want, deadline):
+    """Fetch pages until `want` results are collected (or pages run out).
+
+    Single call when want <= per_page (backward compatible). Multi-page mode
+    dedupes by url/hash/magnet/name across pages, so scrapers that ignore the
+    page param safely stop after the first duplicate page.
+    """
+    if want <= per_page:
+        return await _search_with_retry(website, query, start_page, per_page, deadline)
+
+    started = time.time()
+    rows, seen, total_pages, start_page = [], set(), 1, max(1, start_page)
+    resp = None
+    for p in range(start_page, start_page + MAX_PAGES):
+        try:
+            resp = await _search_with_retry(website, query, p, per_page, deadline)
+        except asyncio.TimeoutError:
+            if p == start_page:
+                raise
+            break
+        except Exception:
+            if p == start_page:
+                raise
+            break
+        if resp is None or not isinstance(resp, dict):
+            if p == start_page:
+                return None
+            break
+        data = resp.get("data") or []
+        try:
+            tp = int(resp.get("total_pages") or 1)
+            total_pages = max(total_pages, tp)
+        except (TypeError, ValueError):
+            pass
+        new = 0
+        for it in data:
+            key = it.get("url") or it.get("hash") or it.get("magnet") or it.get("name") or ""
+            if key:
+                if key in seen:
+                    continue
+                seen.add(key)
+            rows.append(it)
+            new += 1
+        if len(rows) >= want or new == 0 or (total_pages > 1 and p >= total_pages):
+            break
+    return {
+        "data": rows,
+        "current_page": start_page,
+        "total_pages": total_pages,
+        "total": len(rows),
+        "time": time.time() - started,
+    }
 
 
 @router.get("/")
@@ -88,14 +145,12 @@ async def search_for_torrents(
             json_message={"error": "Site is disabled."},
         )
 
-    limit = (
-        all_sites[site]["limit"]
-        if limit == 0 or limit > all_sites[site]["limit"]
-        else limit
-    )
+    site_max = all_sites[site]["limit"]
+    want = MAX_AUTO_LIMIT if limit == 0 else min(limit, MAX_AUTO_LIMIT)
+    per_page = min(site_max, want)
 
     cache_key = (
-        f"{site}:{query}:{page}:{limit}:{min_seeders}:{category}:{sort}:{order}"
+        f"{site}:{query}:{page}:{want}:{min_seeders}:{category}:{sort}:{order}"
         f":{quality}:{language}:{format}:{min_size}:{max_size}:{dedup}:{include}:{timeout}"
     )
     if not fresh:
@@ -105,8 +160,8 @@ async def search_for_torrents(
 
     try:
         deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
-        resp = await _search_with_retry(
-            all_sites[site]["website"], query, page, limit, deadline
+        resp = await _search_paginated(
+            all_sites[site]["website"], query, page, per_page, want, deadline
         )
     except asyncio.TimeoutError:
         # Slow but alive: don't blacklist, retry next time (results matter).
