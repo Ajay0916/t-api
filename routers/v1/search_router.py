@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 
 from fastapi import APIRouter, status
@@ -47,7 +48,22 @@ async def _search_with_retry(website, query, page, limit, deadline):
             raise
 
 
-async def _search_paginated(website, query, start_page, per_page, want, deadline):
+def _parse_page(spec):
+    """-p 0 -> unlimited pages, -p N -> single page N, -p A-B -> pages A..B."""
+    m = re.match(r"^(\d+)(?:-(\d+))?$", (spec or "1").strip().lower())
+    if not m:
+        return 1, 1
+    a, b = int(m.group(1)), int(m.group(2) or m.group(1))
+    if a <= 0:
+        a, b = 1, MAX_PAGES
+    elif b <= 0:
+        b = MAX_PAGES
+    if b < a:
+        b = a
+    return a, min(b, a + MAX_PAGES - 1)
+
+
+async def _search_paginated(website, query, start_page, end_page, per_page, want, deadline):
     """Fetch pages until `want` results are collected (or pages run out).
 
     Single call when want <= per_page (backward compatible). Multi-page mode
@@ -58,9 +74,9 @@ async def _search_paginated(website, query, start_page, per_page, want, deadline
         return await _search_with_retry(website, query, start_page, per_page, deadline)
 
     started = time.time()
-    rows, seen, total_pages, start_page = [], set(), 1, max(1, start_page)
+    rows, seen, total_pages = [], set(), 1
     resp = None
-    for p in range(start_page, start_page + MAX_PAGES):
+    for p in range(start_page, end_page + 1):
         try:
             resp = await _search_with_retry(website, query, p, per_page, deadline)
         except asyncio.TimeoutError:
@@ -90,7 +106,7 @@ async def _search_paginated(website, query, start_page, per_page, want, deadline
                 seen.add(key)
             rows.append(it)
             new += 1
-        if len(rows) >= want or new == 0 or (total_pages > 1 and p >= total_pages):
+        if len(rows) >= want or new == 0 or p >= end_page:
             break
     return {
         "data": rows,
@@ -107,7 +123,7 @@ async def search_for_torrents(
     site: str,
     query: str,
     limit: Optional[int] = 0,
-    page: Optional[int] = 1,
+    page: Optional[str] = "1",
     fresh: Optional[int] = 0,
     dedup: Optional[int] = 0,
     include: Optional[str] = "", 
@@ -148,6 +164,7 @@ async def search_for_torrents(
     site_max = all_sites[site]["limit"]
     want = MAX_AUTO_LIMIT if limit == 0 else min(limit, MAX_AUTO_LIMIT)
     per_page = min(site_max, want)
+    start_page, end_page = _parse_page(page)
 
     cache_key = (
         f"{site}:{query}:{page}:{want}:{min_seeders}:{category}:{sort}:{order}"
@@ -161,7 +178,7 @@ async def search_for_torrents(
     try:
         deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
         resp = await _search_paginated(
-            all_sites[site]["website"], query, page, per_page, want, deadline
+            all_sites[site]["website"], query, start_page, end_page, per_page, want, deadline
         )
     except asyncio.TimeoutError:
         # Slow but alive: don't blacklist, retry next time (results matter).
