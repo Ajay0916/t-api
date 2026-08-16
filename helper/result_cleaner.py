@@ -281,6 +281,25 @@ def _seeders(item):
     return float(seeds) if isinstance(seeds, int) else -1
 
 
+
+# File-locker pages (nitroflare/uploadgig/rapidgator/...) need a browser +
+# often a paid account; proxying them always 502s, so they must be linked
+# directly instead of getting a short /torrent_file token.
+_LOCKER_HOSTS = (
+    "nitroflare.com", "uploadgig.com", "rapidgator.net", "keep2share.cc",
+    "k2s.cc", "filecrypt.cc", "katfile.com", "turbobit.net", "hitfile.net",
+    "alfafile.net", "uploadrar.com", "userscloud.com", "file-upload.com",
+    "fboom.me", "douploads.net", "hxfile.co", "dropapk.to", "uploadboy.com",
+    "upload.ee", "ddownload.com", "wdupload.com", "dailyuploads.net",
+    "4funbox.co", "mega.nz",
+)
+
+
+def _locker_url(url):
+    """True for file-locker/hoster pages that can't be proxied."""
+    return any(h in str(url) for h in _LOCKER_HOSTS)
+
+
 def clean_results(resp, sort=True, dedup=True):
     """Normalize, deduplicate and (optionally) sort results.
 
@@ -357,13 +376,21 @@ def clean_results(resp, sort=True, dedup=True):
                     item["size_bytes"] = size_bytes
             if "size" not in item:
                 item["size"] = ""
-            if item.get("torrent") and not item.get("short"):
+            if (
+                item.get("torrent")
+                and not item.get("short")
+                and not _locker_url(item["torrent"])
+            ):
                 item["short"] = register(
                     item["torrent"], item.get("name") or "", item.get("extension") or ""
                 )
             if item.get("magnet") and not item.get("magnet_short"):
                 item["magnet_short"] = register_magnet(item["magnet"])
-            if item.get("download") and not item.get("download_short"):
+            if (
+                item.get("download")
+                and not item.get("download_short")
+                and not _locker_url(item["download"])
+            ):
                 item["download_short"] = register(
                     item["download"], item.get("name") or "", item.get("extension") or ""
                 )
