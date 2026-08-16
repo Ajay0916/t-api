@@ -76,39 +76,6 @@
 
 > Per-site `limit` and available methods: [`helper/is_site_available.py`](helper/is_site_available.py)
 
----
-
-## 🎯 Lead Generation (IndiaMART / JustDial)
-
-Business leads (name + phone + GST) from public B2B directories — not part of
-torrent combo/search.
-
-- `GET /api/v1/leads?site=indiamart&query=kitchen+chimney&limit=10`
-- `GET /api/v1/leads?site=indiamart&url=https://www.indiamart.com/<company-slug>/` — single company
-- `GET /api/v1/leads?site=justdial&query=kitchen+chimney&city=Delhi` (or pass a full JD search URL)
-- `GET /api/v1/leads/export?site=indiamart&query=kitchen+chimney&limit=10` — Excel-ready CSV (UTF-8 BOM)
-
-Row fields: `name`, `phone` (+ `phones` list), `gst` (full GSTIN when found),
-`gst_masked` (live masked value, e.g. `07**********1Z9`), `gst_verified`, `city`,
-`business_type`, `rating`, `reviews`, `url`.
-
-How GST works: IndiaMART masks the middle of the GSTIN on company pages, so the
-full number is recovered from the company page's archived snapshot and
-**validated against the live mask** (first 2 + last 3 chars must match) — a
-wrong/old snapshot can never pass as that company's GSTIN. `gst_only=1` drops
-rows with no GST info at all.
-
-Notes / env:
-- IndiaMART is fetched through the r.jina.ai reader — `JINA_API_KEY` (free key)
-  raises the reader rate limit; `LEADS_JINA_DELAY` (default 1.2s) paces calls.
-- JustDial sits behind Akamai and denies most datacenter IPs — it works when
-  the API runs behind `HTTP_PROXY`/`HTTPS_PROXY` (residential/ISP IP); otherwise
-  it returns a clear "blocked" error.
-- `gst_only=1` → only rows with full or masked GST.
-
-
----
-
 ## 🚀 Installation
 
 ```sh
