@@ -1,3 +1,4 @@
+import re
 import time
 import xml.etree.ElementTree as ET
 from urllib.parse import quote
@@ -10,6 +11,20 @@ from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.trackers import build_magnet, build_torrent_url
 from helper.utils import format_size
+
+# RSS titles sometimes carry site debug junk ("...Var Lang= New<br/>array(7);
+# Lang[0]='search-Must-Be-At-Least-2-Characters-'"). Skip those items and
+# clean the rest (newlines, <br> tags, double spaces).
+_BAD_TITLE_MARKS = (
+    "must-be-at-least", "array(", "lang[0]", "var lang=", "<br",
+    "notice:", "warning:", "fatal error", "undefined index", "deprecated:",
+    "sqlstate", "mysql error", "parse error",
+)
+
+
+def _clean_title(title):
+    t = re.sub(r"<br\s*/?>", " ", title, flags=re.I)
+    return re.sub(r"\s+", " ", t).strip()
 
 
 class TDP:
@@ -38,8 +53,9 @@ class TDP:
 
             title = field("title")
             info_hash = field("info_hash")
-            if not title:
+            if not title or any(m in title.lower() for m in _BAD_TITLE_MARKS):
                 continue
+            title = _clean_title(title)
             results.append(
                 {
                     "name": title,
