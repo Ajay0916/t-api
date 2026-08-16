@@ -13,7 +13,6 @@ from routers.home_router import router as home_router
 from routers.v1.search_url_router import router as search_url_router
 from routers.v1.status_router import router as status_router
 from routers.v1.torrent_file_router import router as torrent_file_router
-from routers.v1.leads_router import router as leads_router
 from routers.v1.magnet_router import router as magnet_router
 from helper.is_site_available import all_sites
 from helper.uptime import getUptime
@@ -85,7 +84,6 @@ app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends
 # form inside torrent_file_router still requires the PIN.
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
 app.include_router(magnet_router, prefix="/api/v1/magnet")
-app.include_router(leads_router, prefix="/api/v1")
 app.include_router(home_router, prefix="")
 
 handler = Mangum(app)
