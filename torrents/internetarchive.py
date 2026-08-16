@@ -67,7 +67,7 @@ class InternetArchive:
         q = "title:({})".format(quote(query))
         url = self.BASE_URL + (
             "/advancedsearch.php?q={}&fl[]=identifier&fl[]=title"
-            "&fl[]=mediatype&fl[]=date&fl[]=creator&fl[]=item_size"
+            "&fl[]=mediatype&fl[]=date&fl[]=creator&fl[]=item_size&fl[]=btih"
             "&rows={}&page={}&output=json&sort[]=downloads+desc"
         ).format(quote(q), per, page)
         data = None
@@ -115,6 +115,9 @@ class InternetArchive:
             if size:
                 obj["size_bytes"] = int(size)
                 obj["size"] = self._format_size(size)
+            btih = d.get("btih")
+            if btih:
+                obj["hash"] = str(btih).upper()
             authors = clean_archive_creators(d.get("creator"))
             if authors:
                 obj["authors"] = authors
