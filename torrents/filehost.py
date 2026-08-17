@@ -78,6 +78,12 @@ def _clean_title(raw, file_id):
     # If junk or too short, generate from file_id
     if not name or name.lower() in _JUNK_TITLES or len(name) < 4:
         return None
+    # Strip leading file-type prefixes that DDG adds (e.g., 'PDF ', 'ZIP ', 'MP4 ')
+    name = re.sub(r'^(PDF|ZIP|RAR|MP4|MP3|EXE|7Z|ISO|EPUB|TXT|DOC|PPT|XLS|AVI|MKV|FLAC|WAV|JPG|PNG|CSV)\s+', '', name, flags=re.I).strip()
+    # Strip platform domain from end
+    name = re.sub(r'\s*[-–|]?\s*files?\.(?:catbox\.moe|mega\.nz)\s*$', '', name, flags=re.I).strip()
+    if not name or name.lower() in _JUNK_TITLES:
+        return None
     return name
 
 
@@ -136,9 +142,9 @@ def _extract_results(html):
                 if snip_file:
                     name = unquote(snip_file.group(1))
                 else:
-                    # First meaningful part of snippet
+                    # First meaningful part of snippet (skip if looks like a sentence)
                     first_line = snippet.split(".")[0].split(" - ")[0].strip()
-                    if first_line and len(first_line) > 5:
+                    if first_line and len(first_line) > 5 and len(first_line.split()) <= 12:
                         name = first_line
 
             # Final fallback
