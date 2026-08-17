@@ -32,6 +32,7 @@ from torrents.rutracker import RuTracker
 from torrents.gutenberg import Gutenberg
 from torrents.thedownloadly import TheDownloadly
 from torrents.internetarchive import InternetArchive
+from torrents.gdrivesearch import GDriveSearch
 
 all_sites = {
     "1337x": {
@@ -457,6 +458,17 @@ all_sites = {
         "recent_category_available": False,
         "categories": ["books", "movies", "music", "apps"],
         "limit": 15,
+    },
+    "gdrive": {
+        "website": GDriveSearch,
+        "combo_available": False,
+        "trending_available": False,
+        "trending_category": False,
+        "search_by_category": False,
+        "recent_available": False,
+        "recent_category_available": False,
+        "categories": [],
+        "limit": 10,
     },
 }
 
