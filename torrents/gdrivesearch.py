@@ -149,7 +149,7 @@ class GDriveSearch:
         page_num = max(int(page or 1), 1)
 
         # Try SearXNG first (local, fast, no rate limits)
-        results = await _searxng_search(query)
+        results = _parse_searxng_results(await _searxng_search(query))
         source = "searxng"
 
         # Fallback to FlareSolverr + DuckDuckGo
