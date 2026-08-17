@@ -12,7 +12,8 @@ FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rs
 _flare_lock = asyncio.Lock()
 
 _DDG_SEARCH = "https://html.duckduckgo.com/html/?q=site%3Adrive.google.com+{query}"
-_DRIVE_ID_RE = re.compile(r"([a-zA-Z0-9_-]{20,})")
+_DRIVE_FILE_RE = re.compile(r"drive\.google\.com/file/d/([a-zA-Z0-9_-]{20,})")
+_DRIVE_ANY_RE = re.compile(r"drive\.google\.com/[^\"]*?([a-zA-Z0-9_-]{20,})")
 
 
 def _drive_direct_link(file_id):
@@ -31,7 +32,6 @@ async def _searxng_search(query, timeout_sec=15):
         "q": f'site:drive.google.com "{query}"',
         "format": "json",
         "engines": "google,bing,duckduckgo",
-        "categories": "general",
     }
     try:
         async with aiohttp.ClientSession(
@@ -44,7 +44,7 @@ async def _searxng_search(query, timeout_sec=15):
                 timeout=aiohttp.ClientTimeout(total=timeout_sec),
             ) as resp:
                 if resp.status != 200:
-                    return None
+                    return []
                 data = await resp.json(content_type=None)
         return data.get("results") or []
     except Exception:
@@ -52,32 +52,46 @@ async def _searxng_search(query, timeout_sec=15):
 
 
 def _parse_searxng_results(results):
-    """Extract Drive IDs and titles from SearXNG JSON results."""
+    """Extract Drive file IDs and titles from SearXNG results.
+    Prefers /file/d/ links (direct files) over /drive/folders/ links.
+    """
     if not results:
         return []
     seen = set()
     out = []
-    drive_pat = re.compile(r"drive\.google\.com/[^\"]*?([a-zA-Z0-9_-]{20,})")
 
     for r in results:
         url = r.get("url") or ""
-        m = drive_pat.search(url)
+        title = (r.get("title") or "").strip()
+        title = re.sub(r"\s*[-–|]\s*Google Drive\s*$", "", title).strip()
+
+        # Prefer file links over folder links
+        m = _DRIVE_FILE_RE.search(url)
+        is_folder = bool(re.search(r"drive\.google\.com/drive/folders/", url))
+
         if not m:
-            # Check content/snippet for drive links
+            m = _DRIVE_ANY_RE.search(url)
+        if not m:
+            # Check content for drive links
             content = r.get("content") or ""
-            m = drive_pat.search(content)
-            if not m:
-                continue
+            m = _DRIVE_FILE_RE.search(content) or _DRIVE_ANY_RE.search(content)
+        if not m:
+            continue
+
         file_id = m.group(1)
         if file_id in seen:
             continue
         seen.add(file_id)
-        title = (r.get("title") or "").strip()
+
         if not title:
             title = f"GDrive: {file_id[:16]}..."
-        title = re.sub(r"\s*[-–|]\s*Google Drive\s*$", "", title).strip()
-        out.append((file_id, title))
-    return out
+        title = f"📁 {title}" if is_folder else title
+
+        out.append((file_id, title, not is_folder))
+
+    # Sort: files first, then folders
+    out.sort(key=lambda x: (not x[2], x[1]))
+    return [(fid, title) for fid, title, _ in out]
 
 
 # ── FlareSolverr + DuckDuckGo (fallback) ───────────────────────────
@@ -125,15 +139,19 @@ async def _flare_ddg_search(query, timeout_sec=25):
         real_url = unquote(uddg.group(1))
         if "drive.google.com" not in real_url:
             continue
-        id_m = _DRIVE_ID_RE.search(real_url)
+        id_m = _DRIVE_ANY_RE.search(real_url)
         if not id_m:
             continue
         file_id = id_m.group(1)
         if file_id in seen:
             continue
         seen.add(file_id)
-        out.append((file_id, title))
-    return out
+        is_folder = "folders/" in real_url
+        label = f"📁 {title}" if is_folder else title
+        out.append((file_id, label, not is_folder))
+
+    out.sort(key=lambda x: (not x[2], x[1]))
+    return [(fid, title) for fid, title, _ in out]
 
 
 # ── Main class ──────────────────────────────────────────────────────
@@ -152,12 +170,10 @@ class GDriveSearch:
 
         # Try SearXNG first (local, fast, no rate limits)
         results = _parse_searxng_results(await _searxng_search(query))
-        source = "searxng"
 
         # Fallback to FlareSolverr + DuckDuckGo
         if not results:
             results = await _flare_ddg_search(query)
-            source = "ddg-flare"
 
         if not results:
             return None
