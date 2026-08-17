@@ -13,8 +13,7 @@ _flare_lock = asyncio.Lock()
 PLATFORMS = {
     "mega": {
         "dork": "site:mega.nz/file OR site:mega.co.nz/file",
-        "url_re": re.compile(r"(?:mega\.nz|mega\.co\.nz)/file/([a-zA-Z0-9]+#[a-zA-Z0-9]+)"),
-        "name_re": re.compile(r"mega\.(?:nz|co\.nz)/file/([a-zA-Z0-9]+)(?:#([^/]+))?"),
+        "url_re": re.compile(r"(?:mega\.nz|mega\.co\.nz)/file/([a-zA-Z0-9]+)(?:#([a-zA-Z0-9]+))?"),
         "view": "https://mega.nz/file/{id}",
     },
     "workupload": {
@@ -28,12 +27,12 @@ PLATFORMS = {
         "view": "https://gofile.io/d/{id}",
     },
     "catbox": {
-        "dork": "site:catbox.moe OR site:files.catbox.moe",
-        "url_re": re.compile(r"(?:files\.)?catbox\.moe/([a-zA-Z0-9]+\.[a-z0-9]+)"),
+        "dork": "site:files.catbox.moe",
+        "url_re": re.compile(r"files\.catbox\.moe/([a-zA-Z0-9]+\.[a-z0-9]+)"),
         "view": "https://files.catbox.moe/{id}",
     },
     "1fichier": {
-        "dork": "site:1fichier.com",
+        "dork": "site:1fichier.com/",
         "url_re": re.compile(r"1fichier\.com/([a-zA-Z0-9]+)"),
         "view": "https://1fichier.com/{id}",
     },
@@ -44,16 +43,24 @@ PLATFORMS = {
     },
 }
 
+# Junk titles to skip (homepage, about pages, etc.)
+_JUNK_TITLES = {
+    "", "mediafire", "file sharing and storage made simple", "files.catbox.moe",
+    "1fichier.com: cloud storage", "catbox", "catbox tools", "workupload",
+    "workupload - are you a human?", "gofile - the free file sharing platform",
+    "bayfiles", "mega", "mega.nz",
+}
 
-def _build_dork(platforms=None):
-    """Build a combined DDG dork for multiple platforms."""
-    targets = platforms or list(PLATFORMS.keys())
-    parts = []
-    for p in targets:
-        info = PLATFORMS.get(p)
-        if info:
-            parts.append(info["dork"])
-    return " OR ".join(parts)
+
+def _clean_title(raw, file_id):
+    """Clean and validate a title."""
+    name = raw.strip()
+    # Remove common suffixes
+    name = re.sub(r"\s*[-–|]\s*(MediaFire|MEGA|1fichier|Workupload|GoFile|Catbox|Bayfiles)\s*$", "", name, flags=re.I).strip()
+    # If junk or too short, generate from file_id
+    if not name or name.lower() in _JUNK_TITLES or len(name) < 4:
+        return None
+    return name
 
 
 def _extract_results(html):
@@ -61,11 +68,17 @@ def _extract_results(html):
     seen = set()
     out = []
 
-    for m in re.finditer(
-        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S
-    ):
+    # Find result blocks: title + snippet + url
+    result_pattern = re.compile(
+        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>'
+        r'.*?<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
+        re.S,
+    )
+
+    for m in result_pattern.finditer(html):
         href = m.group(1)
         title_raw = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        snippet = re.sub(r"<[^>]+>", "", m.group(3)).strip()[:200]
 
         uddg = re.search(r"uddg=([^&\"]+)", href)
         if not uddg:
@@ -83,11 +96,39 @@ def _extract_results(html):
                 continue
             seen.add(dedup_key)
 
-            # Get view URL
             view_url = plat_info["view"].format(id=file_id)
 
-            # Filename: from URL path or title
-            name = unquote(title_raw) if title_raw and title_raw not in ("MediaFire", "") else f"{plat_name}: {file_id[:16]}..."
+            # Build name: try URL filename > title > snippet > generate
+            name = None
+
+            # From URL path (e.g., mega uses #filename after hash)
+            if plat_name == "mega" and "#" in real_url:
+                url_name = unquote(real_url.split("#", 1)[1].replace("+", " "))
+                if url_name and len(url_name) > 3:
+                    name = url_name
+
+            # From title
+            if not name:
+                name = _clean_title(unquote(title_raw), file_id)
+
+            # From snippet (often has filename info)
+            if not name:
+                # Look for quoted filename in snippet
+                snip_file = re.search(r'["\']([^"\']+\.[a-z]{2,4})["\']', snippet, re.I)
+                if snip_file:
+                    name = unquote(snip_file.group(1))
+                else:
+                    # First meaningful part of snippet
+                    first_line = snippet.split(".")[0].split(" - ")[0].strip()
+                    if first_line and len(first_line) > 5:
+                        name = first_line
+
+            # Final fallback
+            if not name:
+                if plat_name == "catbox":
+                    name = file_id  # e.g., "abc123.pdf"
+                else:
+                    name = f"{plat_name.upper()}: {file_id[:16]}"
 
             out.append({
                 "name": name,
@@ -95,14 +136,14 @@ def _extract_results(html):
                 "hash": file_id,
                 "platform": plat_name.upper(),
             })
-            break  # First match wins
+            break
 
     return out
 
 
-async def _flare_ddg_search(query, timeout_sec=30, platforms=None):
+async def _flare_ddg_search(query, timeout_sec=30):
     """Search via DuckDuckGo HTML through FlareSolverr."""
-    dork = _build_dork(platforms)
+    dork = _build_dork()
     full_query = f"({dork}) {query}"
     url = f"https://html.duckduckgo.com/html/?q={quote(full_query)}"
     payload = {
@@ -132,6 +173,11 @@ async def _flare_ddg_search(query, timeout_sec=30, platforms=None):
         return []
 
     return _extract_results(html)
+
+
+def _build_dork():
+    parts = [info["dork"] for info in PLATFORMS.values()]
+    return " OR ".join(parts)
 
 
 class FileHostSearch:
