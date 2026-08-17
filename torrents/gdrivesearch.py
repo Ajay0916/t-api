@@ -7,7 +7,6 @@ from urllib.parse import quote, unquote
 
 import aiohttp
 
-SEARXNG_URL = (os.getenv("SEARXNG_URL") or "http://127.0.0.1:8888").rstrip("/")
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _flare_lock = asyncio.Lock()
 
@@ -24,80 +23,8 @@ def _drive_view_link(file_id):
     return f"https://drive.google.com/file/d/{file_id}/view"
 
 
-# ── SearXNG (primary) ──────────────────────────────────────────────
-
-async def _searxng_search(query, timeout_sec=15):
-    """Search via local SearXNG instance (JSON API)."""
-    params = {
-        "q": f'site:drive.google.com "{query}"',
-        "format": "json",
-        "engines": "google,bing,duckduckgo",
-    }
-    try:
-        async with aiohttp.ClientSession(
-            connector=aiohttp.TCPConnector(ssl=False, limit=10),
-            connector_owner=True,
-        ) as session:
-            async with session.get(
-                f"{SEARXNG_URL}/search",
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=timeout_sec),
-            ) as resp:
-                if resp.status != 200:
-                    return []
-                data = await resp.json(content_type=None)
-        return data.get("results") or []
-    except Exception:
-        return []
-
-
-def _parse_searxng_results(results):
-    """Extract Drive file IDs and titles from SearXNG results.
-    Prefers /file/d/ links (direct files) over /drive/folders/ links.
-    """
-    if not results:
-        return []
-    seen = set()
-    out = []
-
-    for r in results:
-        url = r.get("url") or ""
-        title = (r.get("title") or "").strip()
-        title = re.sub(r"\s*[-–|]\s*Google Drive\s*$", "", title).strip()
-
-        # Prefer file links over folder links
-        m = _DRIVE_FILE_RE.search(url)
-        is_folder = bool(re.search(r"drive\.google\.com/drive/folders/", url))
-
-        if not m:
-            m = _DRIVE_ANY_RE.search(url)
-        if not m:
-            # Check content for drive links
-            content = r.get("content") or ""
-            m = _DRIVE_FILE_RE.search(content) or _DRIVE_ANY_RE.search(content)
-        if not m:
-            continue
-
-        file_id = m.group(1)
-        if file_id in seen:
-            continue
-        seen.add(file_id)
-
-        if not title:
-            title = f"GDrive: {file_id[:16]}..."
-        title = f"📁 {title}" if is_folder else title
-
-        out.append((file_id, title, not is_folder))
-
-    # Sort: files first, then folders
-    out.sort(key=lambda x: (not x[2], x[1]))
-    return [(fid, title) for fid, title, _ in out]
-
-
-# ── FlareSolverr + DuckDuckGo (fallback) ───────────────────────────
-
-async def _flare_ddg_search(query, timeout_sec=25):
-    """Fallback: search via DuckDuckGo HTML through FlareSolverr."""
+async def _flare_ddg_search(query, timeout_sec=30):
+    """Search via DuckDuckGo HTML through FlareSolverr (only method that works for Drive dorks)."""
     url = _DDG_SEARCH.format(query=quote(query))
     payload = {
         "cmd": "request.get",
@@ -139,6 +66,10 @@ async def _flare_ddg_search(query, timeout_sec=25):
         real_url = unquote(uddg.group(1))
         if "drive.google.com" not in real_url:
             continue
+
+        is_file = bool(_DRIVE_FILE_RE.search(real_url))
+        is_folder = "folders/" in real_url
+
         id_m = _DRIVE_ANY_RE.search(real_url)
         if not id_m:
             continue
@@ -146,15 +77,18 @@ async def _flare_ddg_search(query, timeout_sec=25):
         if file_id in seen:
             continue
         seen.add(file_id)
-        is_folder = "folders/" in real_url
-        label = f"📁 {title}" if is_folder else title
-        out.append((file_id, label, not is_folder))
 
+        if not title or title == "Google Drive":
+            title = f"GDrive: {file_id[:16]}..."
+        if is_folder:
+            title = f"📁 {title}"
+
+        out.append((file_id, title, is_file))
+
+    # Files first, then folders
     out.sort(key=lambda x: (not x[2], x[1]))
     return [(fid, title) for fid, title, _ in out]
 
-
-# ── Main class ──────────────────────────────────────────────────────
 
 class GDriveSearch:
     _name = "GDrive Search"
@@ -168,17 +102,11 @@ class GDriveSearch:
         per = limit or 10
         page_num = max(int(page or 1), 1)
 
-        # Try SearXNG first (local, fast, no rate limits)
-        results = _parse_searxng_results(await _searxng_search(query))
-
-        # Fallback to FlareSolverr + DuckDuckGo
-        if not results:
-            results = await _flare_ddg_search(query)
+        results = await _flare_ddg_search(query)
 
         if not results:
             return None
 
-        # Paginate
         start_idx = (page_num - 1) * per
         page_slice = results[start_idx : start_idx + per]
 
