@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 import aiohttp
 
+SEARXNG_URL = (os.getenv("SEARXNG_URL") or "http://127.0.0.1:8888").rstrip("/")
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _flare_lock = asyncio.Lock()
 
@@ -22,25 +23,106 @@ def _drive_view_link(file_id):
     return f"https://drive.google.com/file/d/{file_id}/view"
 
 
-def _parse_ddg_results(html):
-    """Parse DuckDuckGo HTML search results for Google Drive links."""
-    results = []
-    seen = set()
+# ── SearXNG (primary) ──────────────────────────────────────────────
 
+async def _searxng_search(query, timeout_sec=15):
+    """Search via local SearXNG instance (JSON API)."""
+    params = {
+        "q": f'site:drive.google.com "{query}"',
+        "format": "json",
+        "engines": "google,bing,duckduckgo",
+        "categories": "general",
+    }
+    try:
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=False, limit=10),
+            connector_owner=True,
+        ) as session:
+            async with session.get(
+                f"{SEARXNG_URL}/search",
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=timeout_sec),
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json(content_type=None)
+        return data.get("results") or []
+    except Exception:
+        return None
+
+
+def _parse_searxng_results(results):
+    """Extract Drive IDs and titles from SearXNG JSON results."""
+    seen = set()
+    out = []
+    drive_pat = re.compile(r"drive\.google\.com/[^\"]*?([a-zA-Z0-9_-]{20,})")
+
+    for r in results:
+        url = r.get("url") or ""
+        m = drive_pat.search(url)
+        if not m:
+            # Check content/snippet for drive links
+            content = r.get("content") or ""
+            m = drive_pat.search(content)
+            if not m:
+                continue
+        file_id = m.group(1)
+        if file_id in seen:
+            continue
+        seen.add(file_id)
+        title = (r.get("title") or "").strip()
+        if not title:
+            title = f"GDrive: {file_id[:16]}..."
+        title = re.sub(r"\s*[-–|]\s*Google Drive\s*$", "", title).strip()
+        out.append((file_id, title))
+    return out
+
+
+# ── FlareSolverr + DuckDuckGo (fallback) ───────────────────────────
+
+async def _flare_ddg_search(query, timeout_sec=25):
+    """Fallback: search via DuckDuckGo HTML through FlareSolverr."""
+    url = _DDG_SEARCH.format(query=quote(query))
+    payload = {
+        "cmd": "request.get",
+        "url": url,
+        "maxTimeout": timeout_sec * 1000,
+        "session": "gdrive",
+    }
+    try:
+        async with _flare_lock:
+            async with aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(limit=10, force_close=True, ssl=False),
+                connector_owner=True,
+                trust_env=True,
+            ) as session:
+                async with session.post(
+                    f"{FLARESOLVERR_URL}/v1",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout_sec + 15),
+                ) as res:
+                    data = await res.json(content_type=None)
+        solution = data.get("solution") or {}
+        if solution.get("status") != 200:
+            return []
+        html = solution.get("response") or ""
+    except Exception:
+        return []
+
+    seen = set()
+    out = []
     for m in re.finditer(
         r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S
     ):
         href = m.group(1)
         title_raw = re.sub(r"<[^>]+>", "", m.group(2)).strip()
         title = unescape(title_raw)
-
         uddg = re.search(r"uddg=([^&\"]+)", href)
         if not uddg:
             continue
         real_url = unquote(uddg.group(1))
         if "drive.google.com" not in real_url:
             continue
-
         id_m = _DRIVE_ID_RE.search(real_url)
         if not id_m:
             continue
@@ -48,10 +130,11 @@ def _parse_ddg_results(html):
         if file_id in seen:
             continue
         seen.add(file_id)
-        results.append((file_id, title))
+        out.append((file_id, title))
+    return out
 
-    return results
 
+# ── Main class ──────────────────────────────────────────────────────
 
 class GDriveSearch:
     _name = "GDrive Search"
@@ -60,52 +143,30 @@ class GDriveSearch:
         self.BASE_URL = "https://drive.google.com"
         self.LIMIT = None
 
-    async def _flaresolverr_get(self, url, timeout_sec=25):
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": timeout_sec * 1000,
-            "session": "gdrive",
-        }
-        try:
-            async with _flare_lock:
-                async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(limit=10, force_close=True, ssl=False),
-                    connector_owner=True,
-                    trust_env=True,
-                ) as session:
-                    async with session.post(
-                        f"{FLARESOLVERR_URL}/v1",
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=timeout_sec + 15),
-                    ) as res:
-                        data = await res.json(content_type=None)
-            solution = data.get("solution") or {}
-            if solution.get("status") != 200:
-                return None
-            return solution.get("response") or ""
-        except Exception:
-            return None
-
     async def search(self, query, page, limit):
         start_time = time.time()
         per = limit or 10
         page_num = max(int(page or 1), 1)
 
-        url = _DDG_SEARCH.format(query=quote(query))
-        html = await self._flaresolverr_get(url, timeout_sec=30)
-        if not html:
+        # Try SearXNG first (local, fast, no rate limits)
+        results = await _searxng_search(query)
+        source = "searxng"
+
+        # Fallback to FlareSolverr + DuckDuckGo
+        if not results:
+            results = await _flare_ddg_search(query)
+            source = "ddg-flare"
+
+        if not results:
             return None
 
-        ids_titles = _parse_ddg_results(html)
-
-        # Apply pagination
+        # Paginate
         start_idx = (page_num - 1) * per
-        page_slice = ids_titles[start_idx : start_idx + per]
+        page_slice = results[start_idx : start_idx + per]
 
-        results = []
+        data = []
         for file_id, title in page_slice:
-            results.append({
+            data.append({
                 "name": title,
                 "url": _drive_view_link(file_id),
                 "torrent": _drive_direct_link(file_id),
@@ -115,15 +176,15 @@ class GDriveSearch:
                 "size": "",
             })
 
-        has_more = len(ids_titles) > start_idx + per
+        has_more = len(results) > start_idx + per
         total_pages = page_num + 1 if has_more else page_num
 
         return {
-            "data": results,
+            "data": data,
             "current_page": page_num,
             "total_pages": max(1, total_pages),
             "time": time.time() - start_time,
-            "total": len(results),
+            "total": len(data),
         }
 
     async def trending(self, category, page, limit):
