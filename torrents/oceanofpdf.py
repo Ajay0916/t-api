@@ -2,32 +2,16 @@ import asyncio
 import os
 import re
 import time
-import uuid
 
 import aiohttp
 from urllib.parse import quote
 
 from constants.base_url import OCEANOFPDF
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
-from helper.session import close_flare_session_async, get_connector
+from helper.session import get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-_SESSION_TTL = 300.0
-_sid = None
-_sid_created = 0.0
 _flare_lock = asyncio.Lock()
-
-
-def _get_sid():
-    global _sid, _sid_created
-    now = time.time()
-    if not _sid or now - _sid_created > _SESSION_TTL:
-        old = _sid
-        _sid = "oceanofpdf-{}".format(uuid.uuid4().hex[:10])
-        _sid_created = now
-        # Replacing the session leaks the old browser unless destroyed.
-        close_flare_session_async(old, FLARESOLVERR_URL)
-    return _sid
 
 
 class OceanofPDF:
@@ -41,7 +25,8 @@ class OceanofPDF:
     async def _flaresolverr(self, payload, timeout):
         async with _flare_lock:
             async with aiohttp.ClientSession(
-                connector=get_connector(), connector_owner=False, trust_env=True
+                connector=aiohttp.TCPConnector(limit=10, force_close=True, ssl=False),
+                connector_owner=True, trust_env=True
             ) as session:
                 async with session.post(
                     f"{FLARESOLVERR_URL}/v1", json=payload, timeout=timeout
@@ -52,27 +37,35 @@ class OceanofPDF:
             return None
         return solution
 
+    async def _flare_get(self, url, timeout_sec=30):
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": timeout_sec * 1000,
+            "session": "oceanofpdf",
+        }
+        return await self._flaresolverr(payload, aiohttp.ClientTimeout(total=timeout_sec + 10))
+
+    async def _flare_post(self, url, post_data, timeout_sec=30):
+        payload = {
+            "cmd": "request.post",
+            "url": url,
+            "postData": post_data,
+            "maxTimeout": timeout_sec * 1000,
+            "session": "oceanofpdf",
+        }
+        return await self._flaresolverr(payload, aiohttp.ClientTimeout(total=timeout_sec + 10))
+
     async def _search_page(self, query, page):
         url = self.BASE_URL + "/?s=" + quote(query)
         if page > 1:
             url = self.BASE_URL + "/page/{}/?s={}".format(page, quote(query))
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 60000,
-            "session": _get_sid(),
-        }
-        sol = await self._flaresolverr(payload, aiohttp.ClientTimeout(total=65))
+        sol = await self._flare_get(url, timeout_sec=60)
         if not sol:
             return None, None, None
         html = sol.get("response") or ""
-        cookies = {
-            c.get("name"): c.get("value")
-            for c in (sol.get("cookies") or [])
-            if c.get("name") and c.get("value")
-        }
         ua = sol.get("userAgent") or ""
-        return html, cookies, ua
+        return html, {}, ua
 
     @staticmethod
     def _parser(html):
@@ -93,12 +86,13 @@ class OceanofPDF:
         return out
 
     @decorator_asyncio_fix
-    async def _book_info(self, session, obj, cookies, ua, sem):
+    async def _book_info(self, obj, sem):
         async with sem:
             try:
-                headers = {"User-Agent": ua} if ua else None
-                async with session.get(obj["url"], headers=headers, cookies=cookies) as res:
-                    html = await res.text(errors="replace")
+                sol = await self._flare_get(obj["url"], timeout_sec=30)
+                if not sol:
+                    return
+                html = sol.get("response") or ""
                 m = re.search(r"File Size[\s\S]{0,120}?([\d.,]+\s*(?:MB|GB|KB))\b", html, re.I)
                 if m:
                     obj["size"] = m.group(1).replace(" ", "")
@@ -118,28 +112,27 @@ class OceanofPDF:
                     if not fm:
                         return
                     fname, fid = fm.groups()
-                post = await session.post(
+                post_sol = await self._flare_post(
                     self.BASE_URL + "/Fetching_Resource.php",
-                    data={"id": fid, "filename": fname},
-                    headers=headers,
-                    cookies=cookies,
-                    allow_redirects=True,
+                    f"id={fid}&filename={fname}",
+                    timeout_sec=30,
                 )
-                if post.status == 200:
-                    body = await post.text(errors="replace")
-                    m = re.search(
-                        r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*>',
-                        body,
-                        re.I,
-                    )
-                    if not m:
-                        return
-                    u = re.search(r"url=([^\"'\s>]+)", m.group(0), re.I)
-                    if not u:
-                        return
-                    dl_url = u.group(1).replace("&amp;", "&")
-                    obj["torrent"] = dl_url
-                    obj["download"] = dl_url
+                if not post_sol:
+                    return
+                body = post_sol.get("response") or ""
+                m = re.search(
+                    r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*>',
+                    body,
+                    re.I,
+                )
+                if not m:
+                    return
+                u = re.search(r"url=([^\"'\s>]+)", m.group(0), re.I)
+                if not u:
+                    return
+                dl_url = u.group(1).replace("&amp;", "&")
+                obj["torrent"] = dl_url
+                obj["download"] = dl_url
             except Exception:
                 return
 
@@ -153,15 +146,12 @@ class OceanofPDF:
         if not data:
             return None
         data = data[:limit]
-        sem = asyncio.Semaphore(4)
-        async with aiohttp.ClientSession(
-            connector=get_connector(), connector_owner=False, trust_env=True
-        ) as session:
-            tasks = [
-                asyncio.create_task(self._book_info(session, obj, cookies, ua, sem))
-                for obj in data
-            ]
-            await asyncio.gather(*tasks)
+        sem = asyncio.Semaphore(2)
+        tasks = [
+            asyncio.create_task(self._book_info(obj, sem))
+            for obj in data
+        ]
+        await asyncio.gather(*tasks)
         data = [d for d in data if d.get("torrent")]
         if not data:
             return None
@@ -172,3 +162,9 @@ class OceanofPDF:
             "current_page": page,
             "total_pages": page,
         }
+
+    async def trending(self, category, page, limit):
+        return None
+
+    async def recent(self, category, page, limit):
+        return None

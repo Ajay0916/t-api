@@ -74,6 +74,7 @@ class InternetArchive:
         for _attempt in range(2):
             try:
                 async with aiohttp.ClientSession(
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"},
                     connector=get_connector(), connector_owner=False, trust_env=True
                 ) as session:
                     async with session.get(
