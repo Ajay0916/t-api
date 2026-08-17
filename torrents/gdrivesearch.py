@@ -48,11 +48,13 @@ async def _searxng_search(query, timeout_sec=15):
                 data = await resp.json(content_type=None)
         return data.get("results") or []
     except Exception:
-        return None
+        return []
 
 
 def _parse_searxng_results(results):
     """Extract Drive IDs and titles from SearXNG JSON results."""
+    if not results:
+        return []
     seen = set()
     out = []
     drive_pat = re.compile(r"drive\.google\.com/[^\"]*?([a-zA-Z0-9_-]{20,})")
