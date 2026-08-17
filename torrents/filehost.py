@@ -49,7 +49,23 @@ _JUNK_TITLES = {
     "1fichier.com: cloud storage", "catbox", "catbox tools", "workupload",
     "workupload - are you a human?", "gofile - the free file sharing platform",
     "bayfiles", "mega", "mega.nz",
+    # Security/bot checks
+    "security check checking that you are not a robot",
+    "we provide you several methods of identification",
+    "checking that you are not a robot",
+    "attention required",
+    "cloudflare",
+    "please wait",
+    "captcha",
 }
+
+# Patterns that indicate non-file results
+_JUNK_PATTERNS = re.compile(
+    r"security.check|not.a.robot|methods.of.identification|captcha"
+    r"|attention.required|cloudflare|please.wait|human.verification"
+    r"|are.you.a.human",
+    re.I,
+)
 
 
 def _clean_title(raw, file_id):
@@ -57,6 +73,8 @@ def _clean_title(raw, file_id):
     name = raw.strip()
     # Remove common suffixes
     name = re.sub(r"\s*[-–|]\s*(MediaFire|MEGA|1fichier|Workupload|GoFile|Catbox|Bayfiles)\s*$", "", name, flags=re.I).strip()
+    # Remove trailing platform domain
+    name = re.sub(r"\s*[-–|]?\s*files?\.catbox\.moe\s*$", "", name, flags=re.I).strip()
     # If junk or too short, generate from file_id
     if not name or name.lower() in _JUNK_TITLES or len(name) < 4:
         return None
@@ -129,6 +147,11 @@ def _extract_results(html):
                     name = file_id  # e.g., "abc123.pdf"
                 else:
                     name = f"{plat_name.upper()}: {file_id[:16]}"
+
+            # Skip junk/non-file results
+            if _JUNK_PATTERNS.search(name):
+                seen.discard(dedup_key)
+                break
 
             out.append({
                 "name": name,
