@@ -9,52 +9,16 @@ import aiohttp
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _flare_lock = asyncio.Lock()
 
-PLATFORMS = {
-    "mega": {
-        "dork": "site:mega.nz/file",
-        "url_re": re.compile(r"(?:mega\.nz|mega\.co\.nz)/file/([a-zA-Z0-9]+)(?:#([^/\s\"&]+))?"),
-        "view": "https://mega.nz/file/{id}",
-    },
-    "workupload": {
-        "dork": "site:workupload.com/file",
-        "url_re": re.compile(r"workupload\.com/file/([a-zA-Z0-9]+)"),
-        "view": "https://workupload.com/file/{id}",
-    },
-    "gofile": {
-        "dork": "site:gofile.io/d",
-        "url_re": re.compile(r"gofile\.io/d/([a-zA-Z0-9]+)"),
-        "view": "https://gofile.io/d/{id}",
-    },
-    "catbox": {
-        "dork": "site:files.catbox.moe",
-        "url_re": re.compile(r"files\.catbox\.moe/([a-zA-Z0-9]+\.[a-z0-9]+)"),
-        "view": "https://files.catbox.moe/{id}",
-    },
-    "1fichier": {
-        "dork": "site:1fichier.com",
-        "url_re": re.compile(r"1fichier\.com/([a-zA-Z0-9]+)"),
-        "view": "https://1fichier.com/{id}",
-    },
-    "bayfiles": {
-        "dork": "site:bayfiles.com/file",
-        "url_re": re.compile(r"bayfiles\.com/file/([a-zA-Z0-9]+)"),
-        "view": "https://bayfiles.com/file/{id}",
-    },
-}
-
+_CATBOX_RE = re.compile(r"files\.catbox\.moe/([a-zA-Z0-9]+\.[a-z0-9]+)")
 _JUNK = re.compile(
-    r"security.check|not.a.robot|methods.of.identification|captcha"
-    r"|attention.required|cloudflare|please.wait|human.verification"
-    r"|are.you.a.human|boba.bot|content.*\{\{|use.with",
+    r"security.check|not.a.robot|captcha|cloudflare|please.wait|boba.bot",
     re.I,
 )
 
 
-def _extract_results(html, platform_name):
-    """Extract file links from DDG HTML results for a specific platform."""
+def _extract_results(html):
     seen = set()
     out = []
-    plat = PLATFORMS[platform_name]
 
     for m in re.finditer(
         r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S
@@ -67,51 +31,36 @@ def _extract_results(html, platform_name):
             continue
         real_url = unquote(uddg.group(1))
 
-        id_m = plat["url_re"].search(real_url)
+        id_m = _CATBOX_RE.search(real_url)
         if not id_m:
             continue
-        file_id = id_m.group(1)
-        if file_id in seen:
+        filename = id_m.group(1)
+        if filename in seen:
             continue
-        seen.add(file_id)
+        seen.add(filename)
 
-        view_url = plat["view"].format(id=file_id)
+        # Clean title
+        name = unquote(title_raw).strip()
+        name = re.sub(r"\s*[-–|]?\s*files?\.catbox\.moe\s*$", "", name, flags=re.I).strip()
+        name = re.sub(r"^(PDF|ZIP|RAR|MP4|MP3|EXE|7Z|ISO|EPUB|TXT)\s+", "", name, flags=re.I).strip()
 
-        # Build name from URL hash fragment (mega), filename in URL, or title
-        name = None
-        if platform_name == "mega" and id_m.group(2):
-            name = unquote(id_m.group(2).replace("+", " "))
+        # If title is junk or too short, use filename
+        if not name or len(name) < 3 or _JUNK.search(name) or name.lower() in ("catbox", "catbox tools"):
+            name = filename
 
-        if not name:
-            # Try to get filename from URL path
-            url_parts = real_url.rstrip("/").split("/")
-            for part in reversed(url_parts):
-                if "." in part and len(part) > 4 and part != file_id:
-                    name = unquote(part.replace("+", " "))
-                    break
-
-        if not name:
-            name = unquote(title_raw)
-
-        # Clean: remove platform suffixes, junk
-        name = re.sub(r"\s*[-–|]\s*(MediaFire|MEGA|1fichier|Workupload|GoFile|Catbox|Bayfiles)\s*$", "", name, flags=re.I).strip()
-        name = re.sub(r"\s*[-–|]?\s*files?\.(?:catbox\.moe|mega\.nz)\s*$", "", name, flags=re.I).strip()
-        name = re.sub(r"^(PDF|ZIP|RAR|MP4|MP3|EXE|7Z|ISO|EPUB|TXT|DOC)\s+", "", name, flags=re.I).strip()
-
-        # Skip junk
-        if not name or len(name) < 3 or _JUNK.search(name):
-            continue
-
-        out.append({"name": name, "url": view_url, "hash": file_id, "platform": platform_name.upper()})
+        out.append({
+            "name": name,
+            "url": real_url,
+            "hash": filename,
+            "platform": "CATBOX",
+        })
 
     return out
 
 
-async def _flare_ddg(query, platform_name, timeout_sec=30):
-    """Single platform DDG search via FlareSolverr."""
-    dork = PLATFORMS[platform_name]["dork"]
-    full_query = f"{dork} {query}"
-    url = f"https://html.duckduckgo.com/html/?q={quote(full_query)}"
+async def _flare_ddg_search(query, timeout_sec=30):
+    dork = "site:files.catbox.moe"
+    url = f"https://html.duckduckgo.com/html/?q={quote(dork + ' ' + query)}"
     payload = {
         "cmd": "request.get",
         "url": url,
@@ -135,7 +84,7 @@ async def _flare_ddg(query, platform_name, timeout_sec=30):
         html = solution.get("response") or ""
     except Exception:
         return []
-    return _extract_results(html, platform_name)
+    return _extract_results(html)
 
 
 class FileHostSearch:
@@ -150,19 +99,7 @@ class FileHostSearch:
         per = limit or 10
         page_num = max(int(page or 1), 1)
 
-        # Search all platforms concurrently
-        tasks = [_flare_ddg(query, p) for p in PLATFORMS]
-        all_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Merge and deduplicate
-        results = []
-        seen_hashes = set()
-        for r in all_results:
-            if isinstance(r, list):
-                for item in r:
-                    if item["hash"] not in seen_hashes:
-                        seen_hashes.add(item["hash"])
-                        results.append(item)
+        results = await _flare_ddg_search(query)
 
         if not results:
             return None
@@ -173,12 +110,12 @@ class FileHostSearch:
         data = []
         for item in page_slice:
             data.append({
-                "name": f"[{item['platform']}] {item['name']}",
+                "name": item["name"],
                 "url": item["url"],
                 "torrent": item["url"],
                 "download": item["url"],
                 "hash": item["hash"],
-                "category": item["platform"],
+                "category": "CATBOX",
                 "size": "",
             })
 
