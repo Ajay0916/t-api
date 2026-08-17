@@ -9,11 +9,10 @@ import aiohttp
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _flare_lock = asyncio.Lock()
 
-# ── Platform definitions ────────────────────────────────────────────
 PLATFORMS = {
     "mega": {
-        "dork": "site:mega.nz/file OR site:mega.co.nz/file",
-        "url_re": re.compile(r"(?:mega\.nz|mega\.co\.nz)/file/([a-zA-Z0-9]+)(?:#([a-zA-Z0-9]+))?"),
+        "dork": "site:mega.nz/file",
+        "url_re": re.compile(r"(?:mega\.nz|mega\.co\.nz)/file/([a-zA-Z0-9]+)(?:#([^/\s\"&]+))?"),
         "view": "https://mega.nz/file/{id}",
     },
     "workupload": {
@@ -32,7 +31,7 @@ PLATFORMS = {
         "view": "https://files.catbox.moe/{id}",
     },
     "1fichier": {
-        "dork": "site:1fichier.com/",
+        "dork": "site:1fichier.com",
         "url_re": re.compile(r"1fichier\.com/([a-zA-Z0-9]+)"),
         "view": "https://1fichier.com/{id}",
     },
@@ -43,137 +42,75 @@ PLATFORMS = {
     },
 }
 
-# Junk titles to skip (homepage, about pages, etc.)
-_JUNK_TITLES = {
-    "", "mediafire", "file sharing and storage made simple", "files.catbox.moe",
-    "1fichier.com: cloud storage", "catbox", "catbox tools", "workupload",
-    "workupload - are you a human?", "gofile - the free file sharing platform",
-    "bayfiles", "mega", "mega.nz",
-    # Security/bot checks
-    "security check checking that you are not a robot",
-    "we provide you several methods of identification",
-    "checking that you are not a robot",
-    "attention required",
-    "cloudflare",
-    "please wait",
-    "captcha",
-}
-
-# Patterns that indicate non-file results
-_JUNK_PATTERNS = re.compile(
+_JUNK = re.compile(
     r"security.check|not.a.robot|methods.of.identification|captcha"
     r"|attention.required|cloudflare|please.wait|human.verification"
-    r"|are.you.a.human",
+    r"|are.you.a.human|boba.bot|content.*\{\{|use.with",
     re.I,
 )
 
 
-def _clean_title(raw, file_id):
-    """Clean and validate a title."""
-    name = raw.strip()
-    # Remove common suffixes
-    name = re.sub(r"\s*[-–|]\s*(MediaFire|MEGA|1fichier|Workupload|GoFile|Catbox|Bayfiles)\s*$", "", name, flags=re.I).strip()
-    # Remove trailing platform domain
-    name = re.sub(r"\s*[-–|]?\s*files?\.catbox\.moe\s*$", "", name, flags=re.I).strip()
-    # If junk or too short, generate from file_id
-    if not name or name.lower() in _JUNK_TITLES or len(name) < 4:
-        return None
-    # Strip leading file-type prefixes that DDG adds (e.g., 'PDF ', 'ZIP ', 'MP4 ')
-    name = re.sub(r'^(PDF|ZIP|RAR|MP4|MP3|EXE|7Z|ISO|EPUB|TXT|DOC|PPT|XLS|AVI|MKV|FLAC|WAV|JPG|PNG|CSV)\s+', '', name, flags=re.I).strip()
-    # Strip platform domain from end
-    name = re.sub(r'\s*[-–|]?\s*files?\.(?:catbox\.moe|mega\.nz)\s*$', '', name, flags=re.I).strip()
-    if not name or name.lower() in _JUNK_TITLES:
-        return None
-    return name
-
-
-def _extract_results(html):
-    """Extract file links from DDG HTML results across all platforms."""
+def _extract_results(html, platform_name):
+    """Extract file links from DDG HTML results for a specific platform."""
     seen = set()
     out = []
+    plat = PLATFORMS[platform_name]
 
-    # Find result blocks: title + snippet + url
-    result_pattern = re.compile(
-        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>'
-        r'.*?<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
-        re.S,
-    )
-
-    for m in result_pattern.finditer(html):
+    for m in re.finditer(
+        r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S
+    ):
         href = m.group(1)
         title_raw = re.sub(r"<[^>]+>", "", m.group(2)).strip()
-        snippet = re.sub(r"<[^>]+>", "", m.group(3)).strip()[:200]
 
         uddg = re.search(r"uddg=([^&\"]+)", href)
         if not uddg:
             continue
         real_url = unquote(uddg.group(1))
 
-        # Match against all platforms
-        for plat_name, plat_info in PLATFORMS.items():
-            id_m = plat_info["url_re"].search(real_url)
-            if not id_m:
-                continue
-            file_id = id_m.group(1)
-            dedup_key = f"{plat_name}:{file_id}"
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
+        id_m = plat["url_re"].search(real_url)
+        if not id_m:
+            continue
+        file_id = id_m.group(1)
+        if file_id in seen:
+            continue
+        seen.add(file_id)
 
-            view_url = plat_info["view"].format(id=file_id)
+        view_url = plat["view"].format(id=file_id)
 
-            # Build name: try URL filename > title > snippet > generate
-            name = None
+        # Build name from URL hash fragment (mega), filename in URL, or title
+        name = None
+        if platform_name == "mega" and id_m.group(2):
+            name = unquote(id_m.group(2).replace("+", " "))
 
-            # From URL path (e.g., mega uses #filename after hash)
-            if plat_name == "mega" and "#" in real_url:
-                url_name = unquote(real_url.split("#", 1)[1].replace("+", " "))
-                if url_name and len(url_name) > 3:
-                    name = url_name
+        if not name:
+            # Try to get filename from URL path
+            url_parts = real_url.rstrip("/").split("/")
+            for part in reversed(url_parts):
+                if "." in part and len(part) > 4 and part != file_id:
+                    name = unquote(part.replace("+", " "))
+                    break
 
-            # From title
-            if not name:
-                name = _clean_title(unquote(title_raw), file_id)
+        if not name:
+            name = unquote(title_raw)
 
-            # From snippet (often has filename info)
-            if not name:
-                # Look for quoted filename in snippet
-                snip_file = re.search(r'["\']([^"\']+\.[a-z]{2,4})["\']', snippet, re.I)
-                if snip_file:
-                    name = unquote(snip_file.group(1))
-                else:
-                    # First meaningful part of snippet (skip if looks like a sentence)
-                    first_line = snippet.split(".")[0].split(" - ")[0].strip()
-                    if first_line and len(first_line) > 5 and len(first_line.split()) <= 12:
-                        name = first_line
+        # Clean: remove platform suffixes, junk
+        name = re.sub(r"\s*[-–|]\s*(MediaFire|MEGA|1fichier|Workupload|GoFile|Catbox|Bayfiles)\s*$", "", name, flags=re.I).strip()
+        name = re.sub(r"\s*[-–|]?\s*files?\.(?:catbox\.moe|mega\.nz)\s*$", "", name, flags=re.I).strip()
+        name = re.sub(r"^(PDF|ZIP|RAR|MP4|MP3|EXE|7Z|ISO|EPUB|TXT|DOC)\s+", "", name, flags=re.I).strip()
 
-            # Final fallback
-            if not name:
-                if plat_name == "catbox":
-                    name = file_id  # e.g., "abc123.pdf"
-                else:
-                    name = f"{plat_name.upper()}: {file_id[:16]}"
+        # Skip junk
+        if not name or len(name) < 3 or _JUNK.search(name):
+            continue
 
-            # Skip junk/non-file results
-            if _JUNK_PATTERNS.search(name):
-                seen.discard(dedup_key)
-                break
-
-            out.append({
-                "name": name,
-                "url": view_url,
-                "hash": file_id,
-                "platform": plat_name.upper(),
-            })
-            break
+        out.append({"name": name, "url": view_url, "hash": file_id, "platform": platform_name.upper()})
 
     return out
 
 
-async def _flare_ddg_search(query, timeout_sec=30):
-    """Search via DuckDuckGo HTML through FlareSolverr."""
-    dork = _build_dork()
-    full_query = f"({dork}) {query}"
+async def _flare_ddg(query, platform_name, timeout_sec=30):
+    """Single platform DDG search via FlareSolverr."""
+    dork = PLATFORMS[platform_name]["dork"]
+    full_query = f"{dork} {query}"
     url = f"https://html.duckduckgo.com/html/?q={quote(full_query)}"
     payload = {
         "cmd": "request.get",
@@ -185,12 +122,10 @@ async def _flare_ddg_search(query, timeout_sec=30):
         async with _flare_lock:
             async with aiohttp.ClientSession(
                 connector=aiohttp.TCPConnector(limit=10, force_close=True, ssl=False),
-                connector_owner=True,
-                trust_env=True,
+                connector_owner=True, trust_env=True,
             ) as session:
                 async with session.post(
-                    f"{FLARESOLVERR_URL}/v1",
-                    json=payload,
+                    f"{FLARESOLVERR_URL}/v1", json=payload,
                     timeout=aiohttp.ClientTimeout(total=timeout_sec + 15),
                 ) as res:
                     data = await res.json(content_type=None)
@@ -200,13 +135,7 @@ async def _flare_ddg_search(query, timeout_sec=30):
         html = solution.get("response") or ""
     except Exception:
         return []
-
-    return _extract_results(html)
-
-
-def _build_dork():
-    parts = [info["dork"] for info in PLATFORMS.values()]
-    return " OR ".join(parts)
+    return _extract_results(html, platform_name)
 
 
 class FileHostSearch:
@@ -221,7 +150,19 @@ class FileHostSearch:
         per = limit or 10
         page_num = max(int(page or 1), 1)
 
-        results = await _flare_ddg_search(query)
+        # Search all platforms concurrently
+        tasks = [_flare_ddg(query, p) for p in PLATFORMS]
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Merge and deduplicate
+        results = []
+        seen_hashes = set()
+        for r in all_results:
+            if isinstance(r, list):
+                for item in r:
+                    if item["hash"] not in seen_hashes:
+                        seen_hashes.add(item["hash"])
+                        results.append(item)
 
         if not results:
             return None
