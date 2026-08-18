@@ -7,6 +7,8 @@ from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTDOWNLOAD
+
+HOSTS = [TORRENTDOWNLOAD]
 from helper.trackers import build_magnet
 
 
@@ -69,9 +71,28 @@ class TorrentDownloads:
             url = self.BASE_URL + "/search?q={}&p={}".format(
                 quote(query), page
             )
-            return await self.parser_result(
+            result = await self.parser_result(
                 start_time, url, session, page=page, query=query
             )
+            if result and result.get("data"):
+                return result
+            for host in HOSTS:
+                if host == self.BASE_URL:
+                    continue
+                try:
+                    self.BASE_URL = host
+                    url = self.BASE_URL + "/search?q={}&p={}".format(
+                        quote(query), page
+                    )
+                    result = await self.parser_result(
+                        time.time(), url, session, page=page, query=query
+                    )
+                    if result and result.get("data"):
+                        return result
+                except Exception:
+                    continue
+            self.BASE_URL = TORRENTDOWNLOAD
+            return result
 
     async def parser_result(self, start_time, url, session, page=1, query=None):
         html = await Scraper().get_all_results(session, url)

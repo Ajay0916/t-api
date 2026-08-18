@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORRENTFUNK
+
+HOSTS = [TORRENTFUNK, "https://www.torrentfunk2.com"]
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.trackers import build_magnet
 from torrents.your_bittorrent import extract_info_hash
@@ -137,9 +139,28 @@ class TorrentFunk:
             url = self.BASE_URL + "/all/torrents/{}/{}.html".format(
                 quote(query), page
             )
-            return await self.parser_result(
+            result = await self.parser_result(
                 start_time, url, session, idx=1, page=page, query=query
             )
+            if result and result.get("data"):
+                return result
+            for host in HOSTS:
+                if host == self.BASE_URL:
+                    continue
+                try:
+                    self.BASE_URL = host
+                    url = self.BASE_URL + "/all/torrents/{}/{}.html".format(
+                        quote(query), page
+                    )
+                    result = await self.parser_result(
+                        time.time(), url, session, idx=1, page=page, query=query
+                    )
+                    if result and result.get("data"):
+                        return result
+                except Exception:
+                    continue
+            self.BASE_URL = TORRENTFUNK
+            return result
 
     async def parser_result(self, start_time, url, session, idx=1, page=1, query=None):
         htmls = await Scraper().get_all_results(session, url)

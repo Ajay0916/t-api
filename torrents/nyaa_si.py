@@ -9,6 +9,8 @@ from helper.session import get_connector
 from bs4 import BeautifulSoup
 from helper.html_scraper import Scraper
 from constants.base_url import NYAASI
+
+HOSTS = [NYAASI]
 from helper.trackers import build_magnet
 
 NS = {"nyaa": "https://nyaa.si/xmlns/nyaa"}
@@ -114,27 +116,40 @@ class NyaaSi:
         except Exception:
             return None
 
+    async def _try_host(self, host, query, page, session, start_time):
+        rss_url = host + "/?page=rss&q={}&c=0_0&f=0".format(quote(query))
+        htmls = await Scraper().get_all_results(session, rss_url)
+        data = self._parse_rss(htmls[0]) if htmls and htmls[0] else None
+        if data is not None:
+            return {
+                "data": data,
+                "current_page": page,
+                "total_pages": 1,
+                "time": time.time() - start_time,
+                "total": len(data),
+            }
+        url = host + "/?f=0&c=0_0&q={}&p={}".format(quote(query), page)
+        return await self.parser_result(start_time, url, session)
+
     async def search(self, query, page, limit):
         async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as session:
             start_time = time.time()
             self.LIMIT = limit
-            rss_url = self.BASE_URL + "/?page=rss&q={}&c=0_0&f=0".format(
-                quote(query)
-            )
-            htmls = await Scraper().get_all_results(session, rss_url)
-            data = self._parse_rss(htmls[0]) if htmls and htmls[0] else None
-            if data is not None:
-                return {
-                    "data": data,
-                    "current_page": page,
-                    "total_pages": 1,
-                    "time": time.time() - start_time,
-                    "total": len(data),
-                }
-            url = self.BASE_URL + "/?f=0&c=0_0&q={}&p={}".format(
-                quote(query), page
-            )
-            return await self.parser_result(start_time, url, session)
+            result = await self._try_host(self.BASE_URL, query, page, session, start_time)
+            if result and result.get("data"):
+                return result
+            for host in HOSTS:
+                if host == self.BASE_URL:
+                    continue
+                try:
+                    self.BASE_URL = host
+                    result = await self._try_host(host, query, page, session, time.time())
+                    if result and result.get("data"):
+                        return result
+                except Exception:
+                    continue
+            self.BASE_URL = NYAASI
+            return result
 
     async def parser_result(self, start_time, url, session):
         html = await Scraper().get_all_results(session, url)

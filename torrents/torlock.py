@@ -12,6 +12,8 @@ from bs4 import BeautifulSoup
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.html_scraper import Scraper
 from constants.base_url import TORLOCK
+
+HOSTS = [TORLOCK]
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
@@ -200,6 +202,21 @@ class Torlock:
                 quote(query), page
             )
             results = await self.parser_result(start_time, url, session, idx=5)
+            if results is None or not results.get("data"):
+                for host in HOSTS:
+                    if host == self.BASE_URL:
+                        continue
+                    try:
+                        self.BASE_URL = host
+                        url = self.BASE_URL + "/all/torrents/{}.html?sort=seeds&page={}".format(
+                            quote(query), page
+                        )
+                        results = await self.parser_result(time.time(), url, session, idx=5)
+                        if results and results.get("data"):
+                            break
+                    except Exception:
+                        continue
+                self.BASE_URL = TORLOCK
             if results is None:
                 return None
             results["current_page"] = page

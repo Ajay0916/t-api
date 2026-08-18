@@ -8,6 +8,8 @@ from curl_cffi.requests import AsyncSession
 from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from constants.base_url import MAGNETDL
+
+HOSTS = [MAGNETDL]
 from helper.trackers import build_magnet, build_torrent_url
 from helper.plain_curl import fetch_jina, fetch_plain
 
@@ -158,9 +160,28 @@ class Magnetdl:
             url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
                 quote(query), page
             )
-            return await self.parser_result(
+            result = await self.parser_result(
                 start_time, url, session, page=page, query=query
             )
+            if result and result.get("data"):
+                return result
+            for host in HOSTS:
+                if host == self.BASE_URL:
+                    continue
+                try:
+                    self.BASE_URL = host
+                    url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+                        quote(query), page
+                    )
+                    result = await self.parser_result(
+                        time.time(), url, session, page=page, query=query
+                    )
+                    if result and result.get("data"):
+                        return result
+                except Exception:
+                    continue
+            self.BASE_URL = MAGNETDL
+            return result
 
     async def recent(self, category, page, limit):
         async with AsyncSession(
