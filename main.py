@@ -123,30 +123,30 @@ app.include_router(home_router, prefix="")
 @app.get("/restart", dependencies=[Depends(authenticate_request)])
 async def restart():
     """Pull latest code + restart the service."""
-    import subprocess, os
+    import subprocess, os, threading
     repo = os.path.dirname(os.path.abspath(__file__))
-    restart_script = os.path.join(repo, "_restart.sh")
-    try:
-        with open(restart_script, "w") as f:
-            f.write("#!/bin/bash\n")
-            f.write("cd {repo}\n".format(repo=repo))
-            f.write("git fetch origin -q 2>/dev/null\n")
-            f.write("git reset --hard origin/main -q 2>/dev/null\n")
-            f.write("git pull --ff-only -q 2>/dev/null\n")
-            f.write("COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\n")
-            f.write("MSG=$(git log -1 --pretty=%s 2>/dev/null || echo '')\n")
-            f.write("DATE=$(git log -1 --pretty=%ci 2>/dev/null || echo '')\n")
-            f.write('printf "%s\\n%s\\n%s" "$COMMIT" "$MSG" "$DATE" > COMMIT_INFO\n')
-            f.write("sleep 1\n")
-            f.write("systemctl restart t-api\n")
-        os.chmod(restart_script, 0o755)
-        subprocess.Popen(
-            ["/bin/bash", restart_script],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        return {"status": "restarting", "message": "Pulling latest code and restarting..."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+
+    def _do_restart():
+        try:
+            env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            for git in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
+                try:
+                    subprocess.run([git, "fetch", "origin"], cwd=repo, timeout=15, env=env, capture_output=True)
+                    subprocess.run([git, "reset", "--hard", "origin/main"], cwd=repo, timeout=15, env=env, capture_output=True)
+                    commit = subprocess.check_output([git, "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
+                    msg = subprocess.check_output([git, "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
+                    date = subprocess.check_output([git, "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
+                    with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
+                        f.write(f"{commit}\n{msg}\n{date}")
+                    break
+                except Exception:
+                    continue
+            subprocess.run(["systemctl", "restart", "t-api"], timeout=10, env=env, capture_output=True)
+        except Exception:
+            pass
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)
 
