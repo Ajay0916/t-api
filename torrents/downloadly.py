@@ -57,11 +57,43 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=30):
-        # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr
+    async def _create_session(self, flare_url):
+        """Create a persistent FlareSolverr session for this search."""
+        try:
+            payload = {"cmd": "sessions.create", "session": "downloadly"}
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as s:
+                async with s.post(
+                    f"{flare_url}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=10)
+                ) as res:
+                    await res.json(content_type=None)
+        except Exception:
+            pass
+
+    async def _destroy_session(self, flare_url):
+        """Destroy the FlareSolverr session after search."""
+        try:
+            payload = {"cmd": "sessions.destroy", "session": "downloadly"}
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as s:
+                async with s.post(
+                    f"{flare_url}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as res:
+                    await res.json(content_type=None)
+        except Exception:
+            pass
+
+    async def _fetch(self, url, timeout=30, session_id=None):
+        # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr with session
         FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
         try:
             payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+            if session_id:
+                payload["session"] = session_id
             async with aiohttp.ClientSession(
                 connector=get_connector(), connector_owner=False, trust_env=True
             ) as s:
@@ -105,9 +137,9 @@ class Downloadly:
             })
         return results
 
-    async def _post_page(self, url, obj, sem):
+    async def _post_page(self, url, obj, sem, session_id=None):
         async with sem:
-            page = await self._fetch(url)
+            page = await self._fetch(url, timeout=20, session_id=session_id)
             if not page:
                 return
             soup = BeautifulSoup(page, "html.parser")
@@ -165,8 +197,17 @@ class Downloadly:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
+        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        # Create a persistent FlareSolverr session (solve CF once, reuse cookies)
+        await self._create_session(FLARE)
+        try:
+            return await self._search_inner(query, page, limit, start_time)
+        finally:
+            await self._destroy_session(FLARE)
+
+    async def _search_inner(self, query, page, limit, start_time):
         url = "{}/?s={}".format(self.BASE_URL, quote(query))
-        html = await self._fetch(url)
+        html = await self._fetch(url, session_id="downloadly")
         if not html:
             return None
         soup = BeautifulSoup(html, "html.parser")
@@ -188,14 +229,14 @@ class Downloadly:
                 "total": 0,
             }
         # Fetch post pages concurrently for download links
-        # (2s timeout each — skip if slow to stay within 40s bot deadline)
+        # FlareSolverr takes ~25s per request, so 60s for up to 3-4 concurrent
         sem = asyncio.Semaphore(4)
         try:
             await asyncio.wait_for(
                 asyncio.gather(
-                    *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
+                    *[asyncio.create_task(self._post_page(o["url"], o, sem, session_id="downloadly")) for o in results]
                 ),
-                timeout=12,
+                timeout=60,
             )
         except asyncio.TimeoutError:
             pass
