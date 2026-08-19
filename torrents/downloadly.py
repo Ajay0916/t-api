@@ -77,19 +77,6 @@ class Downloadly:
                     return html
         except Exception:
             pass
-        # Fallback: curl_cffi with SSL bypass
-        try:
-            from curl_cffi.requests import AsyncSession as CurlSession
-            from curl_cffi.const import CurlOpt
-            async with CurlSession(
-                impersonate="chrome",
-                curl_options={CurlOpt.IPRESOLVE: 1, CurlOpt.SSL_VERIFYPEER: 0, CurlOpt.SSL_VERIFYHOST: 0},
-            ) as s:
-                r = await s.get(url, timeout=timeout)
-                if r.status_code < 400 and r.text and len(r.text) > 500:
-                    return r.text
-        except Exception:
-            pass
         return None
 
     def _parse_search(self, html):
@@ -200,12 +187,19 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Fetch post pages concurrently (limited to avoid FlareSolverr overload)
+        # Fetch post pages concurrently for download links
+        # (2s timeout each — skip if slow to stay within 40s bot deadline)
         sem = asyncio.Semaphore(4)
-        await asyncio.gather(
-            *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
-        )
-        # Set download = url for results without torrent (link to post page)
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(
+                    *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
+                ),
+                timeout=12,
+            )
+        except asyncio.TimeoutError:
+            pass
+        # Set post URL as fallback for results without torrent
         for o in results:
             if not o.get("torrent"):
                 o["torrent"] = o["url"]
