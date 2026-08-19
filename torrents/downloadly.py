@@ -26,11 +26,23 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url):
-        html = await fetch_plain(url, timeout=10)
+    async def _fetch(self, url, timeout=20):
+        html = await fetch_plain(url, timeout=timeout)
         if html:
             return html
-        return await fetch_plain(url, timeout=10, family=6)
+        # Try IPv6
+        html = await fetch_plain(url, timeout=timeout, family=6)
+        if html:
+            return html
+        # Last resort: aiohttp with Chrome UA
+        try:
+            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
+                async with s.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}, timeout=aiohttp.ClientTimeout(total=timeout)) as r:
+                    if r.status == 200:
+                        return await r.text()
+        except Exception:
+            pass
+        return None
 
     def _parse_search(self, html):
         soup = BeautifulSoup(html, "html.parser")
