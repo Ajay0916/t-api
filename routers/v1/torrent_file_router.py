@@ -9,6 +9,7 @@ from constants.headers import HEADER_AIO
 from helper.session import get_connector
 from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
+from torrents.downloadly import Downloadly
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
@@ -109,6 +110,19 @@ async def proxy_torrent(
             content=body,
             media_type="application/x-bittorrent",
             headers={"Content-Disposition": disposition},
+        )
+
+    # downloadly.ir post pages: resolve download links lazily
+    if "downloadly.ir/" in url.lower() and ("dl.downloadly" not in url.lower()):
+        parts = await Downloadly.resolve_parts(url)
+        if parts:
+            target = parts[0].get("url", url)
+            dl_name = name or parts[0].get("text", "download")
+            # Redirect to the first download link
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=target, status_code=302)
+        return JSONResponse(
+            status_code=502, content={"error": "Failed to resolve download links."}
         )
 
     try:

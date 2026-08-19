@@ -228,24 +228,13 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Fetch post pages sequentially with session reuse (CF already solved)
-        # After session, each page takes ~3-5s. Max 3 pages to fit in 40s deadline.
-        sem = asyncio.Semaphore(1)
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(
-                    *[asyncio.create_task(self._post_page(o["url"], o, sem, session_id="downloadly")) for o in results[:3]]
-                ),
-                timeout=35,
-            )
-        except asyncio.TimeoutError:
-            pass
-        # Set post URL as fallback for results without torrent
+        # Skip post page fetching during search (FlareSolverr too slow).
+        # Set post URL as torrent/download — parts resolved lazily via
+        # the torrent_file endpoint with resolve_downloadly_parts().
         for o in results:
-            if not o.get("torrent"):
-                o["torrent"] = o["url"]
-                o["download"] = o["url"]
-        results = [o for o in results if o.get("torrent")]
+            o["torrent"] = o["url"]
+            o["download"] = o["url"]
+            o["_downloadly_post"] = True  # flag for lazy resolution
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
@@ -253,6 +242,52 @@ class Downloadly:
             "time": time.time() - start_time,
             "total": len(results),
         }
+
+
+    @staticmethod
+    async def resolve_parts(post_url):
+        """Fetch download links from a downloadly post page via FlareSolverr session."""
+        import aiohttp as _aiohttp
+        from helper.session import get_connector as _gc
+        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        sid = "downloadly_resolve"
+        # Create session
+        try:
+            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as s:
+                await s.post(f"{FLARE}/v1", json={"cmd": "sessions.create", "session": sid},
+                             timeout=_aiohttp.ClientTimeout(total=10))
+                payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 20000, "session": sid}
+                async with s.post(f"{FLARE}/v1", json=payload, timeout=_aiohttp.ClientTimeout(total=25)) as res:
+                    data = await res.json(content_type=None)
+                await s.post(f"{FLARE}/v1", json={"cmd": "sessions.destroy", "session": sid},
+                             timeout=_aiohttp.ClientTimeout(total=5))
+        except Exception:
+            return []
+        sol = data.get("solution") or {}
+        if sol.get("status") != 200:
+            return []
+        html = sol.get("response") or ""
+        if not html or len(html) < 500:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        dl_links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "dl.downloadly.ir" not in href:
+                continue
+            if "/Sample/" in href:
+                continue
+            text = a.get_text(" ", strip=True)
+            dl_links.append({"url": href, "text": text})
+        # Translate + register short tokens
+        if dl_links:
+            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as ts:
+                for dl in dl_links:
+                    dl["text"] = await _translate_text(ts, dl["text"])
+                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    dl["size"] = sm.group(1) if sm else ""
+                    dl["short"] = register(dl["url"], "", "rar")
+        return dl_links
 
     async def trending(self, category, page, limit):
         return None
