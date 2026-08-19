@@ -202,6 +202,7 @@ all_sites = {
         "limit": 20,
     },
     "freecourseweb": {
+        "enabled": False,
         "website": FreeCourseWeb,
         "combo_available": False,
         "trending_available": False,
