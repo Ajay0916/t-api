@@ -56,22 +56,24 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=20):
+    async def _fetch(self, url, timeout=10):
+        # curl_cffi with Chrome impersonation is fastest for this SSL-broken site
+        try:
+            from curl_cffi.requests import AsyncSession as CurlSession
+            from curl_cffi.const import CurlOpt
+            async with CurlSession(
+                impersonate="chrome",
+                curl_options={CurlOpt.IPRESOLVE: 1, CurlOpt.SSL_VERIFYPEER: 0, CurlOpt.SSL_VERIFYHOST: 0},
+            ) as s:
+                r = await s.get(url, timeout=timeout)
+                if r.status_code < 400 and r.text and len(r.text) > 500:
+                    return r.text
+        except Exception:
+            pass
+        # Fallback: plain curl
         html = await fetch_plain(url, timeout=timeout)
         if html:
             return html
-        # Try IPv6
-        html = await fetch_plain(url, timeout=timeout, family=6)
-        if html:
-            return html
-        # Last resort: aiohttp with Chrome UA
-        try:
-            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
-                async with s.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}, timeout=aiohttp.ClientTimeout(total=timeout)) as r:
-                    if r.status == 200:
-                        return await r.text()
-        except Exception:
-            pass
         return None
 
     def _parse_search(self, html):
@@ -182,7 +184,7 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        sem = asyncio.Semaphore(6)
+        sem = asyncio.Semaphore(10)
         await asyncio.gather(
             *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
         )
