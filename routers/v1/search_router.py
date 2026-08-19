@@ -155,6 +155,32 @@ async def search_for_torrents(
             status_code=status.HTTP_404_NOT_FOUND,
             json_message={"error": "Selected Site Not Available"},
         )
+    # Special case: _restart triggers t-API restart
+    if site == "_restart":
+        import subprocess as _sp, threading, time as _time
+        repo = os.path.dirname(os.path.abspath(__file__)).replace("/routers/v1", "")
+        def _bg():
+            _time.sleep(1)
+            env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            try:
+                _sp.run(["/usr/bin/git", "fetch", "origin"], cwd=repo, timeout=20, env=env, capture_output=True)
+                _sp.run(["/usr/bin/git", "reset", "--hard", "origin/main"], cwd=repo, timeout=10, env=env, capture_output=True)
+                try:
+                    commit = _sp.check_output(["/usr/bin/git", "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
+                    msg = _sp.check_output(["/usr/bin/git", "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
+                    date = _sp.check_output(["/usr/bin/git", "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
+                    with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
+                        f.write(f"{commit}\n{msg}\n{date}")
+                except Exception:
+                    pass
+                _time.sleep(1)
+                _sp.run(["systemctl", "restart", "t-api"], timeout=10, env=env, capture_output=True)
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+        return {"data": [{"name": "✅ t-API Restarting...", "url": "#", "category": "System"}], "current_page": 1, "total_pages": 1, "time": 0.1, "total": 1}
+
     if site_health.is_manually_blocked(site):
         return error_handler(
             status_code=status.HTTP_403_FORBIDDEN,

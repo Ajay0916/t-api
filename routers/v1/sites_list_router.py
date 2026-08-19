@@ -26,6 +26,12 @@ async def get_all_supported_sites():
                 "name": info["website"]._name,
             }
         )
+    # Special entry: restart t-API button
+    sites_list.append("_restart")
+    sites.append({
+        "site": "_restart",
+        "name": "Restart t-API",
+    })
     return error_handler(
         status_code=status.HTTP_200_OK,
         json_message={
