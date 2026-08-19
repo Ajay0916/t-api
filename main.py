@@ -120,7 +120,7 @@ app.include_router(home_router, prefix="")
 
 
 
-@app.get("/restart")
+@app.get("/restart", dependencies=[Depends(authenticate_request)])
 async def restart():
     """Pull latest code + restart the service."""
     import subprocess, os
