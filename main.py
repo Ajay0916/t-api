@@ -146,16 +146,11 @@ async def restart():
         except Exception:
             pass
 
-    # Touch trigger file — systemd path unit watches it and restarts t-api
+    # Use systemd-run to create an independent timer that restarts t-api
+    # AFTER this request completes (can't restart own service from child process)
     import subprocess
-    trigger = os.path.join(repo, ".restart_trigger")
-    with open(trigger, "w") as f:
-        f.write(str(time.time()))
-    # Also try direct systemctl as fallback
     subprocess.Popen(
-        ["systemctl", "restart", "t-api"],
-        start_new_session=True,
-        close_fds=True,
+        ["systemd-run", "--on-active=3s", "systemctl", "restart", "t-api"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
