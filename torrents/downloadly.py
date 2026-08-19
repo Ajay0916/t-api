@@ -94,6 +94,17 @@ class Downloadly:
             obj["download"] = dl_links[0]["url"]
             if len(dl_links) > 1:
                 obj["parts"] = dl_links
+                # Convert parts to torrents sub-results format
+                # so Vj-wz bot renders each part as a separate download
+                torrents = []
+                for pl in dl_links:
+                    torrents.append({
+                        "quality": pl.get("text", ""),
+                        "type": "RAR",
+                        "size": "",
+                        "torrent": pl["url"],
+                    })
+                obj["torrents"] = torrents
             # Try to get better name from page
             h1 = soup.select_one("h1")
             if h1:
