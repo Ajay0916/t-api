@@ -58,17 +58,27 @@ class Downloadly:
         self.LIMIT = None
 
     async def _create_session(self, flare_url):
-        """Create a persistent FlareSolverr session for this search."""
+        """Create a persistent FlareSolverr session for this search.
+        Destroy any stale session first, then create fresh."""
         try:
-            payload = {"cmd": "sessions.create", "session": "downloadly"}
             async with aiohttp.ClientSession(
                 connector=get_connector(), connector_owner=False, trust_env=True
             ) as s:
-                async with s.post(
-                    f"{flare_url}/v1", json=payload,
+                # Destroy any leftover session
+                try:
+                    await s.post(
+                        f"{flare_url}/v1",
+                        json={"cmd": "sessions.destroy", "session": "downloadly"},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    )
+                except Exception:
+                    pass
+                # Create fresh session
+                await s.post(
+                    f"{flare_url}/v1",
+                    json={"cmd": "sessions.create", "session": "downloadly"},
                     timeout=aiohttp.ClientTimeout(total=10)
-                ) as res:
-                    await res.json(content_type=None)
+                )
         except Exception:
             pass
 
@@ -109,6 +119,25 @@ class Downloadly:
                     return html
         except Exception:
             pass
+        # Fallback: retry without session if session request failed
+        if session_id:
+            try:
+                payload2 = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+                async with aiohttp.ClientSession(
+                    connector=get_connector(), connector_owner=False, trust_env=True
+                ) as s2:
+                    async with s2.post(
+                        f"{FLARE}/v1", json=payload2,
+                        timeout=aiohttp.ClientTimeout(total=timeout + 5)
+                    ) as res2:
+                        data2 = await res2.json(content_type=None)
+                sol2 = data2.get("solution") or {}
+                if sol2.get("status") == 200:
+                    html2 = sol2.get("response") or ""
+                    if html2 and len(html2) > 500:
+                        return html2
+            except Exception:
+                pass
         return None
 
     def _parse_search(self, html):
