@@ -5,32 +5,33 @@ import time
 _start_time = time.time()
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _COMMIT_INFO = os.path.join(_REPO, "COMMIT_INFO")
+_ENV = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+
+
+def _run_git(args):
+    for git_bin in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
+        try:
+            return subprocess.check_output(
+                [git_bin] + args,
+                cwd=_REPO, stderr=subprocess.DEVNULL, timeout=3, env=_ENV
+            ).decode().strip()
+        except Exception:
+            continue
+    return None
 
 
 def _git_info():
-    try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=_REPO, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
-        msg = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%s"],
-            cwd=_REPO, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
-        ts = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%ci"],
-            cwd=_REPO, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
+    commit = _run_git(["rev-parse", "--short", "HEAD"])
+    if commit:
+        msg = _run_git(["log", "-1", "--pretty=%s"]) or ""
+        ts = _run_git(["log", "-1", "--pretty=%ci"]) or ""
         info = {"commit": commit, "last_commit": msg, "commit_date": ts}
-        # Write to disk so it survives git-less environments
         try:
             with open(_COMMIT_INFO, "w") as f:
                 f.write(f"{commit}\n{msg}\n{ts}")
         except Exception:
             pass
         return info
-    except Exception:
-        pass
     # Fallback: read from COMMIT_INFO file
     try:
         if os.path.exists(_COMMIT_INFO):

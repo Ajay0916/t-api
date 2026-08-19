@@ -39,25 +39,30 @@ app = FastAPI(
 def _write_commit_info():
     """Write git commit info to COMMIT_INFO on startup (best-effort)."""
     import subprocess, os
-    try:
-        repo = os.path.dirname(os.path.abspath(__file__))
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
-        msg = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%s"],
-            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
-        ts = subprocess.check_output(
-            ["git", "log", "-1", "--pretty=%ci"],
-            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
-        ).decode().strip()
-        info_path = os.path.join(repo, "COMMIT_INFO")
-        with open(info_path, "w") as f:
-            f.write(f"{commit}\n{msg}\n{ts}")
-    except Exception:
-        pass
+    repo = os.path.dirname(os.path.abspath(__file__))
+    info_path = os.path.join(repo, "COMMIT_INFO")
+    for git_bin in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
+        try:
+            commit = subprocess.check_output(
+                [git_bin, "rev-parse", "--short", "HEAD"],
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
+                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            ).decode().strip()
+            msg = subprocess.check_output(
+                [git_bin, "log", "-1", "--pretty=%s"],
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
+                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            ).decode().strip()
+            ts = subprocess.check_output(
+                [git_bin, "log", "-1", "--pretty=%ci"],
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
+                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            ).decode().strip()
+            with open(info_path, "w") as f:
+                f.write(f"{commit}\n{msg}\n{ts}")
+            return
+        except Exception:
+            continue
 
 
 _write_commit_info()
