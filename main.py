@@ -41,22 +41,20 @@ def _write_commit_info():
     import subprocess, os
     repo = os.path.dirname(os.path.abspath(__file__))
     info_path = os.path.join(repo, "COMMIT_INFO")
+    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
     for git_bin in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
         try:
             commit = subprocess.check_output(
                 [git_bin, "rev-parse", "--short", "HEAD"],
-                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
-                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             msg = subprocess.check_output(
                 [git_bin, "log", "-1", "--pretty=%s"],
-                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
-                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             ts = subprocess.check_output(
                 [git_bin, "log", "-1", "--pretty=%ci"],
-                cwd=repo, stderr=subprocess.DEVNULL, timeout=3,
-                env={**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+                cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             with open(info_path, "w") as f:
                 f.write(f"{commit}\n{msg}\n{ts}")
@@ -119,6 +117,36 @@ app.include_router(test_router, prefix="/api/v1/test", dependencies=[Depends(aut
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
 app.include_router(magnet_router, prefix="/api/v1/magnet")
 app.include_router(home_router, prefix="")
+
+
+
+@app.get("/restart")
+async def restart():
+    """Pull latest code + restart the service."""
+    import subprocess, os
+    repo = os.path.dirname(os.path.abspath(__file__))
+    restart_script = os.path.join(repo, "_restart.sh")
+    try:
+        with open(restart_script, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write("cd {repo}\n".format(repo=repo))
+            f.write("git fetch origin -q 2>/dev/null\n")
+            f.write("git reset --hard origin/main -q 2>/dev/null\n")
+            f.write("git pull --ff-only -q 2>/dev/null\n")
+            f.write("COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\n")
+            f.write("MSG=$(git log -1 --pretty=%s 2>/dev/null || echo '')\n")
+            f.write("DATE=$(git log -1 --pretty=%ci 2>/dev/null || echo '')\n")
+            f.write('printf "%s\\n%s\\n%s" "$COMMIT" "$MSG" "$DATE" > COMMIT_INFO\n')
+            f.write("sleep 1\n")
+            f.write("systemctl restart t-api\n")
+        os.chmod(restart_script, 0o755)
+        subprocess.Popen(
+            ["/bin/bash", restart_script],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        return {"status": "restarting", "message": "Pulling latest code and restarting..."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 handler = Mangum(app)
 
