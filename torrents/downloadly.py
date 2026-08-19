@@ -200,10 +200,16 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        sem = asyncio.Semaphore(10)
+        # Fetch post pages concurrently (limited to avoid FlareSolverr overload)
+        sem = asyncio.Semaphore(4)
         await asyncio.gather(
             *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
         )
+        # Set download = url for results without torrent (link to post page)
+        for o in results:
+            if not o.get("torrent"):
+                o["torrent"] = o["url"]
+                o["download"] = o["url"]
         results = [o for o in results if o.get("torrent")]
         return {
             "data": results[:limit] if limit else results,
