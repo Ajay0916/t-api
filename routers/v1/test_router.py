@@ -21,6 +21,7 @@ from typing import Optional
 
 from helper.plain_curl import fetch_plain, _is_cf_challenge
 from helper.is_site_available import all_sites
+from helper.version_info import get_version_info
 
 router = APIRouter(tags=["Test"])
 
@@ -155,11 +156,12 @@ async def test_site(
 
     test_url = url or base_url or "https://example.com"
 
-    results = {
+    results = get_version_info()
+    results.update({
         "site": site,
         "name": site_info["website"]._name,
         "test_url": test_url,
-    }
+    })
 
     # Plain HTTP test
     plain = await _test_plain(test_url)
@@ -184,7 +186,8 @@ async def test_url(
     flare: Optional[int] = Query(0, description="Also test via FlareSolverr"),
 ):
     """Test any arbitrary URL — plain + optional FlareSolverr."""
-    results = {"test_url": url}
+    results = get_version_info()
+    results["test_url"] = url
     results["plain"] = await _test_plain(url)
     if flare:
         results["flaresolverr"] = await _test_flare(url)
@@ -199,6 +202,7 @@ async def test_all_sites(
 ):
     """Test all registered sites — returns summary of each."""
     results = []
+    version_info = get_version_info()
     for key, info in all_sites.items():
         obj = info["website"]()
         base_url = getattr(obj, "BASE_URL", None)
@@ -220,7 +224,9 @@ async def test_all_sites(
 
         results.append(entry)
 
-    return {
+    resp = get_version_info()
+    resp.update({
         "total": len(results),
         "sites": results,
-    }
+    })
+    return resp
