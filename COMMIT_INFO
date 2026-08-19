@@ -1,3 +1,3 @@
-050f750
-fix: downloadly - 12s timeout for post pages, fallback to post URL
-2026-08-19 22:14:45 +0530
+3b18c43
+fix: downloadly - increase _fetch timeout 15→30s (FlareSolverr needs ~25s)
+2026-08-19 22:19:19 +0530
