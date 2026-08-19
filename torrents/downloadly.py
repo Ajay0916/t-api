@@ -139,7 +139,7 @@ class Downloadly:
 
     async def _post_page(self, url, obj, sem, session_id=None):
         async with sem:
-            page = await self._fetch(url, timeout=20, session_id=session_id)
+            page = await self._fetch(url, timeout=12, session_id=session_id)
             if not page:
                 return
             soup = BeautifulSoup(page, "html.parser")
@@ -207,7 +207,7 @@ class Downloadly:
 
     async def _search_inner(self, query, page, limit, start_time):
         url = "{}/?s={}".format(self.BASE_URL, quote(query))
-        html = await self._fetch(url, session_id="downloadly")
+        html = await self._fetch(url, timeout=20, session_id="downloadly")
         if not html:
             return None
         soup = BeautifulSoup(html, "html.parser")
@@ -228,15 +228,15 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Fetch post pages concurrently for download links
-        # FlareSolverr takes ~25s per request, so 60s for up to 3-4 concurrent
-        sem = asyncio.Semaphore(4)
+        # Fetch post pages sequentially with session reuse (CF already solved)
+        # After session, each page takes ~3-5s. Max 3 pages to fit in 40s deadline.
+        sem = asyncio.Semaphore(1)
         try:
             await asyncio.wait_for(
                 asyncio.gather(
-                    *[asyncio.create_task(self._post_page(o["url"], o, sem, session_id="downloadly")) for o in results]
+                    *[asyncio.create_task(self._post_page(o["url"], o, sem, session_id="downloadly")) for o in results[:3]]
                 ),
-                timeout=60,
+                timeout=35,
             )
         except asyncio.TimeoutError:
             pass
