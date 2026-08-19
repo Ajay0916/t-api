@@ -97,13 +97,11 @@ class Downloadly:
         except Exception:
             pass
 
-    async def _fetch(self, url, timeout=30, session_id=None):
-        # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr with session
+    async def _fetch(self, url, timeout=25):
+        # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr
         FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
         try:
             payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
-            if session_id:
-                payload["session"] = session_id
             async with aiohttp.ClientSession(
                 connector=get_connector(), connector_owner=False, trust_env=True
             ) as s:
@@ -119,25 +117,6 @@ class Downloadly:
                     return html
         except Exception:
             pass
-        # Fallback: retry without session if session request failed
-        if session_id:
-            try:
-                payload2 = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
-                async with aiohttp.ClientSession(
-                    connector=get_connector(), connector_owner=False, trust_env=True
-                ) as s2:
-                    async with s2.post(
-                        f"{FLARE}/v1", json=payload2,
-                        timeout=aiohttp.ClientTimeout(total=timeout + 5)
-                    ) as res2:
-                        data2 = await res2.json(content_type=None)
-                sol2 = data2.get("solution") or {}
-                if sol2.get("status") == 200:
-                    html2 = sol2.get("response") or ""
-                    if html2 and len(html2) > 500:
-                        return html2
-            except Exception:
-                pass
         return None
 
     def _parse_search(self, html):
@@ -226,17 +205,11 @@ class Downloadly:
     async def search(self, query, page, limit):
         start_time = time.time()
         self.LIMIT = limit
-        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-        # Create a persistent FlareSolverr session (solve CF once, reuse cookies)
-        await self._create_session(FLARE)
-        try:
-            return await self._search_inner(query, page, limit, start_time)
-        finally:
-            await self._destroy_session(FLARE)
+        return await self._search_inner(query, page, limit, start_time)
 
     async def _search_inner(self, query, page, limit, start_time):
         url = "{}/?s={}".format(self.BASE_URL, quote(query))
-        html = await self._fetch(url, timeout=20, session_id="downloadly")
+        html = await self._fetch(url, timeout=25)
         if not html:
             return None
         soup = BeautifulSoup(html, "html.parser")
