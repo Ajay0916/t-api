@@ -202,7 +202,6 @@ all_sites = {
         "limit": 20,
     },
     "freecourseweb": {
-        "enabled": False,
         "website": FreeCourseWeb,
         "combo_available": False,
         "trending_available": False,
@@ -225,8 +224,8 @@ all_sites = {
         "limit": 15,
     },
     "downloadfreecourse": {
-        "website": DownloadFreeCourse,
         "enabled": False,
+        "website": DownloadFreeCourse,
         "trending_available": False,
         "trending_category": False,
         "search_by_category": False,
