@@ -146,20 +146,25 @@ async def restart():
         except Exception:
             pass
 
-    # Run via nohup bash so the restart survives process kill
-    repo_esc = repo.replace("'", "'\\''")
-    git_esc = git.replace("'", "'\\''")
-    bg_cmd = (
-        f"sleep 2 && cd '{repo_esc}' && "
-        f"'{git_esc}' fetch origin >/dev/null 2>&1 && "
-        f"'{git_esc}' reset --hard origin/main >/dev/null 2>&1 && "
-        f"commit=$('{git_esc}' rev-parse --short HEAD 2>/dev/null) && "
-        f"msg=$('{git_esc}' log -1 --pretty=%s 2>/dev/null) && "
-        f"date=$('{git_esc}' log -1 --pretty=%ci 2>/dev/null) && "
-        f"printf '%s\\n%s\\n%s' \"$commit\" \"$msg\" \"$date\" > '{repo_esc}/COMMIT_INFO' && "
+    # Detach restart process from service cgroup so it survives systemctl restart
+    import subprocess
+    cmd = (
+        f"sleep 2 && cd {repo} && "
+        f"{git} fetch origin >/dev/null 2>&1 && "
+        f"{git} reset --hard origin/main >/dev/null 2>&1 && "
+        f"commit=$({git} rev-parse --short HEAD 2>/dev/null) && "
+        f"msg=$({git} log -1 --pretty=%s 2>/dev/null) && "
+        f"date=$({git} log -1 --pretty=%ci 2>/dev/null) && "
+        f"printf '%s\\n%s\\n%s' \"$commit\" \"$msg\" \"$date\" > {repo}/COMMIT_INFO && "
         f"sleep 1 && systemctl restart t-api"
     )
-    os.system(f"nohup bash -c '{bg_cmd}' >/dev/null 2>&1 &")
+    subprocess.Popen(
+        ["bash", "-c", cmd],
+        start_new_session=True,
+        close_fds=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)
