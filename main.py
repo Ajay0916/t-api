@@ -146,9 +146,20 @@ async def restart():
         except Exception:
             pass
 
-    # Just exit — systemd Restart=always + start.sh does git pull on startup
-    # This is the ONLY reliable way to restart from within the same service
-    import sys, threading
+    # Do git pull NOW (before exit), then exit for systemd Restart=always
+    import subprocess, threading
+    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+    try:
+        subprocess.run(["/usr/bin/git", "fetch", "origin"], cwd=repo, timeout=15, env=env, capture_output=True)
+        subprocess.run(["/usr/bin/git", "reset", "--hard", "origin/main"], cwd=repo, timeout=10, env=env, capture_output=True)
+        # Write COMMIT_INFO
+        commit = subprocess.check_output(["/usr/bin/git", "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
+        msg = subprocess.check_output(["/usr/bin/git", "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
+        date = subprocess.check_output(["/usr/bin/git", "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
+        with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
+            f.write(f"{commit}\n{msg}\n{date}")
+    except Exception:
+        pass
     def _exit():
         import time
         time.sleep(1)
