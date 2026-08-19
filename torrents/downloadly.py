@@ -6,6 +6,7 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 from helper.plain_curl import fetch_plain
 from helper.session import get_connector
+from helper.short_links import register
 
 import aiohttp
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
@@ -121,6 +122,10 @@ class Downloadly:
             # Use first part as torrent/download, collect all parts
             obj["torrent"] = dl_links[0]["url"]
             obj["download"] = dl_links[0]["url"]
+            # Extract size from first part text
+            size_match = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl_links[0].get("text", ""), re.I)
+            if size_match:
+                obj["size"] = size_match.group(1)
             if len(dl_links) > 1:
                 obj["parts"] = dl_links
                 # Convert parts to torrents sub-results format
@@ -138,6 +143,13 @@ class Downloadly:
                 async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                     for t in obj["torrents"]:
                         t["quality"] = await _translate_text(ts, t.get("quality", ""))
+                        # Extract size from translated text (e.g. "Download Part 1 – 1 GB")
+                        size_match = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", t["quality"], re.I)
+                        if size_match:
+                            t["size"] = size_match.group(1)
+                        # Register short token for each part
+                        if t.get("torrent"):
+                            t["short"] = register(t["torrent"], obj.get("name") or "", "rar")
             # Try to get better name from page
             h1 = soup.select_one("h1")
             if h1:
