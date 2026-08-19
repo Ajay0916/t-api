@@ -20,4 +20,11 @@ echo "[STARTUP] Commit: $COMMIT"
 if [ -f venv/bin/activate ]; then
     source venv/bin/activate
 fi
-exec python main.py "$@"
+if command -v python3 &>/dev/null; then
+    exec python3 main.py "$@"
+elif command -v python &>/dev/null; then
+    exec python main.py "$@"
+else
+    echo "[STARTUP] ERROR: python not found"
+    exit 1
+fi
