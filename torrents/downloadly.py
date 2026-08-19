@@ -56,8 +56,27 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=10):
-        # curl_cffi with Chrome impersonation is fastest for this SSL-broken site
+    async def _fetch(self, url, timeout=15):
+        # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr
+        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        try:
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+            async with aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            ) as s:
+                async with s.post(
+                    f"{FLARE}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout + 5)
+                ) as res:
+                    data = await res.json(content_type=None)
+            sol = data.get("solution") or {}
+            if sol.get("status") == 200:
+                html = sol.get("response") or ""
+                if html and len(html) > 500:
+                    return html
+        except Exception:
+            pass
+        # Fallback: curl_cffi with SSL bypass
         try:
             from curl_cffi.requests import AsyncSession as CurlSession
             from curl_cffi.const import CurlOpt
@@ -70,10 +89,6 @@ class Downloadly:
                     return r.text
         except Exception:
             pass
-        # Fallback: plain curl
-        html = await fetch_plain(url, timeout=timeout)
-        if html:
-            return html
         return None
 
     def _parse_search(self, html):
