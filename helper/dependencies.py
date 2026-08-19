@@ -4,7 +4,7 @@ from fastapi import Request, Security, HTTPException, status
 from fastapi.security import APIKeyHeader
 
 
-api_key = os.environ.get("PYTORRENT_API_KEY")
+api_key = os.environ.get("PYTORRENT_API_KEY") or os.environ.get("API_PIN")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 api_pin_header = APIKeyHeader(name="X-API-Pin", auto_error=False)
 
