@@ -155,7 +155,9 @@ async def restart():
         f"commit=$({git} rev-parse --short HEAD 2>/dev/null) && "
         f"msg=$({git} log -1 --pretty=%s 2>/dev/null) && "
         f"date=$({git} log -1 --pretty=%ci 2>/dev/null) && "
-        f"printf '%s\\n%s\\n%s' \"$commit\" \"$msg\" \"$date\" > {repo}/COMMIT_INFO && "
+        f"echo \"$commit\" > {repo}/COMMIT_INFO && "
+        f"echo \"$msg\" >> {repo}/COMMIT_INFO && "
+        f"echo \"$date\" >> {repo}/COMMIT_INFO && "
         f"sleep 1 && systemctl restart t-api"
     )
     subprocess.Popen(
