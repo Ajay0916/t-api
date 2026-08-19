@@ -122,30 +122,27 @@ app.include_router(home_router, prefix="")
 
 @app.get("/restart", dependencies=[Depends(authenticate_request)])
 async def restart():
-    """Pull latest code + restart the service."""
-    import subprocess, os, threading
+    """Pull latest code + restart the service via detached script."""
+    import os
     repo = os.path.dirname(os.path.abspath(__file__))
-
-    def _do_restart():
-        try:
-            env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-            for git in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
-                try:
-                    subprocess.run([git, "fetch", "origin"], cwd=repo, timeout=15, env=env, capture_output=True)
-                    subprocess.run([git, "reset", "--hard", "origin/main"], cwd=repo, timeout=15, env=env, capture_output=True)
-                    commit = subprocess.check_output([git, "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
-                    msg = subprocess.check_output([git, "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
-                    date = subprocess.check_output([git, "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
-                    with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
-                        f.write(f"{commit}\n{msg}\n{date}")
-                    break
-                except Exception:
-                    continue
-            subprocess.run(["systemctl", "restart", "t-api"], timeout=10, env=env, capture_output=True)
-        except Exception:
-            pass
-
-    threading.Thread(target=_do_restart, daemon=True).start()
+    git = "/usr/bin/git"
+    script = f"""#!/bin/bash
+sleep 2
+cd {repo}
+{git} fetch origin 2>/dev/null
+{git} reset --hard origin/main 2>/dev/null
+commit=$({git} rev-parse --short HEAD 2>/dev/null)
+msg=$({git} log -1 --pretty=%s 2>/dev/null)
+date=$({git} log -1 --pretty=%ci 2>/dev/null)
+printf "%s\n%s\n%s" "$commit" "$msg" "$date" > {repo}/COMMIT_INFO
+sleep 1
+systemctl restart t-api
+"""
+    script_path = "/tmp/_tapi_restart.sh"
+    with open(script_path, "w") as f:
+        f.write(script)
+    os.chmod(script_path, 0o755)
+    os.system(f"nohup bash {script_path} > /dev/null 2>&1 &")
     return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)
