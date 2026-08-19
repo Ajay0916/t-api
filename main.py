@@ -14,6 +14,7 @@ from routers.v1.search_url_router import router as search_url_router
 from routers.v1.status_router import router as status_router
 from routers.v1.torrent_file_router import router as torrent_file_router
 from routers.v1.magnet_router import router as magnet_router
+from routers.v1.test_router import router as test_router
 from helper.is_site_available import all_sites
 from helper.uptime import getUptime
 from helper.session import sweep_flare_sessions_async
@@ -82,6 +83,7 @@ app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends
 # torrent_file/magnet stay open so shared short links (Direct Link / Share
 # Magnet in the bot) work for anyone who clicks them; the full-URL proxy
 # form inside torrent_file_router still requires the PIN.
+app.include_router(test_router, prefix="/api/v1/test", dependencies=[Depends(authenticate_request)])
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
 app.include_router(magnet_router, prefix="/api/v1/magnet")
 app.include_router(home_router, prefix="")
