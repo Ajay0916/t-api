@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>35 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>36 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,7 +22,7 @@
 
 ## ✨ What's Unique Here
 
-- **35 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
+- **36 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
 - **Auth support** — `X-API-Key`, `X-API-Pin` header or `?key=` query param. Set `PYTORRENT_API_KEY` or `API_PIN` env var to enforce.
 - **`/restart` endpoint** — auto git pull + restart via `start.sh`. One-click deploy from bot.
 - **Restart t-API button** — appears in Vj-wz site list (`_restart`), triggers API restart.
