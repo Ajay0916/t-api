@@ -26,16 +26,18 @@ class Magnetdl:
         # (curl included, TCP 000) while serving other IPs, so the chain is:
         # system curl -> curl_cffi -> r.jina.ai proxy (same HTML back). Each
         # leg is timeboxed to stay inside the router's 40s per-site deadline.
-        html = await fetch_plain(url, timeout=6)
+        # Try v4 then v6 with generous timeout — magnetdl search pages are
+        # slow from non-residential IPs.
+        html = await fetch_plain(url, timeout=12)
         if html:
             return html
         try:
-            r = await session.get(url, timeout=8)
+            r = await session.get(url, timeout=12)
             if r.status_code < 400:
                 return r.text
         except Exception:
             pass
-        return await fetch_jina(url, timeout=12)
+        return await fetch_jina(url, timeout=15)
 
     def _parser(self, htmls):
         try:
