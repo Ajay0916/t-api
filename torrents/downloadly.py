@@ -10,6 +10,35 @@ from helper.session import get_connector
 import aiohttp
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
+_TRANS_URL = "https://api.mymemory.translated.net/get"
+_TRANS_CACHE = {}
+_PERSIAN_RE = re.compile(r"[؀-ۿ]")
+
+
+def _is_persian(text):
+    return bool(_PERSIAN_RE.search(text or ""))
+
+
+async def _translate_text(session, text, src="fa", dst="en"):
+    """Translate text via MyMemory free API. Returns original on failure."""
+    if not text or not _is_persian(text):
+        return text
+    if text in _TRANS_CACHE:
+        return _TRANS_CACHE[text]
+    try:
+        url = "{0}?q={1}&langpair={2}|{3}".format(_TRANS_URL, quote(text[:480]), src, dst)
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as res:
+            data = await res.json(content_type=None)
+        out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
+        out = str(out).strip()
+        if out and out.lower() != text.lower() and "QUERY LENGTH" not in out.upper():
+            _TRANS_CACHE[text] = out
+            return out
+    except Exception:
+        pass
+    _TRANS_CACHE[text] = text
+    return text
+
 # downloadly.ir - WordPress site with direct dl.downloadly.ir file links.
 # Posts have multi-part downloads (بخش 1, بخش 2, ...).
 _SKIP_SLUGS = (
@@ -105,6 +134,10 @@ class Downloadly:
                         "torrent": pl["url"],
                     })
                 obj["torrents"] = torrents
+                # Translate Persian part labels to English
+                async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
+                    for t in obj["torrents"]:
+                        t["quality"] = await _translate_text(ts, t.get("quality", ""))
             # Try to get better name from page
             h1 = soup.select_one("h1")
             if h1:
