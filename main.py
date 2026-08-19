@@ -146,14 +146,20 @@ async def restart():
         except Exception:
             pass
 
-    # Use systemd-run to create an independent timer that restarts t-api
-    # AFTER this request completes (can't restart own service from child process)
-    import subprocess
-    subprocess.Popen(
-        ["systemd-run", "--on-active=3s", "systemctl", "restart", "t-api"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    # Fork + setsid to fully detach from service cgroup
+    # The child sleeps 3s then restarts — completely independent process
+    try:
+        pid = os.fork()
+        if pid == 0:
+            # Child: detach from parent cgroup
+            os.setsid()
+            import subprocess
+            subprocess.run(["sleep", "3"])
+            subprocess.run(["systemctl", "restart", "t-api"])
+            os._exit(0)
+        # Parent: return response immediately
+    except Exception:
+        pass
     return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)
