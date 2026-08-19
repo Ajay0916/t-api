@@ -36,6 +36,33 @@ app = FastAPI(
     },
 )
 
+def _write_commit_info():
+    """Write git commit info to COMMIT_INFO on startup (best-effort)."""
+    import subprocess, os
+    try:
+        repo = os.path.dirname(os.path.abspath(__file__))
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
+        ).decode().strip()
+        msg = subprocess.check_output(
+            ["git", "log", "-1", "--pretty=%s"],
+            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
+        ).decode().strip()
+        ts = subprocess.check_output(
+            ["git", "log", "-1", "--pretty=%ci"],
+            cwd=repo, stderr=subprocess.DEVNULL, timeout=3
+        ).decode().strip()
+        info_path = os.path.join(repo, "COMMIT_INFO")
+        with open(info_path, "w") as f:
+            f.write(f"{commit}\n{msg}\n{ts}")
+    except Exception:
+        pass
+
+
+_write_commit_info()
+
+
 @app.on_event("startup")
 async def _startup_cleanup():
     # Kill Flaresolverr sessions orphaned by the previous pkill -9 restart;
