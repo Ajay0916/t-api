@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>29 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>35 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,8 +22,13 @@
 
 ## ✨ What's Unique Here
 
-- **30 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
-- **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
+- **35 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
+- **Auth support** — `X-API-Key`, `X-API-Pin` header or `?key=` query param. Set `PYTORRENT_API_KEY` or `API_PIN` env var to enforce.
+- **`/restart` endpoint** — auto git pull + restart via `start.sh`. One-click deploy from bot.
+- **Restart t-API button** — appears in Vj-wz site list (`_restart`), triggers API restart.
+- **Downloadly.ir** — FlareSolverr-backed WordPress scraper with Persian→English translation.
+- **Test system** — `/api/v1/test?site=X` for health checks, `/api/v1/test/all` for full audit.
+- - **Mirror rotation** — 1337x, YTS, Bitsearch, AudiobookBay, LimeTorrents (5 hosts), KickAss & ExtraTorrent auto-failover to next mirror when one is blocked.
 - **Full proxy support** — every scraper honors `HTTP_PROXY`/`HTTPS_PROXY` (`trust_env`), so you can route all site traffic through a proxy/Tor when your IP gets blocked (same as upstream Torrent-Api-py).
 - **Live tracker magnets** — magnets built with fresh working trackers, not dead hardcoded ones.
 - **`.torrent` for every hash** — results with an infohash automatically get a working `.torrent` download link (itorrents.net), so WZML-X buttons never stay empty (TGX, TDP, MagnetDL, KickAss, Magnetz, TorrentProject, PirateBay).
