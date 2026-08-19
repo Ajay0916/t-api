@@ -17,4 +17,7 @@ DATE=$(git log -1 --pretty=%ci 2>/dev/null || echo "")
 echo -e "${COMMIT}\n${MSG}\n${DATE}" > COMMIT_INFO 2>/dev/null || true
 
 echo "[STARTUP] Commit: $COMMIT"
+if [ -f venv/bin/activate ]; then
+    source venv/bin/activate
+fi
 exec python main.py "$@"
