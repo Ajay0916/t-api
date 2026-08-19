@@ -129,7 +129,7 @@ class Magnetdl:
                 results["current_page"] = page
                 while len(results["data"]) < self.LIMIT:
                     page += 1
-                    url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+                    url = self.BASE_URL + "/search/?q={}&page={}".format(
                         quote(query), page
                     )
                     html = await self._fetch(session, url)
@@ -157,7 +157,7 @@ class Magnetdl:
         ) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+            url = self.BASE_URL + "/search/?q={}&page={}".format(
                 quote(query), page
             )
             result = await self.parser_result(
@@ -170,7 +170,7 @@ class Magnetdl:
                     continue
                 try:
                     self.BASE_URL = host
-                    url = self.BASE_URL + "/search/?q={}&orderby=DESC&order=seeders&page={}".format(
+                    url = self.BASE_URL + "/search/?q={}&page={}".format(
                         quote(query), page
                     )
                     result = await self.parser_result(
