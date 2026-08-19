@@ -146,20 +146,14 @@ async def restart():
         except Exception:
             pass
 
-    # Fork + setsid to fully detach from service cgroup
-    # The child sleeps 3s then restarts — completely independent process
-    try:
-        pid = os.fork()
-        if pid == 0:
-            # Child: detach from parent cgroup
-            os.setsid()
-            import subprocess
-            subprocess.run(["sleep", "3"])
-            subprocess.run(["systemctl", "restart", "t-api"])
-            os._exit(0)
-        # Parent: return response immediately
-    except Exception:
-        pass
+    # Just exit — systemd Restart=always + start.sh does git pull on startup
+    # This is the ONLY reliable way to restart from within the same service
+    import sys, threading
+    def _exit():
+        import time
+        time.sleep(1)
+        os._exit(0)
+    threading.Thread(target=_exit, daemon=True).start()
     return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)
