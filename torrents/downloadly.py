@@ -57,7 +57,7 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=15):
+    async def _fetch(self, url, timeout=30):
         # downloadly.ir blocks direct curl from VPS IPs — use FlareSolverr
         FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
         try:
