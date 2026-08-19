@@ -146,22 +146,14 @@ async def restart():
         except Exception:
             pass
 
-    # Detach restart process from service cgroup so it survives systemctl restart
+    # Touch trigger file — systemd path unit watches it and restarts t-api
     import subprocess
-    cmd = (
-        f"sleep 2 && cd {repo} && "
-        f"{git} fetch origin >/dev/null 2>&1 && "
-        f"{git} reset --hard origin/main >/dev/null 2>&1 && "
-        f"commit=$({git} rev-parse --short HEAD 2>/dev/null) && "
-        f"msg=$({git} log -1 --pretty=%s 2>/dev/null) && "
-        f"date=$({git} log -1 --pretty=%ci 2>/dev/null) && "
-        f"echo \"$commit\" > {repo}/COMMIT_INFO && "
-        f"echo \"$msg\" >> {repo}/COMMIT_INFO && "
-        f"echo \"$date\" >> {repo}/COMMIT_INFO && "
-        f"sleep 1 && systemctl restart t-api"
-    )
+    trigger = os.path.join(repo, ".restart_trigger")
+    with open(trigger, "w") as f:
+        f.write(str(time.time()))
+    # Also try direct systemctl as fallback
     subprocess.Popen(
-        ["bash", "-c", cmd],
+        ["systemctl", "restart", "t-api"],
         start_new_session=True,
         close_fds=True,
         stdout=subprocess.DEVNULL,
