@@ -1,3 +1,3 @@
-87f8194
-fix: downloadly - curl_cffi first (SSL bypass), reduce timeout 20→10s, semaphore 6→10
-2026-08-19 21:07:41 +0530
+5d3793d
+fix: downloadly - use FlareSolverr first (direct curl blocked from VPS)
+2026-08-19 21:13:00 +0530
