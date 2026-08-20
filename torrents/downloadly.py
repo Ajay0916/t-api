@@ -253,13 +253,17 @@ class Downloadly:
         html = None
         try:
             import aiohttp as _aiohttp
-            from helper.session import get_connector as _gc
-            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as s:
+            import socket
+            # Force IPv4 — downloadlynet.ir IPv6 is broken
+            conn = _aiohttp.TCPConnector(
+                ssl=False, family=socket.AF_INET,
+                limit=5, limit_per_host=5,
+            )
+            async with _aiohttp.ClientSession(connector=conn) as s:
                 async with s.get(
                     post_url,
                     timeout=_aiohttp.ClientTimeout(total=20),
                     allow_redirects=True,
-                    headers={},
                 ) as res:
                     if res.status == 200:
                         html = await res.text()
