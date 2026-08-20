@@ -249,24 +249,17 @@ class Downloadly:
     @staticmethod
     async def resolve_parts(post_url):
         """Fetch download links from a downloadly post page.
-        aiohttp without User-Agent -- site blocks Chrome UA with bot verification."""
+        Bare curl (no -A flag) -- site blocks Chrome/Python UAs with bot verification."""
         html = None
         try:
-            import aiohttp as _aiohttp
-            import socket
-            # Force IPv4 — downloadlynet.ir IPv6 is broken
-            conn = _aiohttp.TCPConnector(
-                ssl=False, family=socket.AF_INET,
-                limit=5, limit_per_host=5,
+            proc = await asyncio.create_subprocess_exec(
+                "curl", "-sL", "-4", "--max-time", "15",
+                "--", post_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
             )
-            async with _aiohttp.ClientSession(connector=conn) as s:
-                async with s.get(
-                    post_url,
-                    timeout=_aiohttp.ClientTimeout(total=20),
-                    allow_redirects=True,
-                ) as res:
-                    if res.status == 200:
-                        html = await res.text()
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+            html = stdout.decode("utf-8", errors="replace") if stdout else ""
         except Exception:
             pass
         if not html or len(html) < 500:
@@ -296,7 +289,6 @@ class Downloadly:
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
-
 
     async def trending(self, category, page, limit):
         return None
