@@ -249,23 +249,22 @@ class Downloadly:
     @staticmethod
     async def resolve_parts(post_url):
         """Fetch download links from a downloadly post page.
-        Bare curl (no UA) -- site blocks Chrome UA with bot verification."""
+        aiohttp without User-Agent -- site blocks Chrome UA with bot verification."""
         html = None
         try:
-            import sys
-            print(f"[DL] resolve_parts: fetching {post_url[:80]}", file=sys.stderr, flush=True)
-            proc = await asyncio.create_subprocess_exec(
-                "curl", "-sL", "-4", "--max-time", "15",
-                post_url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
-            html = stdout.decode("utf-8", errors="replace") if stdout else ""
-            print(f"[DL] resolve_parts: got {len(html)} bytes", file=sys.stderr, flush=True)
-        except Exception as e:
-            import sys
-            print(f"[DL] resolve_parts: error: {e}", file=sys.stderr, flush=True)
+            import aiohttp as _aiohttp
+            from helper.session import get_connector as _gc
+            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as s:
+                async with s.get(
+                    post_url,
+                    timeout=_aiohttp.ClientTimeout(total=20),
+                    allow_redirects=True,
+                    headers={},
+                ) as res:
+                    if res.status == 200:
+                        html = await res.text()
+        except Exception:
+            pass
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
