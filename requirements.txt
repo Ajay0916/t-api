@@ -8,3 +8,4 @@ requests
 uvicorn[standard]
 curl_cffi>=0.16
 
+aiohttp-socks>=0.8

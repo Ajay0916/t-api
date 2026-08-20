@@ -6,6 +6,7 @@ import time
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
+from aiohttp_socks import ProxyConnector
 
 _SKIP_SLUGS = (
     "category", "tag", "page", "feed", "wp-",
@@ -18,27 +19,28 @@ CHROME_UA = (
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
+_SOCKS_URL = "socks5://127.0.0.1:1080"
+
 
 async def _fetch_via_socks(url, timeout=20):
-    """Fetch URL through SOCKS5 proxy (wg1 VPN, binds outgoing to 10.2.0.2)."""
+    """Fetch URL through SOCKS5 proxy (wg1 VPN)."""
+    connector = ProxyConnector.from_url(_SOCKS_URL)
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "/usr/bin/curl", "-sL", "-4",
-            "--socks5-hostname", "127.0.0.1:1080",
-            "-A", CHROME_UA,
-            "--max-time", str(timeout),
-            "--", url,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout + 5)
-        if out and proc.returncode == 0:
-            html = out.decode("utf-8", errors="replace")
-            if html and len(html) > 500:
+        async with __import__("aiohttp").ClientSession(
+            connector=connector,
+            headers={"User-Agent": CHROME_UA},
+        ) as session:
+            async with session.get(url, timeout=__import__("aiohttp").ClientTimeout(total=timeout)) as resp:
+                if resp.status != 200:
+                    return None
+                html = await resp.text(errors="replace")
+                if len(html) < 500:
+                    return None
                 return html
     except Exception:
-        pass
-    return None
+        return None
+    finally:
+        await connector.close()
 
 
 class Downloadly:
