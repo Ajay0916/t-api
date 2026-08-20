@@ -81,7 +81,7 @@ async def get_search_combo(
     start_time = time.time()
     query = query.lower().strip()
     start_page, end_page = _parse_page(page)
-    LOGGER.info(f'Combo search: query={query[:40]} sites={sites or 'all'}')
+    LOGGER.info("Combo search: query=" + query[:40] + " sites=" + (sites or "all"))
     if timeout and timeout > 0:
         deadline = timeout
     else:
