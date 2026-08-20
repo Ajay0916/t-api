@@ -248,47 +248,21 @@ class Downloadly:
 
     @staticmethod
     async def resolve_parts(post_url):
-        """Fetch download links from a downloadly post page via FlareSolverr."""
+        """Fetch download links from a downloadly post page.
+        Bare curl (no UA) -- site blocks Chrome UA with bot verification."""
         html = None
-        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-        for attempt in range(2):
-            try:
-                payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
-                async with aiohttp.ClientSession(
-                    connector=get_connector(), connector_owner=False, trust_env=True
-                ) as s:
-                    async with s.post(
-                        f"{FLARE}/v1", json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30)
-                    ) as res:
-                        data = await res.json(content_type=None)
-                sol = data.get("solution") or {}
-                if sol.get("status") == 200:
-                    html = sol.get("response") or ""
-                    if html and len(html) > 500:
-                        break
-            except Exception:
-                pass
-            FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-            for attempt in range(2):
-                try:
-                    payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
-                    async with aiohttp.ClientSession(
-                        connector=get_connector(), connector_owner=False, trust_env=True
-                    ) as s:
-                        async with s.post(
-                            f"{FLARE}/v1", json=payload,
-                            timeout=aiohttp.ClientTimeout(total=30)
-                        ) as res:
-                            data = await res.json(content_type=None)
-                    sol = data.get("solution") or {}
-                    if sol.get("status") == 200:
-                        html = sol.get("response") or ""
-                        if html and len(html) > 500:
-                            break
-                except Exception:
-                    pass
-        if not html:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "curl", "-sL", "-4", "--max-time", "15",
+                post_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+            html = stdout.decode("utf-8", errors="replace") if stdout else ""
+        except Exception:
+            pass
+        if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -300,7 +274,6 @@ class Downloadly:
                 continue
             text = a.get_text(" ", strip=True)
             dl_links.append({"url": href, "text": text})
-        # Deduplicate by URL
         seen = set()
         unique = []
         for dl in dl_links:
@@ -308,7 +281,6 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        # Translate + register short tokens
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
@@ -317,6 +289,7 @@ class Downloadly:
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
+
 
     async def trending(self, category, page, limit):
         return None
