@@ -251,6 +251,9 @@ class Downloadly:
 
     async def resolve_parts(self, post_url):
         """Fetch download links — try cloudscraper, fall back to curl."""
+        import logging as _rl
+        _log = _rl.getLogger("tapi.downloadly")
+        _log.info("resolve_parts: %s", post_url[:80])
         loop = asyncio.get_event_loop()
         html = None
 
@@ -265,6 +268,7 @@ class Downloadly:
         except Exception:
             pass
 
+        _log.info('resolve_parts: cloudscraper html=%s', len(html) if html else 0)
         # Method 2: subprocess curl (proven to work from CLI)
         if not html or len(html) < 500:
             try:
@@ -277,10 +281,12 @@ class Downloadly:
                     out, _ = p.communicate(timeout=20)
                     return out.decode("utf-8", errors="replace")
                 html = await loop.run_in_executor(None, _curl_fetch)
-            except Exception:
-                pass
+            except Exception as _ce:
+                _log.info('resolve_parts: curl error: %s', str(_ce)[:80])
 
+        _log.info('resolve_parts: final html=%s', len(html) if html else 0)
         if not html or len(html) < 500:
+            _log.warning('resolve_parts: no usable HTML, returning empty')
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -306,6 +312,7 @@ class Downloadly:
                     sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
+        _log.info('resolve_parts: found %d links', len(dl_links))
         return dl_links
 
     async def trending(self, category, page, limit):
