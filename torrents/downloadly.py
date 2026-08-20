@@ -24,20 +24,27 @@ _SOCKS_URL = "socks5://127.0.0.1:1080"
 
 async def _fetch_via_socks(url, timeout=20):
     """Fetch URL through SOCKS5 proxy (wg1 VPN)."""
+    import logging
+    _log = logging.getLogger("downloadly")
     connector = ProxyConnector.from_url(_SOCKS_URL)
     try:
-        async with __import__("aiohttp").ClientSession(
+        import aiohttp as _aio
+        async with _aio.ClientSession(
             connector=connector,
             headers={"User-Agent": CHROME_UA},
         ) as session:
-            async with session.get(url, timeout=__import__("aiohttp").ClientTimeout(total=timeout)) as resp:
+            _log.info("Fetching %s via SOCKS...", url[:60])
+            async with session.get(url, timeout=_aio.ClientTimeout(total=timeout)) as resp:
+                _log.info("Status: %d", resp.status)
                 if resp.status != 200:
                     return None
                 html = await resp.text(errors="replace")
+                _log.info("HTML len: %d", len(html))
                 if len(html) < 500:
                     return None
                 return html
-    except Exception:
+    except Exception as e:
+        _log.error("Fetch error: %s", e)
         return None
     finally:
         await connector.close()
