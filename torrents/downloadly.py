@@ -270,19 +270,19 @@ class Downloadly:
 
         _log.info('resolve_parts: cloudscraper html=%s', len(html) if html else 0)
         # Method 2: asyncio subprocess curl
-        if not html or len(html) < 500:
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
-                html = out.decode("utf-8", errors="replace") if out else None
-                if html:
-                    _log.info("curl asyncio: len=%d", len(html))
-            except Exception as _ce:
-                _log.info("curl asyncio error: %s", str(_ce)[:80])
+        _log.info('resolve_parts: starting curl fallback, html_before=%s', type(html).__name__)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            _log.info('resolve_parts: curl proc started pid=%s', proc.pid)
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=20)
+            _log.info('resolve_parts: curl rc=%s out_len=%s', proc.returncode, len(out) if out else 0)
+            html = out.decode("utf-8", errors="replace") if out else None
+        except Exception as _ce:
+            _log.error('resolve_parts: curl error: %s', str(_ce)[:100])
 
         _log.info('resolve_parts: final html=%s', len(html) if html else 0)
         if not html or len(html) < 500:
