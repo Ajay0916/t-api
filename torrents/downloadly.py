@@ -252,6 +252,8 @@ class Downloadly:
         Bare curl (no UA) -- site blocks Chrome UA with bot verification."""
         html = None
         try:
+            import sys
+            print(f"[DL] resolve_parts: fetching {post_url[:80]}", file=sys.stderr, flush=True)
             proc = await asyncio.create_subprocess_exec(
                 "curl", "-sL", "-4", "--max-time", "15",
                 post_url,
@@ -260,8 +262,10 @@ class Downloadly:
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
             html = stdout.decode("utf-8", errors="replace") if stdout else ""
-        except Exception:
-            pass
+            print(f"[DL] resolve_parts: got {len(html)} bytes", file=sys.stderr, flush=True)
+        except Exception as e:
+            import sys
+            print(f"[DL] resolve_parts: error: {e}", file=sys.stderr, flush=True)
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
