@@ -8,6 +8,37 @@ from urllib.parse import quote
 from bs4 import BeautifulSoup
 from aiohttp_socks import ProxyConnector
 
+_TRANS_URL = "https://api.mymemory.translated.net/get"
+_TRANS_CACHE = {}
+_PERSIAN_RE = re.compile(r"[؀-ۿ]")
+
+
+def _is_persian(text):
+    return bool(_PERSIAN_RE.search(text or ""))
+
+
+async def _translate_text(session, text, src="fa", dst="en"):
+    """Translate Persian text via MyMemory free API."""
+    if not text or not _is_persian(text):
+        return text
+    if text in _TRANS_CACHE:
+        return _TRANS_CACHE[text]
+    try:
+        url = "{0}?q={1}&langpair={2}|{3}".format(
+            _TRANS_URL, quote(text[:480]), src, dst
+        )
+        async with session.get(url, timeout=__import__("aiohttp").ClientTimeout(total=6)) as res:
+            data = await res.json(content_type=None)
+        out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
+        out = str(out).strip()
+        if out and out.lower() != text.lower() and "QUERY LENGTH" not in out.upper():
+            _TRANS_CACHE[text] = out
+            return out
+    except Exception:
+        pass
+    _TRANS_CACHE[text] = text
+    return text
+
 _SKIP_SLUGS = (
     "category", "tag", "page", "feed", "wp-",
     "privacy", "about", "contact", "terms",
@@ -79,6 +110,18 @@ class Downloadly:
                     {"quality": dl.get("text", ""), "type": "RAR", "size": "", "torrent": dl["url"]}
                     for dl in dl_links
                 ]
+                try:
+                    import aiohttp as _aio
+                    async with _aio.ClientSession() as ts:
+                        for t in obj["torrents"]:
+                            t["quality"] = await _translate_text(ts, t.get("quality", ""))
+                            size_match = re.search(
+                                r"([\d.]+\s*(?:GB|MB|KB|TB))", t["quality"], re.I
+                            )
+                            if size_match:
+                                t["size"] = size_match.group(1)
+                except Exception:
+                    pass
             h1 = soup.select_one("h1")
             if h1:
                 name = h1.get_text(" ", strip=True)
