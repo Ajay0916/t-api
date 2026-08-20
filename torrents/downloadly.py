@@ -26,11 +26,25 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url):
-        html = await fetch_plain(url, timeout=10)
-        if html:
-            return html
-        return await fetch_plain(url, timeout=10, family=6)
+    async def _fetch(self, url, timeout=15):
+        """Fetch via curl --interface wg1 (ProtonVPN) to bypass downloadly IP block."""
+        import asyncio as _aio
+        try:
+            proc = await _aio.create_subprocess_exec(
+                "curl", "-sL", "-4", "--interface", "wg1",
+                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0",
+                "--max-time", str(timeout), "--", url,
+                stdout=_aio.subprocess.PIPE,
+                stderr=_aio.subprocess.DEVNULL,
+            )
+            out, _ = await _aio.wait_for(proc.communicate(), timeout=timeout + 5)
+            if out and proc.returncode == 0:
+                html = out.decode("utf-8", errors="replace")
+                if html and len(html) > 500:
+                    return html
+        except Exception:
+            pass
+        return None
 
     def _parse_search(self, html):
         soup = BeautifulSoup(html, "html.parser")
