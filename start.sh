@@ -1,23 +1,18 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-UPSTREAM="https://github.com/Ajay0916/t-api.git"
-BRANCH="main"
+echo "[STARTUP] Starting Torrents-Api..."
 
-echo "[STARTUP] Auto-updating..."
-
-# Vj-wz style: destroy .git, fresh init, fetch, reset
-# Use -c safe.directory='*' to bypass dubious ownership check
-rm -rf .git 2>/dev/null || true
-git -c safe.directory='*' init -q 2>/dev/null || true
-git -c safe.directory='*' remote add origin "$UPSTREAM" 2>/dev/null || true
-git -c safe.directory='*' fetch origin -q 2>/dev/null || true
-git -c safe.directory='*' reset --hard "origin/$BRANCH" -q 2>/dev/null || true
-
-# Write COMMIT_INFO
-COMMIT=$(git -c safe.directory='*' rev-parse --short HEAD 2>/dev/null || echo "unknown")
-MSG=$(git -c safe.directory='*' log -1 --pretty=%s 2>/dev/null || echo "")
-DATE=$(git -c safe.directory='*' log -1 --pretty=%ci 2>/dev/null || echo "")
+# Write COMMIT_INFO (read only, don't modify git)
+if [ -d ".git" ]; then
+    COMMIT=$(git -c safe.directory='*' rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    MSG=$(git -c safe.directory='*' log -1 --pretty=%s 2>/dev/null || echo "")
+    DATE=$(git -c safe.directory='*' log -1 --pretty=%ci 2>/dev/null || echo "")
+else
+    COMMIT="unknown"
+    MSG=""
+    DATE=""
+fi
 echo -e "${COMMIT}\n${MSG}\n${DATE}" > COMMIT_INFO 2>/dev/null || true
 
 echo "[STARTUP] Commit: $COMMIT"
