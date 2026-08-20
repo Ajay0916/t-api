@@ -116,9 +116,7 @@ async def proxy_torrent(
 
     # downloadly.ir post pages: resolve download links lazily
     import logging as _dl_log
-    print(f"[TF] checking URL: {url[:80]}")
     if ("downloadly.ir/" in url.lower() or "downloadlynet.ir/" in url.lower()) and ("dl.downloadly" not in url.lower() and "dl3.downloadly" not in url.lower()):
-        print(f"[TF] matched downloadly pattern, calling resolve_parts")
         parts = await Downloadly().resolve_parts(url)
         if parts:
             target = parts[0].get("url", url)

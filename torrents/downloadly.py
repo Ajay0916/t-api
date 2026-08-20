@@ -250,29 +250,21 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links via FlareSolverr (only method that works for downloadly)."""
-        import logging as _rl
-        _log = _rl.getLogger("tapi.downloadly")
-        _log.info("resolve_parts: fetching %s", post_url[:80])
-
+        """Fetch download links via FlareSolverr."""
         FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
         html = None
         try:
-            payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 35000}
+            payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 30000}
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
                 async with s.post(
                     f"{FLARE}/v1", json=payload,
-                    timeout=aiohttp.ClientTimeout(total=40)
+                    timeout=aiohttp.ClientTimeout(total=35)
                 ) as res:
                     data = await res.json(content_type=None)
             sol = data.get("solution") or {}
             html = sol.get("response")
-            _log.info("resolve_parts: flare status=%s html=%d message=%s", 
-                sol.get("status"), len(html) if html else 0, 
-                (data.get("message") or "")[:80])
-        except Exception as e:
-            _log.warning("resolve_parts: flare error: %s", str(e)[:80])
-
+        except Exception:
+            pass
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
@@ -292,7 +284,6 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        _log.info("resolve_parts: found %d links", len(dl_links))
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
