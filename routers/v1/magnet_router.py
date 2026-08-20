@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+from helper.logging_setup import get_logger
+LOGGER = get_logger("tapi.magnet")
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from helper.short_links import lookup

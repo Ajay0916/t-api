@@ -1,4 +1,5 @@
 import uvicorn
+import logging
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,15 +21,19 @@ from helper.is_site_available import all_sites
 from helper.uptime import getUptime
 from helper.session import sweep_flare_sessions_async
 from helper.dependencies import authenticate_request
+from helper.logging_setup import setup_logging, get_logger
 from mangum import Mangum
 from math import ceil
 import time
+
+setup_logging()
+LOGGER = get_logger("tapi.main")
 
 startTime = time.time()
 
 app = FastAPI(
     title="Torrents-Api",
-    version="1.6.12",
+    version="1.6.13",
     description="Unofficial Torrents / Books / Courses API — {} sites, mirror rotation, combo search".format(len(all_sites)),
     docs_url="/docs",
     contact={
@@ -59,6 +64,7 @@ def _write_commit_info():
             ).decode().strip()
             with open(info_path, "w") as f:
                 f.write(f"{commit}\n{msg}\n{ts}")
+            LOGGER.info(f"Commit: {commit} — {msg}")
             return
         except Exception:
             continue
@@ -69,9 +75,10 @@ _write_commit_info()
 
 @app.on_event("startup")
 async def _startup_cleanup():
-    # Kill Flaresolverr sessions orphaned by the previous pkill -9 restart;
-    # leaked headless browsers make every challenge solve slower over time.
+    LOGGER.info("Torrents-Api v1.6.13 starting...")
+    LOGGER.info(f"Loaded {len(all_sites)} search sites")
     sweep_flare_sessions_async()
+    LOGGER.info("Flaresolverr session sweep initiated")
 
 
 origins = ["*"]
@@ -89,14 +96,10 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_route(req: Request):
-    """
-    Health Route : Returns App details.
-
-    """
     return JSONResponse(
         {
             "app": "Torrents-Api",
-            "version": "v" + "1.6.12",
+            "version": "v" + "1.6.13",
             "ip": req.client.host,
             "uptime": ceil(getUptime(startTime)),
         }
@@ -111,9 +114,6 @@ app.include_router(combo_router, prefix="/api/v1/all", dependencies=[Depends(aut
 app.include_router(site_list_router, prefix="/api/v1/sites", dependencies=[Depends(authenticate_request)])
 app.include_router(search_url_router, prefix="/api/v1/search_url", dependencies=[Depends(authenticate_request)])
 app.include_router(status_router, prefix="/api/v1/status", dependencies=[Depends(authenticate_request)])
-# torrent_file/magnet stay open so shared short links (Direct Link / Share
-# Magnet in the bot) work for anyone who clicks them; the full-URL proxy
-# form inside torrent_file_router still requires the PIN.
 app.include_router(test_router, prefix="/api/v1/test", dependencies=[Depends(authenticate_request)])
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
 app.include_router(magnet_router, prefix="/api/v1/magnet")
@@ -121,26 +121,17 @@ app.include_router(log_router, prefix="/api/v1/log")
 app.include_router(home_router, prefix="")
 
 
-
 @app.get("/restart", dependencies=[Depends(authenticate_request)])
 async def restart():
-    """Pull latest code + restart the service (Vj-wz style).
-
-    Vj-wz update.py approach:
-    1. rm -rf .git  (destroy broken state - branch mismatches etc)
-    2. git init → git add . → git commit  (snapshot current code)
-    3. git remote add origin → git fetch → git reset --hard origin/main
-    4. os._exit(0)  →  systemd Restart=always picks up new code
-
-    Uses asyncio.create_subprocess_exec (like Vj-wz cmd_exec) so
-    git operations complete BEFORE we exit.
-    """
+    """Pull latest code + restart the service (Vj-wz style)."""
     import asyncio, os, threading, time as _time
 
     repo = os.path.dirname(os.path.abspath(__file__))
     upstream = "https://github.com/Ajay0916/t-api.git"
     branch = "main"
     env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+
+    LOGGER.info("/restart requested — pulling latest code...")
 
     async def _run(cmd, timeout=60):
         proc = await asyncio.create_subprocess_exec(
@@ -153,14 +144,9 @@ async def restart():
         except asyncio.TimeoutError:
             proc.kill()
 
-    # Fix git dubious ownership error
-    # safe.directory handled by -c flag below
-
-    # Vj-wz _run_update: destroy .git, reinit, fresh fetch
     if os.path.isdir(os.path.join(repo, ".git")):
         await _run(["rm", "-rf", ".git"])
 
-    # No git add/commit — just init, fetch, reset (avoids huge venv commit)
     await _run(["git", "-c", "safe.directory=*", "init", "-q"])
     await _run(["git", "-c", "safe.directory=*", "remote", "add", "origin", upstream])
     await _run(["git", "-c", "safe.directory=*", "fetch", "origin", "-q"])
@@ -194,7 +180,7 @@ async def restart():
     except Exception:
         pass
 
-    # Exit - systemd Restart=always restarts with new code
+    LOGGER.info(f"/restart updated to {commit} — {msg}")
     threading.Thread(target=lambda: (_time.sleep(1), os._exit(0)), daemon=True).start()
     return {"status": "restarting", "message": f"Updated to {commit}. Restarting..."}
 

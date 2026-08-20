@@ -12,6 +12,8 @@ Params:
 """
 
 import asyncio
+from helper.logging_setup import get_logger
+LOGGER = get_logger("tapi.test")
 import os
 import re
 import time
@@ -139,6 +141,7 @@ async def test_site(
     skip_search: Optional[int] = Query(0, description="Skip live search test"),
 ):
     site_info = all_sites.get(site)
+    LOGGER.info(f"Test: site={site} url={url or "default"} flare={flare}")
     if not site_info:
         available = list(all_sites.keys())
         return {
@@ -201,6 +204,7 @@ async def test_all_sites(
     flare: Optional[int] = Query(0, description="Also test FlareSolverr on each"),
 ):
     """Test all registered sites — returns summary of each."""
+    LOGGER.info(f"Test all: {len(all_sites)} sites, query={query}")
     results = []
     version_info = get_version_info()
     for key, info in all_sites.items():

@@ -1,4 +1,6 @@
 import asyncio
+from helper.logging_setup import get_logger
+LOGGER = get_logger("tapi.search")
 import re
 import time
 
@@ -201,6 +203,7 @@ async def search_for_torrents(
         if cached is not None:
             return clean_results(cached, dedup=bool(dedup))
 
+    LOGGER.info(f"Search: site={site} query={query[:40]} limit={want}")
     try:
         deadline = timeout if timeout and timeout > 0 else SITE_DEADLINE
         resp = await _search_paginated(
@@ -208,11 +211,13 @@ async def search_for_torrents(
         )
     except asyncio.TimeoutError:
         # Slow but alive: don't blacklist, retry next time (results matter).
+        LOGGER.warning(f"Timeout: {site} query={query[:30]}")
         return error_handler(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             json_message={"error": "Site took too long to respond, try again."},
         )
     except Exception as e:
+        LOGGER.error(f"Error: {site} query={query[:30]} - {e}")
         site_health.mark_failure(site, e)
         return error_handler(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -304,6 +309,7 @@ async def search_for_torrents(
         resp["relaxed_filters"] = True
     if len(resp["data"]) > 0:
         site_health.mark_success(site)
+        LOGGER.info(f"Results: {site} → {len(resp.get("data", []))} items")
         search_cache.set(cache_key, resp)
         return clean_results(resp, dedup=bool(dedup))
 

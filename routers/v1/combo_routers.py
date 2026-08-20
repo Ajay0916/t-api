@@ -1,4 +1,6 @@
 import time
+from helper.logging_setup import get_logger
+LOGGER = get_logger("tapi.combo")
 import asyncio
 
 from fastapi import APIRouter, status
@@ -79,6 +81,7 @@ async def get_search_combo(
     start_time = time.time()
     query = query.lower().strip()
     start_page, end_page = _parse_page(page)
+    LOGGER.info(f"Combo search: query={query[:40]} sites={sites or "all"}")
     if timeout and timeout > 0:
         deadline = timeout
     else:

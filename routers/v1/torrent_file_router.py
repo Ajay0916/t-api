@@ -1,4 +1,6 @@
 import re
+from helper.logging_setup import get_logger
+LOGGER = get_logger("tapi.torrent")
 from urllib.parse import quote, unquote, urlsplit
 
 import aiohttp
