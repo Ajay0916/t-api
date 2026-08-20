@@ -235,19 +235,11 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Fetch each post page to extract actual download links
-        import asyncio as _aio
-        sem = _aio.Semaphore(3)
-        _items = results[:limit] if limit else results
-        post_tasks = [self._post_page(o["url"], o, sem) for o in _items]
-        if post_tasks:
-            await _aio.gather(*post_tasks, return_exceptions=True)
-        # Fallback: set post URL if _post_page didn't find download links
+        # Set post URL as torrent/download — parts resolved lazily
         for o in results:
-            if not o.get("torrent") or o["torrent"] == o.get("url"):
-                o["torrent"] = o["url"]
-                o["download"] = o["url"]
-                o["_downloadly_post"] = True
+            o["torrent"] = o["url"]
+            o["download"] = o["url"]
+            o["_downloadly_post"] = True
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
@@ -258,13 +250,16 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links from a downloadly post page via aiohttp."""
+        """Fetch download links via cloudscraper (bypasses Cloudflare)."""
+        import cloudscraper as _cs
+        loop = asyncio.get_event_loop()
         html = None
         try:
-            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as cs:
-                async with cs.get(post_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status == 200:
-                        html = await resp.text(content_type=None)
+            def _fetch():
+                scraper = _cs.create_scraper()
+                r = scraper.get(post_url, timeout=20)
+                return r.text if r.status_code == 200 else None
+            html = await loop.run_in_executor(None, _fetch)
         except Exception:
             pass
         if not html or len(html) < 500:
@@ -290,7 +285,7 @@ class Downloadly:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
-                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    sm = re.search(r"([\\d.]+\\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
