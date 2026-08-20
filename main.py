@@ -124,51 +124,81 @@ app.include_router(home_router, prefix="")
 async def restart():
     """Pull latest code + restart the service (Vj-wz style).
 
-    1. Write a shell script that does git pull.
-    2. Run it detached (start_new_session=True) so it survives our exit.
-    3. Return response immediately, then os._exit(0).
-    4. systemd Restart=always brings us back with new code.
+    Vj-wz update.py approach:
+    1. rm -rf .git  (destroy broken state - branch mismatches etc)
+    2. git init → git add . → git commit  (snapshot current code)
+    3. git remote add origin → git fetch → git reset --hard origin/main
+    4. os._exit(0)  →  systemd Restart=always picks up new code
+
+    Uses asyncio.create_subprocess_exec (like Vj-wz cmd_exec) so
+    git operations complete BEFORE we exit.
     """
-    import subprocess as _sp, os, threading, time as _time
+    import asyncio, os, threading, time as _time
 
     repo = os.path.dirname(os.path.abspath(__file__))
-    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
     upstream = "https://github.com/Ajay0916/t-api.git"
+    branch = "main"
+    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
 
-    script_content = "#!/bin/bash\n"
-    script_content += "sleep 2\n"
-    script_content += "cd '" + repo + "'\n"
-    script_content += "/usr/bin/git remote set-url origin '" + upstream + "' 2>/dev/null || "
-    script_content += "/usr/bin/git remote add origin '" + upstream + "' 2>/dev/null\n"
-    script_content += "/usr/bin/git fetch origin -q 2>/dev/null\n"
-    script_content += "/usr/bin/git reset --hard origin/main -q 2>/dev/null\n"
-    script_content += 'COMMIT=$(/usr/bin/git rev-parse --short HEAD 2>/dev/null || echo unknown)\n'
-    script_content += "MSG=$(/usr/bin/git log -1 --pretty=%s 2>/dev/null || echo '')\n"
-    script_content += "DATE=$(/usr/bin/git log -1 --pretty=%ci 2>/dev/null || echo '')\n"
-    script_content += "printf '%s\\n%s\\n%s\\n' \"$COMMIT\" \"$MSG\" \"$DATE\" > '" + repo + "/COMMIT_INFO' 2>/dev/null\n"
-    script_content += "/usr/bin/systemctl restart t-api 2>/dev/null\n"
+    async def _run(cmd, timeout=60):
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, cwd=repo, env=env,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
 
-    script_path = os.path.join("/tmp", "tapi_restart.sh")
-    with open(script_path, "w") as f:
-        f.write(script_content)
-    os.chmod(script_path, 0o755)
+    # Vj-wz _run_update: destroy .git, reinit, fresh fetch
+    if os.path.isdir(os.path.join(repo, ".git")):
+        await _run(["rm", "-rf", ".git"])
 
-    # Detached subprocess — survives parent death (like Vj-wz cmd_exec)
-    _sp.Popen(
-        ["/bin/bash", script_path],
-        start_new_session=True,
-        stdout=_sp.DEVNULL,
-        stderr=_sp.DEVNULL,
-        env=env,
+    git_cmds = [
+        ["git", "init", "-q"],
+        ["git", "add", "."],
+        ["git", "commit", "-sm", "update", "-q"],
+        ["git", "remote", "add", "origin", upstream],
+        ["git", "fetch", "origin", "-q"],
+        ["git", "reset", "--hard", f"origin/{branch}", "-q"],
+    ]
+    for cmd in git_cmds:
+        await _run(cmd)
+        # If commit fails (no changes), skip remaining commit steps but continue
+        # Actually for Vj-wz style, just continue - git reset will overwrite anyway
+
+    # Write COMMIT_INFO
+    proc = await asyncio.create_subprocess_exec(
+        "git", "rev-parse", "--short", "HEAD",
+        cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
+    stdout, _ = await proc.communicate()
+    commit = stdout.decode().strip() if stdout else "unknown"
 
-    # Fallback: if systemctl restart doesn't fire in 5s, force exit
-    def _fallback_exit():
-        _time.sleep(5)
-        os._exit(0)
-    threading.Thread(target=_fallback_exit, daemon=True).start()
+    proc = await asyncio.create_subprocess_exec(
+        "git", "log", "-1", "--pretty=%s",
+        cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    msg = stdout.decode().strip() if stdout else ""
 
-    return {"status": "restarting", "message": "Pulling latest code and restarting..."}
+    proc = await asyncio.create_subprocess_exec(
+        "git", "log", "-1", "--pretty=%ci",
+        cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    date = stdout.decode().strip() if stdout else ""
+
+    try:
+        with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
+            f.write(f"{commit}\n{msg}\n{date}")
+    except Exception:
+        pass
+
+    # Exit - systemd Restart=always restarts with new code
+    threading.Thread(target=lambda: (_time.sleep(1), os._exit(0)), daemon=True).start()
+    return {"status": "restarting", "message": f"Updated to {commit}. Restarting..."}
 
 handler = Mangum(app)
 
