@@ -149,6 +149,20 @@ class Downloadly:
         async with sem:
             page = await self._fetch(url, timeout=12, session_id=session_id)
             if not page:
+                # Fallback: try subprocess curl (like resolve_parts)
+                try:
+                    import subprocess as _sp
+                    loop = asyncio.get_event_loop()
+                    def _curl():
+                        r = _sp.run(
+                            ["/usr/bin/curl", "-sL", "-4", "--max-time", "12", "--", url],
+                            capture_output=True, timeout=15
+                        )
+                        return r.stdout.decode("utf-8", errors="replace")
+                    page = await loop.run_in_executor(None, _curl)
+                except Exception:
+                    pass
+            if not page or len(page) < 500:
                 return
             soup = BeautifulSoup(page, "html.parser")
             # Extract download links from dl.downloadly.ir
