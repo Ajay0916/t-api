@@ -69,7 +69,7 @@ class Downloadly:
             dl_links = []
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if "dl.downloadly.ir" not in href:
+                if not __import__("re").match(r"https?://dl\d*\.downloadly\.ir/", href):
                     continue
                 if "/Sample/" in href:
                     continue
@@ -96,7 +96,7 @@ class Downloadly:
         dl_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if "dl.downloadly.ir" not in href:
+            if not __import__("re").match(r"https?://dl\d*\.downloadly\.ir/", href):
                 continue
             if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
                 continue
