@@ -124,7 +124,7 @@ app.include_router(home_router, prefix="")
 async def restart():
     """Pull latest code + restart the service (Vj-wz style).
 
-    1. Write a shell script that does git pull with PAT auth.
+    1. Write a shell script that does git pull.
     2. Run it detached (start_new_session=True) so it survives our exit.
     3. Return response immediately, then os._exit(0).
     4. systemd Restart=always brings us back with new code.
@@ -133,7 +133,7 @@ async def restart():
 
     repo = os.path.dirname(os.path.abspath(__file__))
     env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-    upstream = "https://Ajay0916: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I@github.com/Ajay0916/t-api.git"
+    upstream = "https://github.com/Ajay0916/t-api.git"
 
     script_content = "#!/bin/bash\n"
     script_content += "sleep 2\n"
