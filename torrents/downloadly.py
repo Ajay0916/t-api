@@ -1,56 +1,17 @@
-import os
-"""downloadly.ir — WordPress course site with dl.downloadly.ir direct links.
-
-Search page lists posts; each post page is fetched (concurrency-limited)
-to extract all download links. The first link becomes torrent/download;
-if multiple parts exist, they're stored in 'torrents' sub-results so
-Vj-wz renders each as a separate download button.
-"""
 import asyncio
 import re
 import time
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
-
-from constants.base_url import DOWNLOADLY
 from helper.plain_curl import fetch_plain
 from helper.session import get_connector
-from helper.short_links import register
 
 import aiohttp
+from constants.headers import HEADER_AIO, AIO_TIMEOUT
 
-_TRANS_URL = "https://api.mymemory.translated.net/get"
-_TRANS_CACHE = {}
-_PERSIAN_RE = re.compile(r"[\u0600-\u06FF]")
-
-
-def _is_persian(text):
-    return bool(_PERSIAN_RE.search(text or ""))
-
-
-async def _translate_text(session, text, src="fa", dst="en"):
-    if not text or not _is_persian(text):
-        return text
-    if text in _TRANS_CACHE:
-        return _TRANS_CACHE[text]
-    try:
-        url = "{0}?q={1}&langpair={2}|{3}".format(
-            _TRANS_URL, quote(text[:480]), src, dst
-        )
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=6)) as res:
-            data = await res.json(content_type=None)
-        out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
-        out = str(out).strip()
-        if out and out.lower() != text.lower() and "QUERY LENGTH" not in out.upper():
-            _TRANS_CACHE[text] = out
-            return out
-    except Exception:
-        pass
-    _TRANS_CACHE[text] = text
-    return text
-
-
+# downloadly.ir - WordPress site with direct dl.downloadly.ir file links.
+# Posts have multi-part downloads (بخش 1, بخش 2, ...).
 _SKIP_SLUGS = (
     "category", "tag", "page", "feed", "wp-",
     "privacy", "about", "contact", "terms",
@@ -62,77 +23,66 @@ class Downloadly:
     _name = "Downloadly"
 
     def __init__(self):
-        self.BASE_URL = DOWNLOADLY
+        self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=12):
-        """FlareSolverr for search pages (proven to work)."""
-        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-        try:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
-            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
-                async with s.post(f"{FLARE}/v1", json=payload, timeout=aiohttp.ClientTimeout(total=timeout + 10)) as res:
-                    data = await res.json(content_type=None)
-            sol = data.get("solution") or {}
-            if sol.get("status") == 200:
-                html = sol.get("response") or ""
-                if html and len(html) > 500:
-                    return html
-        except Exception:
-            pass
-        return None
+    async def _fetch(self, url):
+        html = await fetch_plain(url, timeout=10)
+        if html:
+            return html
+        return await fetch_plain(url, timeout=10, family=6)
+
+    def _parse_search(self, html):
+        soup = BeautifulSoup(html, "html.parser")
+        results = []
+        for item in soup.find_all("div", class_=lambda c: c and "w-grid-item" in c):
+            title_el = item.find("a", class_=lambda c: c and "entry-title" in c)
+            if not title_el:
+                pc = item.find(class_=lambda c: c and "post_title" in c)
+                title_el = pc.find("a") if pc else None
+            if not title_el or not title_el.has_attr("href"):
+                continue
+            href = title_el["href"]
+            if any(s in href for s in _SKIP_SLUGS):
+                continue
+            name = title_el.get_text(" ", strip=True)
+            if not name:
+                continue
+            img = item.find("img")
+            poster = img["src"] if img and img.has_attr("src") else None
+            results.append({
+                "name": name,
+                "url": href,
+                "poster": poster,
+                "category": "Courses",
+            })
+        return results
 
     async def _post_page(self, url, obj, sem):
         async with sem:
             page = await self._fetch(url)
-            if not page or len(page) < 500:
+            if not page:
                 return
             soup = BeautifulSoup(page, "html.parser")
+            # Extract download links from dl.downloadly.ir
             dl_links = []
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if not re.match(r"https?://dl\d*\.downloadly\.ir/", href):
-                    continue
-                if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
+                if "dl.downloadly.ir" not in href:
                     continue
                 text = a.get_text(" ", strip=True)
+                # Skip sample files
+                if "/Sample/" in href:
+                    continue
                 dl_links.append({"url": href, "text": text})
             if not dl_links:
                 return
+            # Use first part as torrent/download, collect all parts
             obj["torrent"] = dl_links[0]["url"]
             obj["download"] = dl_links[0]["url"]
-            sm = re.search(
-                r"([\d.]+\s*(?:GB|MB|KB|TB))",
-                dl_links[0].get("text", ""), re.I,
-            )
-            if sm:
-                obj["size"] = sm.group(1)
             if len(dl_links) > 1:
                 obj["parts"] = dl_links
-                torrents = []
-                for pl in dl_links:
-                    torrents.append({
-                        "quality": pl.get("text", ""),
-                        "type": "RAR",
-                        "size": "",
-                        "torrent": pl["url"],
-                    })
-                obj["torrents"] = torrents
-                async with aiohttp.ClientSession(
-                    connector=get_connector(), connector_owner=False, trust_env=True
-                ) as ts:
-                    for t in obj["torrents"]:
-                        t["quality"] = await _translate_text(ts, t.get("quality", ""))
-                        sm = re.search(
-                            r"([\d.]+\s*(?:GB|MB|KB|TB))",
-                            t["quality"], re.I,
-                        )
-                        if sm:
-                            t["size"] = sm.group(1)
-                        if t.get("torrent"):
-                            t["short"] = register(
-                                t["torrent"], obj.get("name") or "", "rar"
-                            )
+            # Try to get better name from page
             h1 = soup.select_one("h1")
             if h1:
                 name = h1.get_text(" ", strip=True)
@@ -141,6 +91,7 @@ class Downloadly:
 
     async def search(self, query, page, limit):
         start_time = time.time()
+        self.LIMIT = limit
         url = "{}/?s={}".format(self.BASE_URL, quote(query))
         html = await self._fetch(url)
         if not html:
@@ -154,29 +105,7 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        results = []
-        seen = set()
-        for div in soup.find_all("div", class_=lambda c: c and "w-grid-item" in c):
-            title_el = div.find("a", class_=lambda c: c and "entry-title" in c)
-            if not title_el:
-                pc = div.find(class_=lambda c: c and "post_title" in c)
-                title_el = pc.find("a") if pc else None
-            if not title_el or not title_el.has_attr("href"):
-                continue
-            href = title_el["href"]
-            if href in seen or any(s in href for s in _SKIP_SLUGS):
-                continue
-            name = title_el.get_text(" ", strip=True)
-            if not name:
-                continue
-            seen.add(href)
-            results.append({
-                "name": name,
-                "url": href,
-                "category": "Courses",
-            })
-            if limit and len(results) >= limit:
-                break
+        results = self._parse_search(html)
         if not results:
             return {
                 "data": [],
@@ -185,17 +114,11 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(6)
         await asyncio.gather(
-            *[asyncio.create_task(self._post_page(o["url"], o, sem))
-              for o in results]
+            *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
         )
-        # Fallback: set post URL as torrent if _post_page didn't find dl links
-        for o in results:
-            if not o.get("torrent"):
-                o["torrent"] = o["url"]
-                o["download"] = o["url"]
-                o["_downloadly_post"] = True
+        results = [o for o in results if o.get("torrent")]
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
