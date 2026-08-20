@@ -260,15 +260,15 @@ class Downloadly:
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
             html = stdout.decode("utf-8", errors="replace") if stdout else ""
-            _logger.info(f"resolve_parts: curl rc={proc.returncode} len={len(html)} url={post_url[:60]}")
+            print(f"resolve_parts: curl rc={proc.returncode} len={len(html)} url={post_url[:60]}")
             if stderr:
                 err = stderr.decode(errors="replace").strip()
                 if err:
-                    _logger.warning(f"resolve_parts: curl stderr: {err[:200]}")
+                    print(f"resolve_parts: curl stderr: {err[:200]}")
         except Exception as e:
-            _logger.error(f"resolve_parts: curl exception: {e}")
+            print(f"resolve_parts: curl exception: {e}")
         if not html or len(html) < 500:
-            _logger.warning(f"resolve_parts: no valid HTML for {post_url[:60]}")
+            print(f"resolve_parts: no valid HTML for {post_url[:60]}")
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -287,7 +287,7 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        _logger.info(f"resolve_parts: found {len(dl_links)} download links")
+        print(f"resolve_parts: found {len(dl_links)} download links")
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
