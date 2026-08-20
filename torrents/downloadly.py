@@ -250,44 +250,19 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links — try cloudscraper, fall back to curl."""
+        """Fetch download links using fetch_plain (proven curl helper)."""
+        from helper.plain_curl import fetch_plain
         import logging as _rl
         _log = _rl.getLogger("tapi.downloadly")
-        _log.info("resolve_parts: %s", post_url[:80])
-        loop = asyncio.get_event_loop()
-        html = None
+        _log.info("resolve_parts: fetching %s", post_url[:80])
 
-        # Method 1: cloudscraper
-        try:
-            def _cs_fetch():
-                import cloudscraper
-                s = cloudscraper.create_scraper()
-                r = s.get(post_url, timeout=20)
-                return r.text if r.status_code == 200 and len(r.text) > 500 else None
-            html = await loop.run_in_executor(None, _cs_fetch)
-        except Exception:
-            pass
-
-        _log.info('resolve_parts: cloudscraper html=%s', len(html) if html else 0)
-        # Method 2: asyncio subprocess curl
-        _log.info('resolve_parts: starting curl fallback, html_before=%s', type(html).__name__)
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            _log.info('resolve_parts: curl proc started pid=%s', proc.pid)
-            out, err = await asyncio.wait_for(proc.communicate(), timeout=20)
-            _log.info('resolve_parts: curl rc=%s out_len=%s', proc.returncode, len(out) if out else 0)
-            html = out.decode("utf-8", errors="replace") if out else None
-        except Exception as _ce:
-            _log.error('resolve_parts: curl error: %s', str(_ce)[:100])
-
-        _log.info('resolve_parts: final html=%s', len(html) if html else 0)
-        if not html or len(html) < 500:
-            _log.warning('resolve_parts: no usable HTML, returning empty')
+        html = await fetch_plain(post_url, timeout=15)
+        if html:
+            _log.info("resolve_parts: fetch_plain html=%d", len(html))
+        else:
+            _log.warning("resolve_parts: fetch_plain returned None")
             return []
+
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
         for a in soup.find_all("a", href=True):
@@ -305,14 +280,14 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
+        _log.info("resolve_parts: found %d links", len(dl_links))
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
-                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    sm = re.search(r"([\\d.]+\\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
-        _log.info('resolve_parts: found %d links', len(dl_links))
         return dl_links
 
     async def trending(self, category, page, limit):
