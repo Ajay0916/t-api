@@ -146,12 +146,14 @@ class Downloadly:
         return results
 
     async def _post_page(self, url, obj, sem, session_id=None):
+        import subprocess as _sp
         async with sem:
+            page = None
+            # Try FlareSolverr first
             page = await self._fetch(url, timeout=12, session_id=session_id)
-            if not page:
-                # Fallback: try subprocess curl (like resolve_parts)
+            # Fallback: subprocess curl
+            if not page or len(page) < 500:
                 try:
-                    import subprocess as _sp
                     loop = asyncio.get_event_loop()
                     def _curl():
                         r = _sp.run(
@@ -165,30 +167,24 @@ class Downloadly:
             if not page or len(page) < 500:
                 return
             soup = BeautifulSoup(page, "html.parser")
-            # Extract download links from dl.downloadly.ir
             dl_links = []
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if not re.match(r"https?://dl\d*\.downloadly\.ir/", href) or "/Sample/" in href:
+                if not re.match(r"https?://dl\d*\.downloadly\.ir/", href):
                     continue
-                text = a.get_text(" ", strip=True)
-                # Skip sample files
                 if "/Sample/" in href:
                     continue
+                text = a.get_text(" ", strip=True)
                 dl_links.append({"url": href, "text": text})
             if not dl_links:
                 return
-            # Use first part as torrent/download, collect all parts
             obj["torrent"] = dl_links[0]["url"]
             obj["download"] = dl_links[0]["url"]
-            # Extract size from first part text
             size_match = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl_links[0].get("text", ""), re.I)
             if size_match:
                 obj["size"] = size_match.group(1)
             if len(dl_links) > 1:
                 obj["parts"] = dl_links
-                # Convert parts to torrents sub-results format
-                # so Vj-wz bot renders each part as a separate download
                 torrents = []
                 for pl in dl_links:
                     torrents.append({
@@ -198,18 +194,14 @@ class Downloadly:
                         "torrent": pl["url"],
                     })
                 obj["torrents"] = torrents
-                # Translate Persian part labels to English
                 async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                     for t in obj["torrents"]:
                         t["quality"] = await _translate_text(ts, t.get("quality", ""))
-                        # Extract size from translated text (e.g. "Download Part 1 – 1 GB")
                         size_match = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", t["quality"], re.I)
                         if size_match:
                             t["size"] = size_match.group(1)
-                        # Register short token for each part
                         if t.get("torrent"):
                             t["short"] = register(t["torrent"], obj.get("name") or "", "rar")
-            # Try to get better name from page
             h1 = soup.select_one("h1")
             if h1:
                 name = h1.get_text(" ", strip=True)
@@ -298,7 +290,7 @@ class Downloadly:
         dl_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if not re.match(r"https?://dl\\d*\\.downloadly\\.ir/", href):
+            if not re.match(r"https?://dl\d*\.downloadly\.ir/", href):
                 continue
             if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
                 continue
@@ -315,7 +307,7 @@ class Downloadly:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
-                    sm = re.search(r"([\\d.]+\\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
