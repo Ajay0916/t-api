@@ -258,7 +258,7 @@ class Downloadly:
                 _dbg.write(f"calling curl for {post_url[:80]}\n")
                 _dbg.flush()
                 result = _sp.run(
-                    ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
+                    ["/usr/bin/curl", "-4", "--max-time", "15", "--", post_url],
                     capture_output=True, timeout=20
                 )
                 _dbg.write(f"curl rc={result.returncode} stdout_len={len(result.stdout)} stderr={result.stderr[:200]}\n")
