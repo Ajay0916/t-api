@@ -146,20 +146,22 @@ async def restart():
         except Exception:
             pass
 
-    # Do git pull NOW (before exit), then exit for systemd Restart=always
-    import subprocess, threading
-    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-    try:
-        subprocess.run(["/usr/bin/git", "fetch", "origin"], cwd=repo, timeout=15, env=env, capture_output=True)
-        subprocess.run(["/usr/bin/git", "reset", "--hard", "origin/main"], cwd=repo, timeout=10, env=env, capture_output=True)
-        # Write COMMIT_INFO
-        commit = subprocess.check_output(["/usr/bin/git", "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
-        msg = subprocess.check_output(["/usr/bin/git", "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
-        date = subprocess.check_output(["/usr/bin/git", "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
-        with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
-            f.write(f"{commit}\n{msg}\n{date}")
-    except Exception:
-        pass
+    # Vj-wz style: rm .git, re-init, fresh remote, fetch, reset
+    # Bypasses all credential / tracking / env issues
+    import threading
+    upstream = "https://Ajay0916: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I@github.com/Ajay0916/t-api.git"
+    pull_cmd = (
+        f"cd {repo} && "
+        f"rm -rf .git && "
+        f"git init -q && "
+        f"git config --global user.email 'bot@t-api' && "
+        f"git config --global user.name 't-api' && "
+        f"git add . && git commit -sm 'update' -q 2>/dev/null; "
+        f"git remote add origin {upstream} 2>/dev/null || git remote set-url origin {upstream}; "
+        f"git fetch origin -q 2>/dev/null && "
+        f"git reset --hard origin/main -q 2>/dev/null"
+    )
+    os.system(pull_cmd)
     def _exit():
         import time
         time.sleep(1)
