@@ -248,28 +248,35 @@ class Downloadly:
 
     @staticmethod
     async def resolve_parts(post_url):
-        """Fetch download links from a downloadly post page via FlareSolverr (no session)."""
-        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        """Fetch download links from a downloadly post page.
+        Try plain curl first (fast), fall back to FlareSolverr if blocked."""
         html = None
-        # Try without session first (more reliable)
-        for attempt in range(2):
-            try:
-                payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
-                async with aiohttp.ClientSession(
-                    connector=get_connector(), connector_owner=False, trust_env=True
-                ) as s:
-                    async with s.post(
-                        f"{FLARE}/v1", json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30)
-                    ) as res:
-                        data = await res.json(content_type=None)
-                sol = data.get("solution") or {}
-                if sol.get("status") == 200:
-                    html = sol.get("response") or ""
-                    if html and len(html) > 500:
-                        break
-            except Exception:
-                pass
+        # Plain curl first (downloadlynet.ir post pages work without browser)
+        try:
+            html = await fetch_plain(post_url, timeout=15)
+        except Exception:
+            pass
+        # Fall back to FlareSolverr if plain curl failed
+        if not html or len(html) < 500:
+            FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+            for attempt in range(2):
+                try:
+                    payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
+                    async with aiohttp.ClientSession(
+                        connector=get_connector(), connector_owner=False, trust_env=True
+                    ) as s:
+                        async with s.post(
+                            f"{FLARE}/v1", json=payload,
+                            timeout=aiohttp.ClientTimeout(total=30)
+                        ) as res:
+                            data = await res.json(content_type=None)
+                    sol = data.get("solution") or {}
+                    if sol.get("status") == 200:
+                        html = sol.get("response") or ""
+                        if html and len(html) > 500:
+                            break
+                except Exception:
+                    pass
         if not html:
             return []
         soup = BeautifulSoup(html, "html.parser")
