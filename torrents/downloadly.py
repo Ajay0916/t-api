@@ -257,28 +257,24 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links from a downloadly post page."""
-        import logging as _log
-        _logger = _log.getLogger("downloadly")
+        """Fetch download links from a downloadly post page.
+        Uses run_in_executor + subprocess.run (avoids asyncio subprocess issues in systemd)."""
+        import subprocess as _sp
+        import functools
+        loop = asyncio.get_event_loop()
         html = None
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "/usr/bin/curl", "-sL", "-4", "--max-time", "15",
-                "--", post_url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
-            html = stdout.decode("utf-8", errors="replace") if stdout else ""
-            print(f"resolve_parts: curl rc={proc.returncode} len={len(html)} url={post_url[:60]}")
-            if stderr:
-                err = stderr.decode(errors="replace").strip()
-                if err:
-                    print(f"resolve_parts: curl stderr: {err[:200]}")
+            def _fetch():
+                result = _sp.run(
+                    ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
+                    capture_output=True, timeout=20
+                )
+                return result.stdout.decode("utf-8", errors="replace")
+            html = await loop.run_in_executor(None, _fetch)
+            print(f"[DL] resolve_parts: got {len(html)} bytes from {post_url[:60]}", flush=True)
         except Exception as e:
-            print(f"resolve_parts: curl exception: {e}")
+            print(f"[DL] resolve_parts error: {e}", flush=True)
         if not html or len(html) < 500:
-            print(f"resolve_parts: no valid HTML for {post_url[:60]}")
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -297,7 +293,7 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        print(f"resolve_parts: found {len(dl_links)} download links")
+        print(f"[DL] resolve_parts: {len(dl_links)} links found", flush=True)
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
