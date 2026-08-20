@@ -116,7 +116,10 @@ class Downloadly:
         results = []
         seen = set()
         for div in soup.find_all("div", class_=lambda c: c and "w-grid-item" in c):
-            title_el = div.find("a", class_=lambda c: c and "entry-title" in c)
+            h2 = div.find("h2", class_=lambda c: c and "entry-title" in c)
+            title_el = h2.find("a", href=True) if h2 else None
+            if not title_el:
+                title_el = div.find("a", class_=lambda c: c and "entry-title" in c)
             if not title_el:
                 pc = div.find(class_=lambda c: c and "post_title" in c)
                 title_el = pc.find("a") if pc else None
