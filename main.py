@@ -151,6 +151,9 @@ async def restart():
         except asyncio.TimeoutError:
             proc.kill()
 
+    # Fix git dubious ownership error
+    await _run(["git", "config", "--global", "--add", "safe.directory", repo])
+
     # Vj-wz _run_update: destroy .git, reinit, fresh fetch
     if os.path.isdir(os.path.join(repo, ".git")):
         await _run(["rm", "-rf", ".git"])
