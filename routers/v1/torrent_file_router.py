@@ -114,20 +114,6 @@ async def proxy_torrent(
             headers={"Content-Disposition": disposition},
         )
 
-    # downloadly.ir post pages: resolve download links lazily
-    import logging as _dl_log
-    if ("downloadly.ir/" in url.lower() or "downloadlynet.ir/" in url.lower()) and ("dl.downloadly" not in url.lower() and "dl3.downloadly" not in url.lower()):
-        parts = await Downloadly().resolve_parts(url)
-        if parts:
-            target = parts[0].get("url", url)
-            dl_name = name or parts[0].get("text", "download")
-            # Redirect to the first download link
-            from fastapi.responses import RedirectResponse
-            return RedirectResponse(url=target, status_code=302)
-        return JSONResponse(
-            status_code=502, content={"error": "Failed to resolve download links."}
-        )
-
     try:
         session = aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
