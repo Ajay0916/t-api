@@ -246,22 +246,10 @@ class Downloadly:
         }
 
 
-    @staticmethod
-    async def resolve_parts(post_url):
-        """Fetch download links from a downloadly post page.
-        Bare curl (no -A flag) -- site blocks Chrome/Python UAs with bot verification."""
-        html = None
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "/usr/bin/curl", "-sL", "-4", "--max-time", "15",
-                "--", post_url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
-            html = stdout.decode("utf-8", errors="replace") if stdout else ""
-        except Exception:
-            pass
+    async def resolve_parts(self, post_url):
+        """Fetch download links from a downloadly post page via FlareSolverr.
+        Uses same _fetch method that works for search pages."""
+        html = await self._fetch(post_url, timeout=25)
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
