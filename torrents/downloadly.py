@@ -147,6 +147,8 @@ class Downloadly:
 
     async def _post_page(self, url, obj, sem, session_id=None):
         import subprocess as _sp
+        with open("/tmp/dl_post.log", "a") as _dbg:
+            _dbg.write("called for %s\n" % url[:60])
         async with sem:
             page = None
             # Try FlareSolverr first
@@ -162,8 +164,11 @@ class Downloadly:
                         )
                         return r.stdout.decode("utf-8", errors="replace")
                     page = await loop.run_in_executor(None, _curl)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    with open('/tmp/dl_post.log', 'a') as _dbg:
+                        _dbg.write('curl_exc: %s\n' % str(_e)[:80])
+            with open('/tmp/dl_post.log', 'a') as _dbg:
+                _dbg.write('page_len=%d\n' % (len(page) if page else 0))
             if not page or len(page) < 500:
                 return
             soup = BeautifulSoup(page, "html.parser")
@@ -176,6 +181,8 @@ class Downloadly:
                     continue
                 text = a.get_text(" ", strip=True)
                 dl_links.append({"url": href, "text": text})
+            with open('/tmp/dl_post.log', 'a') as _dbg:
+                _dbg.write('dl_links=%d\n' % len(dl_links))
             if not dl_links:
                 return
             obj["torrent"] = dl_links[0]["url"]
