@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from constants.headers import HEADER_AIO
 from helper.session import get_connector
 from helper.short_links import lookup
+from aiohttp_socks import ProxyConnector
 from torrents.rutracker import fetch_dl_torrent
 from torrents.downloadly import Downloadly
 
@@ -114,9 +115,16 @@ async def proxy_torrent(
             headers={"Content-Disposition": disposition},
         )
 
+    is_downloadly = bool(re.search(r"dl\d*\.downloadly\.ir", url, re.I))
+    if is_downloadly:
+        connector = ProxyConnector.from_url("socks5://127.0.0.1:1080")
+    else:
+        connector = get_connector()
     try:
         session = aiohttp.ClientSession(
-            connector=get_connector(), connector_owner=False, trust_env=True
+            connector=connector,
+            connector_owner=not is_downloadly,
+            trust_env=True,
         )
         res = await session.get(
             url, headers=HEADER_AIO, timeout=TIMEOUT, allow_redirects=True
