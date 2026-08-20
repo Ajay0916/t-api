@@ -250,19 +250,29 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links using fetch_plain (proven curl helper)."""
-        from helper.plain_curl import fetch_plain
+        """Fetch download links via FlareSolverr (only method that works for downloadly)."""
         import logging as _rl
         _log = _rl.getLogger("tapi.downloadly")
         _log.info("resolve_parts: fetching %s", post_url[:80])
 
-        html = await fetch_plain(post_url, timeout=15)
-        if html:
-            _log.info("resolve_parts: fetch_plain html=%d", len(html))
-        else:
-            _log.warning("resolve_parts: fetch_plain returned None")
-            return []
+        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        html = None
+        try:
+            payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
+            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
+                async with s.post(
+                    f"{FLARE}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as res:
+                    data = await res.json(content_type=None)
+            sol = data.get("solution") or {}
+            html = sol.get("response")
+            _log.info("resolve_parts: flare status=%s html=%d", sol.get("status"), len(html) if html else 0)
+        except Exception as e:
+            _log.warning("resolve_parts: flare error: %s", str(e)[:80])
 
+        if not html or len(html) < 500:
+            return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
         for a in soup.find_all("a", href=True):
