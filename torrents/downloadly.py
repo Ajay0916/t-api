@@ -75,6 +75,10 @@ class Downloadly:
             obj["download"] = dl_links[0]["url"]
             if len(dl_links) > 1:
                 obj["parts"] = dl_links
+                obj["torrents"] = [
+                    {"quality": dl.get("text", ""), "type": "RAR", "size": "", "torrent": dl["url"]}
+                    for dl in dl_links
+                ]
             h1 = soup.select_one("h1")
             if h1:
                 name = h1.get_text(" ", strip=True)
