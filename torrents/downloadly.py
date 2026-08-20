@@ -250,18 +250,36 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links via cloudscraper (bypasses Cloudflare)."""
-        import cloudscraper as _cs
+        """Fetch download links — try cloudscraper, fall back to curl."""
         loop = asyncio.get_event_loop()
         html = None
+
+        # Method 1: cloudscraper
         try:
-            def _fetch():
-                scraper = _cs.create_scraper()
-                r = scraper.get(post_url, timeout=20)
-                return r.text if r.status_code == 200 else None
-            html = await loop.run_in_executor(None, _fetch)
+            def _cs_fetch():
+                import cloudscraper
+                s = cloudscraper.create_scraper()
+                r = s.get(post_url, timeout=20)
+                return r.text if r.status_code == 200 and len(r.text) > 500 else None
+            html = await loop.run_in_executor(None, _cs_fetch)
         except Exception:
             pass
+
+        # Method 2: subprocess curl (proven to work from CLI)
+        if not html or len(html) < 500:
+            try:
+                def _curl_fetch():
+                    import subprocess
+                    p = subprocess.Popen(
+                        ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                    )
+                    out, _ = p.communicate(timeout=20)
+                    return out.decode("utf-8", errors="replace")
+                html = await loop.run_in_executor(None, _curl_fetch)
+            except Exception:
+                pass
+
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
@@ -285,7 +303,7 @@ class Downloadly:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
-                    sm = re.search(r"([\\d.]+\\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
