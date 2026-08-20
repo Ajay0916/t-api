@@ -1,5 +1,5 @@
 """downloadly.ir — WordPress course site with dl.downloadly.ir direct links.
-Uses ProtonVPN (wg1) via iptables routing for VPS IP bypass."""
+Uses wg1 SOCKS5 proxy (ProtonVPN Japan) for VPS IP bypass."""
 import asyncio
 import re
 import time
@@ -13,6 +13,33 @@ _SKIP_SLUGS = (
     "advertisement", "donate", "support",
 )
 
+CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
+
+async def _fetch_via_socks(url, timeout=20):
+    """Fetch URL through SOCKS5 proxy (wg1 VPN, binds outgoing to 10.2.0.2)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "/usr/bin/curl", "-sL", "-4",
+            "--socks5-hostname", "127.0.0.1:1080",
+            "-A", CHROME_UA,
+            "--max-time", str(timeout),
+            "--", url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout + 5)
+        if out and proc.returncode == 0:
+            html = out.decode("utf-8", errors="replace")
+            if html and len(html) > 500:
+                return html
+    except Exception:
+        pass
+    return None
+
 
 class Downloadly:
     _name = "Downloadly"
@@ -22,23 +49,7 @@ class Downloadly:
         self.LIMIT = None
 
     async def _fetch(self, url, timeout=20):
-        """Fetch via curl --interface wg1 (ProtonVPN Japan)."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "curl", "-sL", "-4", "--interface", "wg1",
-                "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0",
-                "--max-time", str(timeout), "--", url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout + 5)
-            if out and proc.returncode == 0:
-                html = out.decode("utf-8", errors="replace")
-                if html and len(html) > 500:
-                    return html
-        except Exception:
-            pass
-        return None
+        return await _fetch_via_socks(url, timeout)
 
     async def _post_page(self, url, obj, sem):
         async with sem:
@@ -66,6 +77,29 @@ class Downloadly:
                 name = h1.get_text(" ", strip=True)
                 if name:
                     obj["name"] = name
+
+    async def resolve_parts(self, post_url):
+        """Fetch download links from a downloadly post page via SOCKS5 proxy."""
+        html = await _fetch_via_socks(post_url, 15)
+        if not html or len(html) < 500:
+            return []
+        soup = BeautifulSoup(html, "html.parser")
+        dl_links = []
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if "dl.downloadly.ir" not in href:
+                continue
+            if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
+                continue
+            text = a.get_text(" ", strip=True)
+            dl_links.append({"url": href, "text": text})
+        seen = set()
+        unique = []
+        for dl in dl_links:
+            if dl["url"] not in seen:
+                seen.add(dl["url"])
+                unique.append(dl)
+        return unique
 
     async def search(self, query, page, limit):
         start_time = time.time()

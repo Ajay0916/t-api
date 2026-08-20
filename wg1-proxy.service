@@ -1,0 +1,15 @@
+[Unit]
+Description=WG1 SOCKS5 Proxy for downloadly
+After=network-online.target wg-quick@wg1.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/bash -c 'while ! ip link show wg1 2>/dev/null | grep -q UP; do sleep 2; done'
+ExecStart=/usr/bin/python3 /home/ubuntu/t-api/wg1_proxy.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
