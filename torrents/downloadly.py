@@ -146,29 +146,23 @@ class Downloadly:
         return results
 
     async def _post_page(self, url, obj, sem, session_id=None):
-        import subprocess as _sp
-        with open("/tmp/dl_post.log", "a") as _dbg:
-            _dbg.write("called for %s\n" % url[:60])
+        """Fetch post page and extract download links using aiohttp."""
         async with sem:
             page = None
             # Try FlareSolverr first
-            page = await self._fetch(url, timeout=12, session_id=session_id)
-            # Fallback: subprocess curl
+            try:
+                page = await self._fetch(url, timeout=12, session_id=session_id)
+            except Exception:
+                pass
+            # Fallback: direct aiohttp fetch
             if not page or len(page) < 500:
                 try:
-                    loop = asyncio.get_event_loop()
-                    def _curl():
-                        r = _sp.run(
-                            ["/usr/bin/curl", "-sL", "-4", "--max-time", "12", "--", url],
-                            capture_output=True, timeout=15
-                        )
-                        return r.stdout.decode("utf-8", errors="replace")
-                    page = await loop.run_in_executor(None, _curl)
-                except Exception as _e:
-                    with open('/tmp/dl_post.log', 'a') as _dbg:
-                        _dbg.write('curl_exc: %s\n' % str(_e)[:80])
-            with open('/tmp/dl_post.log', 'a') as _dbg:
-                _dbg.write('page_len=%d\n' % (len(page) if page else 0))
+                    async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as cs:
+                        async with cs.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                            if resp.status == 200:
+                                page = await resp.text(content_type=None)
+                except Exception:
+                    pass
             if not page or len(page) < 500:
                 return
             soup = BeautifulSoup(page, "html.parser")
@@ -181,8 +175,6 @@ class Downloadly:
                     continue
                 text = a.get_text(" ", strip=True)
                 dl_links.append({"url": href, "text": text})
-            with open('/tmp/dl_post.log', 'a') as _dbg:
-                _dbg.write('dl_links=%d\n' % len(dl_links))
             if not dl_links:
                 return
             obj["torrent"] = dl_links[0]["url"]
@@ -266,31 +258,15 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links from a downloadly post page.
-        Uses run_in_executor + subprocess.run (avoids asyncio subprocess issues in systemd)."""
-        import subprocess as _sp
-        import sys as _sys
-        loop = asyncio.get_event_loop()
+        """Fetch download links from a downloadly post page via aiohttp."""
         html = None
-        _dbg = open("/tmp/dl_resolve.log", "a")
         try:
-            def _fetch():
-                _dbg.write(f"calling curl for {post_url[:80]}\n")
-                _dbg.flush()
-                result = _sp.run(
-                    ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
-                    capture_output=True, timeout=20
-                )
-                _dbg.write(f"curl rc={result.returncode} stdout_len={len(result.stdout)} stderr={result.stderr[:200]}\n")
-                _dbg.flush()
-                return result.stdout.decode("utf-8", errors="replace")
-            html = await loop.run_in_executor(None, _fetch)
-            _dbg.write(f"html_len={len(html)}\n")
-            _dbg.flush()
-        except Exception as e:
-            _dbg.write(f"exception: {e}\n")
-            _dbg.flush()
-        _dbg.close()
+            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as cs:
+                async with cs.get(post_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                    if resp.status == 200:
+                        html = await resp.text(content_type=None)
+        except Exception:
+            pass
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
