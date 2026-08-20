@@ -155,18 +155,11 @@ async def restart():
     if os.path.isdir(os.path.join(repo, ".git")):
         await _run(["rm", "-rf", ".git"])
 
-    git_cmds = [
-        ["git", "init", "-q"],
-        ["git", "add", "."],
-        ["git", "commit", "-sm", "update", "-q"],
-        ["git", "remote", "add", "origin", upstream],
-        ["git", "fetch", "origin", "-q"],
-        ["git", "reset", "--hard", f"origin/{branch}", "-q"],
-    ]
-    for cmd in git_cmds:
-        await _run(cmd)
-        # If commit fails (no changes), skip remaining commit steps but continue
-        # Actually for Vj-wz style, just continue - git reset will overwrite anyway
+    # No git add/commit — just init, fetch, reset (avoids huge venv commit)
+    await _run(["git", "init", "-q"])
+    await _run(["git", "remote", "add", "origin", upstream])
+    await _run(["git", "fetch", "origin", "-q"])
+    await _run(["git", "reset", "--hard", f"origin/{branch}", "-q"])
 
     # Write COMMIT_INFO
     proc = await asyncio.create_subprocess_exec(

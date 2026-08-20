@@ -1,6 +1,5 @@
 #!/bin/bash
-# Auto-update t-api on startup (Vj-wz update.py style)
-set -e
+# Auto-update t-api on startup (Vj-wz style)
 cd "$(dirname "$0")"
 
 UPSTREAM="https://github.com/Ajay0916/t-api.git"
@@ -8,15 +7,10 @@ BRANCH="main"
 
 echo "[STARTUP] Auto-updating..."
 
-# Vj-wz approach: destroy .git, reinit, fresh fetch (always works)
-if [ -d ".git" ]; then
-    rm -rf .git
-fi
-
+# Vj-wz style: destroy .git, fresh init, fetch, reset
+rm -rf .git 2>/dev/null || true
 git init -q 2>/dev/null || true
-git add . 2>/dev/null || true
-git commit -sm "update" -q 2>/dev/null || true
-git remote add origin "$UPSTREAM" 2>/dev/null || git remote set-url origin "$UPSTREAM" 2>/dev/null
+git remote add origin "$UPSTREAM" 2>/dev/null || git remote set-url origin "$UPSTREAM" 2>/dev/null || true
 git fetch origin -q 2>/dev/null || true
 git reset --hard "origin/$BRANCH" -q 2>/dev/null || true
 
