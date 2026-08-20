@@ -253,7 +253,7 @@ class Downloadly:
         html = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                "curl", "-sL", "-4", "--max-time", "15",
+                "/usr/bin/curl", "-sL", "-4", "--max-time", "15",
                 "--", post_url,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
