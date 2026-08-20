@@ -122,51 +122,52 @@ app.include_router(home_router, prefix="")
 
 @app.get("/restart", dependencies=[Depends(authenticate_request)])
 async def restart():
-    """Pull latest code + restart the service."""
-    import subprocess as _sp, os, time as _time
+    """Pull latest code + restart the service (Vj-wz style).
+
+    1. Write a shell script that does git pull with PAT auth.
+    2. Run it detached (start_new_session=True) so it survives our exit.
+    3. Return response immediately, then os._exit(0).
+    4. systemd Restart=always brings us back with new code.
+    """
+    import subprocess as _sp, os, threading, time as _time
+
     repo = os.path.dirname(os.path.abspath(__file__))
-    git = "/usr/bin/git"
-
-    def _bg():
-        _time.sleep(2)
-        env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
-        try:
-            _sp.run([git, "fetch", "origin"], cwd=repo, timeout=20, env=env, capture_output=True)
-            _sp.run([git, "reset", "--hard", "origin/main"], cwd=repo, timeout=10, env=env, capture_output=True)
-            try:
-                commit = _sp.check_output([git, "rev-parse", "--short", "HEAD"], cwd=repo, timeout=5, env=env).decode().strip()
-                msg = _sp.check_output([git, "log", "-1", "--pretty=%s"], cwd=repo, timeout=5, env=env).decode().strip()
-                date = _sp.check_output([git, "log", "-1", "--pretty=%ci"], cwd=repo, timeout=5, env=env).decode().strip()
-                with open(os.path.join(repo, "COMMIT_INFO"), "w") as f:
-                    f.write(f"{commit}\n{msg}\n{date}")
-            except Exception:
-                pass
-            _time.sleep(1)
-            _sp.run(["systemctl", "restart", "t-api"], timeout=10, env=env, capture_output=True)
-        except Exception:
-            pass
-
-    # Vj-wz style: rm .git, re-init, fresh remote, fetch, reset
-    # Bypasses all credential / tracking / env issues
-    import threading
+    env = {**os.environ, "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
     upstream = "https://Ajay0916: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I@github.com/Ajay0916/t-api.git"
-    pull_cmd = (
-        f"cd {repo} && "
-        f"rm -rf .git && "
-        f"git init -q && "
-        f"git config --global user.email 'bot@t-api' && "
-        f"git config --global user.name 't-api' && "
-        f"git add . && git commit -sm 'update' -q 2>/dev/null; "
-        f"git remote add origin {upstream} 2>/dev/null || git remote set-url origin {upstream}; "
-        f"git fetch origin -q 2>/dev/null && "
-        f"git reset --hard origin/main -q 2>/dev/null"
+
+    script_content = "#!/bin/bash\n"
+    script_content += "sleep 2\n"
+    script_content += "cd '" + repo + "'\n"
+    script_content += "/usr/bin/git remote set-url origin '" + upstream + "' 2>/dev/null || "
+    script_content += "/usr/bin/git remote add origin '" + upstream + "' 2>/dev/null\n"
+    script_content += "/usr/bin/git fetch origin -q 2>/dev/null\n"
+    script_content += "/usr/bin/git reset --hard origin/main -q 2>/dev/null\n"
+    script_content += 'COMMIT=$(/usr/bin/git rev-parse --short HEAD 2>/dev/null || echo unknown)\n'
+    script_content += "MSG=$(/usr/bin/git log -1 --pretty=%s 2>/dev/null || echo '')\n"
+    script_content += "DATE=$(/usr/bin/git log -1 --pretty=%ci 2>/dev/null || echo '')\n"
+    script_content += "printf '%s\\n%s\\n%s\\n' \"$COMMIT\" \"$MSG\" \"$DATE\" > '" + repo + "/COMMIT_INFO' 2>/dev/null\n"
+    script_content += "/usr/bin/systemctl restart t-api 2>/dev/null\n"
+
+    script_path = os.path.join("/tmp", "tapi_restart.sh")
+    with open(script_path, "w") as f:
+        f.write(script_content)
+    os.chmod(script_path, 0o755)
+
+    # Detached subprocess — survives parent death (like Vj-wz cmd_exec)
+    _sp.Popen(
+        ["/bin/bash", script_path],
+        start_new_session=True,
+        stdout=_sp.DEVNULL,
+        stderr=_sp.DEVNULL,
+        env=env,
     )
-    os.system(pull_cmd)
-    def _exit():
-        import time
-        time.sleep(1)
+
+    # Fallback: if systemctl restart doesn't fire in 5s, force exit
+    def _fallback_exit():
+        _time.sleep(5)
         os._exit(0)
-    threading.Thread(target=_exit, daemon=True).start()
+    threading.Thread(target=_fallback_exit, daemon=True).start()
+
     return {"status": "restarting", "message": "Pulling latest code and restarting..."}
 
 handler = Mangum(app)

@@ -5,6 +5,8 @@ cd "$(dirname "$0")"
 
 echo "[STARTUP] Auto-updating..."
 if [ -d ".git" ]; then
+    # Ensure remote URL has PAT token (private repo auth)
+    /usr/bin/git remote set-url origin "https://Ajay0916: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I@github.com/Ajay0916/t-api.git" 2>/dev/null || true
     /usr/bin/git fetch origin -q 2>/dev/null || true
     /usr/bin/git reset --hard origin/main -q 2>/dev/null || true
     /usr/bin/git pull --ff-only -q 2>/dev/null || true
