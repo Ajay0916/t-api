@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>42 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
+<b>35 sites</b> — Torrents, Indian &amp; International Courses, Indian Books/Audiobooks, eBooks, Anime &amp; Audiobooks in one API.
 <br>Built &amp; maintained by <b>Ajay</b> on top of <a href="https://github.com/Ryuk-me/Torrent-Api-py">Torrent-Api-py</a>.
 </p>
 
@@ -22,9 +22,9 @@
 
 ## ✨ What's Unique Here
 
-- **42 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
+- **35 sites** — general torrents + courses + Indian books/audiobooks + eBooks + anime + audiobooks + Internet Archive (books/movies/audio/software via `archive` — single fast query, every item gets a working `.torrent` link).
 - **Auth support** — `X-API-Key`, `X-API-Pin` header or `?key=` query param. Set `PYTORRENT_API_KEY` or `API_PIN` env var to enforce.
-- **`/restart` endpoint** — auto git pull + restart via `start.sh`. One-click deploy from bot.
+- **`/restart` endpoint** — Vj-wz style git pull (rm .git → init → fetch → reset) + systemd restart. One-click deploy from bot.
 - **Restart t-API button** — appears in Vj-wz site list (`_restart`), triggers API restart.
 - **Downloadly.ir** — FlareSolverr-backed WordPress scraper with Persian→English translation.
 - **Test system** — `/api/v1/test?site=X` for health checks, `/api/v1/test/all` for full audit.
