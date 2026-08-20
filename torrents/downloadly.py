@@ -230,23 +230,12 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Fetch each post page to get actual download links
+        # Set post URL as torrent/download — parts resolved lazily via
+        # the torrent_file endpoint with resolve_parts().
         for o in results:
-            post_url = o.get("url", "")
-            parts = []
-            try:
-                parts = await self.resolve_parts(post_url)
-            except Exception:
-                pass
-            if parts:
-                o["torrent"] = parts[0].get("url", post_url)
-                o["download"] = parts[0].get("url", post_url)
-                o["parts"] = [{"url": p["url"], "name": p.get("text", ""), "size": p.get("size", "")} for p in parts]
-                if parts[0].get("size"):
-                    o["size"] = parts[0]["size"]
-            else:
-                o["torrent"] = post_url
-                o["download"] = post_url
+            o["torrent"] = o["url"]
+            o["download"] = o["url"]
+            o["_downloadly_post"] = True
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
@@ -260,27 +249,35 @@ class Downloadly:
         """Fetch download links from a downloadly post page.
         Uses run_in_executor + subprocess.run (avoids asyncio subprocess issues in systemd)."""
         import subprocess as _sp
-        import functools
+        import sys as _sys
         loop = asyncio.get_event_loop()
         html = None
+        _dbg = open("/tmp/dl_resolve.log", "a")
         try:
             def _fetch():
+                _dbg.write(f"calling curl for {post_url[:80]}\n")
+                _dbg.flush()
                 result = _sp.run(
                     ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
                     capture_output=True, timeout=20
                 )
+                _dbg.write(f"curl rc={result.returncode} stdout_len={len(result.stdout)} stderr={result.stderr[:200]}\n")
+                _dbg.flush()
                 return result.stdout.decode("utf-8", errors="replace")
             html = await loop.run_in_executor(None, _fetch)
-            print(f"[DL] resolve_parts: got {len(html)} bytes from {post_url[:60]}", flush=True)
+            _dbg.write(f"html_len={len(html)}\n")
+            _dbg.flush()
         except Exception as e:
-            print(f"[DL] resolve_parts error: {e}", flush=True)
+            _dbg.write(f"exception: {e}\n")
+            _dbg.flush()
+        _dbg.close()
         if not html or len(html) < 500:
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if not re.match(r"https?://dl\d*\.downloadly\.ir/", href):
+            if not re.match(r"https?://dl\\d*\\.downloadly\\.ir/", href):
                 continue
             if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
                 continue
@@ -293,12 +290,11 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        print(f"[DL] resolve_parts: {len(dl_links)} links found", flush=True)
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
-                    sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
+                    sm = re.search(r"([\\d.]+\\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
                     dl["size"] = sm.group(1) if sm else ""
                     dl["short"] = register(dl["url"], "", "rar")
         return dl_links
