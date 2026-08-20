@@ -230,13 +230,23 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Skip post page fetching during search (FlareSolverr too slow).
-        # Set post URL as torrent/download — parts resolved lazily via
-        # the torrent_file endpoint with resolve_downloadly_parts().
+        # Fetch each post page to get actual download links
         for o in results:
-            o["torrent"] = o["url"]
-            o["download"] = o["url"]
-            o["_downloadly_post"] = True  # flag for lazy resolution
+            post_url = o.get("url", "")
+            parts = []
+            try:
+                parts = await self.resolve_parts(post_url)
+            except Exception:
+                pass
+            if parts:
+                o["torrent"] = parts[0].get("url", post_url)
+                o["download"] = parts[0].get("url", post_url)
+                o["parts"] = [{"url": p["url"], "name": p.get("text", ""), "size": p.get("size", "")} for p in parts]
+                if parts[0].get("size"):
+                    o["size"] = parts[0]["size"]
+            else:
+                o["torrent"] = post_url
+                o["download"] = post_url
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
