@@ -27,7 +27,7 @@ startTime = time.time()
 
 app = FastAPI(
     title="Torrents-Api",
-    version="1.6.10",
+    version="1.6.11",
     description="Unofficial Torrents / Books / Courses API — {} sites, mirror rotation, combo search".format(len(all_sites)),
     docs_url="/docs",
     contact={
