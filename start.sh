@@ -1,23 +1,20 @@
 #!/bin/bash
-# Auto-update t-api on startup (Vj-wz style)
 cd "$(dirname "$0")"
 
 UPSTREAM="https://github.com/Ajay0916/t-api.git"
 BRANCH="main"
 
-# Fix: git dubious ownership error (service runs as different user)
-git config --global --add safe.directory "$(pwd)"
+# Fix git dubious ownership
+git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
 echo "[STARTUP] Auto-updating..."
 
-# Vj-wz style: destroy .git, fresh init, fetch, reset
 rm -rf .git 2>/dev/null || true
-git init -q 2>/dev/null || true
-git remote add origin "$UPSTREAM" 2>/dev/null || git remote set-url origin "$UPSTREAM" 2>/dev/null || true
-git fetch origin -q 2>/dev/null || true
-git reset --hard "origin/$BRANCH" -q 2>/dev/null || true
+git init -q 2>&1
+echo "[STARTUP] remote: $(git remote add origin "$UPSTREAM" 2>&1 || true)"
+echo "[STARTUP] fetch rc=$(git fetch origin 2>&1 | tee /dev/stderr | wc -c)"
+echo "[STARTUP] reset rc=$(git reset --hard "origin/$BRANCH" 2>&1 | tee /dev/stderr | wc -c)"
 
-# Write COMMIT_INFO
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 MSG=$(git log -1 --pretty=%s 2>/dev/null || echo "")
 DATE=$(git log -1 --pretty=%ci 2>/dev/null || echo "")
