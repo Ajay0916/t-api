@@ -247,10 +247,24 @@ class Downloadly:
 
 
     async def resolve_parts(self, post_url):
-        """Fetch download links from a downloadly post page via FlareSolverr.
-        Uses same _fetch method that works for search pages."""
-        html = await self._fetch(post_url, timeout=25)
+        """Fetch download links from a downloadly post page."""
+        import sys as _sys
+        html = None
+        # Try bare curl (no UA) - site blocks Chrome/Python UAs
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "/usr/bin/curl", "-sL", "-4", "--max-time", "15",
+                "--", post_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+            html = stdout.decode("utf-8", errors="replace") if stdout else ""
+            print(f"[DL] curl rc={proc.returncode} len={len(html)} stderr={stderr.decode(errors='replace')[:200]}", file=_sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[DL] curl exception: {e}", file=_sys.stderr, flush=True)
         if not html or len(html) < 500:
+            print(f"[DL] no valid HTML, returning []", file=_sys.stderr, flush=True)
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -269,6 +283,7 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
+        print(f"[DL] found {len(dl_links)} unique download links", file=_sys.stderr, flush=True)
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
