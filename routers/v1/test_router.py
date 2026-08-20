@@ -141,7 +141,7 @@ async def test_site(
     skip_search: Optional[int] = Query(0, description="Skip live search test"),
 ):
     site_info = all_sites.get(site)
-    LOGGER.info(f"Test: site={site} url={url or "default"} flare={flare}")
+    LOGGER.info(f'Test: site={site} url={url or 'default'} flare={flare}')
     if not site_info:
         available = list(all_sites.keys())
         return {
