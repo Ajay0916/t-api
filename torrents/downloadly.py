@@ -269,20 +269,20 @@ class Downloadly:
             pass
 
         _log.info('resolve_parts: cloudscraper html=%s', len(html) if html else 0)
-        # Method 2: subprocess curl (proven to work from CLI)
+        # Method 2: asyncio subprocess curl
         if not html or len(html) < 500:
             try:
-                def _curl_fetch():
-                    import subprocess
-                    p = subprocess.Popen(
-                        ["/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                    )
-                    out, _ = p.communicate(timeout=20)
-                    return out.decode("utf-8", errors="replace")
-                html = await loop.run_in_executor(None, _curl_fetch)
+                proc = await asyncio.create_subprocess_exec(
+                    "/usr/bin/curl", "-sL", "-4", "--max-time", "15", "--", post_url,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                out, _ = await asyncio.wait_for(proc.communicate(), timeout=20)
+                html = out.decode("utf-8", errors="replace") if out else None
+                if html:
+                    _log.info("curl asyncio: len=%d", len(html))
             except Exception as _ce:
-                _log.info('resolve_parts: curl error: %s', str(_ce)[:80])
+                _log.info("curl asyncio error: %s", str(_ce)[:80])
 
         _log.info('resolve_parts: final html=%s', len(html) if html else 0)
         if not html or len(html) < 500:
