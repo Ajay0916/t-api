@@ -230,12 +230,19 @@ class Downloadly:
                 "time": time.time() - start_time,
                 "total": 0,
             }
-        # Set post URL as torrent/download — parts resolved lazily via
-        # the torrent_file endpoint with resolve_parts().
+        # Fetch each post page to extract actual download links
+        import asyncio as _aio
+        sem = _aio.Semaphore(3)
+        _items = results[:limit] if limit else results
+        post_tasks = [self._post_page(o["url"], o, sem) for o in _items]
+        if post_tasks:
+            await _aio.gather(*post_tasks, return_exceptions=True)
+        # Fallback: set post URL if _post_page didn't find download links
         for o in results:
-            o["torrent"] = o["url"]
-            o["download"] = o["url"]
-            o["_downloadly_post"] = True
+            if not o.get("torrent") or o["torrent"] == o.get("url"):
+                o["torrent"] = o["url"]
+                o["download"] = o["url"]
+                o["_downloadly_post"] = True
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
