@@ -21,11 +21,11 @@ class Downloadly:
         self.BASE_URL = "https://downloadly.ir"
         self.LIMIT = None
 
-    async def _fetch(self, url, timeout=15):
-        """Fetch via curl. iptables routes downloadly IPs through wg1 VPN."""
+    async def _fetch(self, url, timeout=20):
+        """Fetch via curl --interface wg1 (ProtonVPN Japan)."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "curl", "-sL", "-4",
+                "curl", "-sL", "-4", "--interface", "wg1",
                 "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0",
                 "--max-time", str(timeout), "--", url,
                 stdout=asyncio.subprocess.PIPE,
