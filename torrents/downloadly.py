@@ -189,7 +189,12 @@ class Downloadly:
             *[asyncio.create_task(self._post_page(o["url"], o, sem))
               for o in results]
         )
-        results = [o for o in results if o.get("torrent")]
+        # Fallback: set post URL as torrent if _post_page didn't find dl links
+        for o in results:
+            if not o.get("torrent"):
+                o["torrent"] = o["url"]
+                o["download"] = o["url"]
+                o["_downloadly_post"] = True
         return {
             "data": results[:limit] if limit else results,
             "current_page": page,
