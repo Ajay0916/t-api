@@ -37,6 +37,22 @@ def _read_commit_file():
     return None
 
 
+
+def _check_up_to_date(local_commit):
+    """Check if local commit matches latest on GitHub (public repo)."""
+    import urllib.request
+    if not local_commit or local_commit == "unknown":
+        return False
+    try:
+        url = "https://api.github.com/repos/Ajay0916/t-api/commits/main"
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github.v3+json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = __import__("json").loads(resp.read())
+        remote_sha = data.get("sha", "")[:7]
+        return remote_sha == local_commit
+    except Exception:
+        return None  # can't determine
+
 def _git_info():
     # Try COMMIT_INFO file first (written by start.sh on startup)
     file_info = _read_commit_file()
@@ -72,10 +88,12 @@ def get_version_info():
     hours, rem = divmod(uptime, 3600)
     mins, secs = divmod(rem, 60)
     git = _git_info()
+    up_to_date = _check_up_to_date(git["commit"])
     return {
-        "api_version": "v1.6.10",
+        "api_version": "v1.6.12",
         "commit": git["commit"],
         "last_commit": git["last_commit"],
         "commit_date": git["commit_date"],
         "uptime": f"{hours}h{mins}m{secs}s",
+        "up_to_date": up_to_date,
     }
