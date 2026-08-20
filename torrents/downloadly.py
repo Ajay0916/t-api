@@ -54,7 +54,7 @@ class Downloadly:
     _name = "Downloadly"
 
     def __init__(self):
-        self.BASE_URL = "https://downloadly.ir"
+        self.BASE_URL = "https://downloadlynet.ir"
         self.LIMIT = None
 
     async def _create_session(self, flare_url):
@@ -155,7 +155,7 @@ class Downloadly:
             dl_links = []
             for a in soup.find_all("a", href=True):
                 href = a["href"]
-                if "dl.downloadly.ir" not in href:
+                if "downloadly.ir" not in href or "/Sample/" in href:
                     continue
                 text = a.get_text(" ", strip=True)
                 # Skip sample files
@@ -248,42 +248,51 @@ class Downloadly:
 
     @staticmethod
     async def resolve_parts(post_url):
-        """Fetch download links from a downloadly post page via FlareSolverr session."""
-        import aiohttp as _aiohttp
-        from helper.session import get_connector as _gc
+        """Fetch download links from a downloadly post page via FlareSolverr (no session)."""
         FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-        sid = "downloadly_resolve"
-        # Create session
-        try:
-            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as s:
-                await s.post(f"{FLARE}/v1", json={"cmd": "sessions.create", "session": sid},
-                             timeout=_aiohttp.ClientTimeout(total=10))
-                payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 20000, "session": sid}
-                async with s.post(f"{FLARE}/v1", json=payload, timeout=_aiohttp.ClientTimeout(total=25)) as res:
-                    data = await res.json(content_type=None)
-                await s.post(f"{FLARE}/v1", json={"cmd": "sessions.destroy", "session": sid},
-                             timeout=_aiohttp.ClientTimeout(total=5))
-        except Exception:
-            return []
-        sol = data.get("solution") or {}
-        if sol.get("status") != 200:
-            return []
-        html = sol.get("response") or ""
-        if not html or len(html) < 500:
+        html = None
+        # Try without session first (more reliable)
+        for attempt in range(2):
+            try:
+                payload = {"cmd": "request.get", "url": post_url, "maxTimeout": 25000}
+                async with aiohttp.ClientSession(
+                    connector=get_connector(), connector_owner=False, trust_env=True
+                ) as s:
+                    async with s.post(
+                        f"{FLARE}/v1", json=payload,
+                        timeout=aiohttp.ClientTimeout(total=30)
+                    ) as res:
+                        data = await res.json(content_type=None)
+                sol = data.get("solution") or {}
+                if sol.get("status") == 200:
+                    html = sol.get("response") or ""
+                    if html and len(html) > 500:
+                        break
+            except Exception:
+                pass
+        if not html:
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            if "dl.downloadly.ir" not in href:
+            if "downloadly.ir" not in href:
                 continue
-            if "/Sample/" in href:
+            if "/Sample/" in href or href.lower().endswith((".mp4", ".mp3")):
                 continue
             text = a.get_text(" ", strip=True)
             dl_links.append({"url": href, "text": text})
+        # Deduplicate by URL
+        seen = set()
+        unique = []
+        for dl in dl_links:
+            if dl["url"] not in seen:
+                seen.add(dl["url"])
+                unique.append(dl)
+        dl_links = unique
         # Translate + register short tokens
         if dl_links:
-            async with _aiohttp.ClientSession(connector=_gc(), connector_owner=False, trust_env=True) as ts:
+            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
                     dl["text"] = await _translate_text(ts, dl["text"])
                     sm = re.search(r"([\d.]+\s*(?:GB|MB|KB|TB))", dl["text"], re.I)
