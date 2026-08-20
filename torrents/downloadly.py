@@ -262,9 +262,9 @@ class Downloadly:
             html = stdout.decode("utf-8", errors="replace") if stdout else ""
             print(f"[DL] curl rc={proc.returncode} len={len(html)} stderr={stderr.decode(errors='replace')[:200]}", file=_sys.stderr, flush=True)
         except Exception as e:
-            print(f"[DL] curl exception: {e}", file=_sys.stderr, flush=True)
+            open("/tmp/dl_debug.log","a").write(f"exception: {e}\n")
         if not html or len(html) < 500:
-            print(f"[DL] no valid HTML, returning []", file=_sys.stderr, flush=True)
+            open("/tmp/dl_debug.log","a").write(f"no valid HTML\n")
             return []
         soup = BeautifulSoup(html, "html.parser")
         dl_links = []
@@ -283,7 +283,7 @@ class Downloadly:
                 seen.add(dl["url"])
                 unique.append(dl)
         dl_links = unique
-        print(f"[DL] found {len(dl_links)} unique download links", file=_sys.stderr, flush=True)
+        open("/tmp/dl_debug.log","a").write(f"found {len(dl_links)} links\n")
         if dl_links:
             async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as ts:
                 for dl in dl_links:
