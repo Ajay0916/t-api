@@ -95,7 +95,7 @@ async def health_route(req: Request):
     return JSONResponse(
         {
             "app": "Torrents-Api",
-            "version": "v" + "1.6.10",
+            "version": "v" + "1.6.12",
             "ip": req.client.host,
             "uptime": ceil(getUptime(startTime)),
         }
