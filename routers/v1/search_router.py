@@ -309,7 +309,7 @@ async def search_for_torrents(
         resp["relaxed_filters"] = True
     if len(resp["data"]) > 0:
         site_health.mark_success(site)
-        LOGGER.info(f"Results: {site} → {len(resp.get("data", []))} items")
+        LOGGER.info(f"Results: {site} -> {len(resp.get('data') or [])} items")
         search_cache.set(cache_key, resp)
         return clean_results(resp, dedup=bool(dedup))
 
