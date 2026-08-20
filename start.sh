@@ -9,10 +9,23 @@ echo "[STARTUP] Auto-updating..."
 
 # Vj-wz style: destroy .git, fresh init, fetch, reset
 rm -rf .git 2>/dev/null || true
-git init -q 2>/dev/null || true
-git remote add origin "$UPSTREAM" 2>/dev/null || git remote set-url origin "$UPSTREAM" 2>/dev/null || true
-git fetch origin -q 2>/dev/null || true
-git reset --hard "origin/$BRANCH" -q 2>/dev/null || true
+
+# Debug: show what git does
+echo "[STARTUP] Running: git init"
+git init -q 2>&1 || true
+
+echo "[STARTUP] Running: git remote add origin"
+git remote add origin "$UPSTREAM" 2>&1 || true
+
+echo "[STARTUP] Running: git fetch origin"
+FETCH_OUT=$(git fetch origin 2>&1)
+FETCH_RC=$?
+echo "[STARTUP] fetch rc=$FETCH_RC out=$FETCH_OUT"
+
+echo "[STARTUP] Running: git reset --hard origin/$BRANCH"
+RESET_OUT=$(git reset --hard "origin/$BRANCH" 2>&1)
+RESET_RC=$?
+echo "[STARTUP] reset rc=$RESET_RC out=$RESET_OUT"
 
 # Write COMMIT_INFO
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
