@@ -65,10 +65,21 @@ class Downloadly:
         self.LIMIT = None
 
     async def _fetch(self, url, timeout=12):
-        html = await fetch_plain(url, timeout=timeout)
-        if html:
-            return html
-        return await fetch_plain(url, timeout=timeout, family=6)
+        """FlareSolverr for search pages (proven to work)."""
+        FLARE = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
+        try:
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+            async with aiohttp.ClientSession(connector=get_connector(), connector_owner=False, trust_env=True) as s:
+                async with s.post(f"{FLARE}/v1", json=payload, timeout=aiohttp.ClientTimeout(total=timeout + 10)) as res:
+                    data = await res.json(content_type=None)
+            sol = data.get("solution") or {}
+            if sol.get("status") == 200:
+                html = sol.get("response") or ""
+                if html and len(html) > 500:
+                    return html
+        except Exception:
+            pass
+        return None
 
     async def _post_page(self, url, obj, sem):
         async with sem:
