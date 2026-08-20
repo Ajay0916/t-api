@@ -11,7 +11,6 @@ from constants.headers import HEADER_AIO
 from helper.session import get_connector
 from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
-from torrents.downloadly import Downloadly
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
