@@ -45,15 +45,15 @@ def _write_commit_info():
     for git_bin in ["/usr/bin/git", "/usr/local/bin/git", "git"]:
         try:
             commit = subprocess.check_output(
-                [git_bin, "rev-parse", "--short", "HEAD"],
+                [git_bin, "-c", "safe.directory=*", "rev-parse", "--short", "HEAD"],
                 cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             msg = subprocess.check_output(
-                [git_bin, "log", "-1", "--pretty=%s"],
+                [git_bin, "-c", "safe.directory=*", "log", "-1", "--pretty=%s"],
                 cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             ts = subprocess.check_output(
-                [git_bin, "log", "-1", "--pretty=%ci"],
+                [git_bin, "-c", "safe.directory=*", "log", "-1", "--pretty=%ci"],
                 cwd=repo, stderr=subprocess.DEVNULL, timeout=3, env=env
             ).decode().strip()
             with open(info_path, "w") as f:
@@ -152,35 +152,35 @@ async def restart():
             proc.kill()
 
     # Fix git dubious ownership error
-    await _run(["git", "config", "--global", "--add", "safe.directory", repo])
+    # safe.directory handled by -c flag below
 
     # Vj-wz _run_update: destroy .git, reinit, fresh fetch
     if os.path.isdir(os.path.join(repo, ".git")):
         await _run(["rm", "-rf", ".git"])
 
     # No git add/commit — just init, fetch, reset (avoids huge venv commit)
-    await _run(["git", "init", "-q"])
-    await _run(["git", "remote", "add", "origin", upstream])
-    await _run(["git", "fetch", "origin", "-q"])
-    await _run(["git", "reset", "--hard", f"origin/{branch}", "-q"])
+    await _run(["git", "-c", "safe.directory=*", "init", "-q"])
+    await _run(["git", "-c", "safe.directory=*", "remote", "add", "origin", upstream])
+    await _run(["git", "-c", "safe.directory=*", "fetch", "origin", "-q"])
+    await _run(["git", "-c", "safe.directory=*", "reset", "--hard", f"origin/{branch}", "-q"])
 
     # Write COMMIT_INFO
     proc = await asyncio.create_subprocess_exec(
-        "git", "rev-parse", "--short", "HEAD",
+        "git", "-c", "safe.directory=*", "rev-parse", "--short", "HEAD",
         cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
     stdout, _ = await proc.communicate()
     commit = stdout.decode().strip() if stdout else "unknown"
 
     proc = await asyncio.create_subprocess_exec(
-        "git", "log", "-1", "--pretty=%s",
+        "git", "-c", "safe.directory=*", "log", "-1", "--pretty=%s",
         cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
     stdout, _ = await proc.communicate()
     msg = stdout.decode().strip() if stdout else ""
 
     proc = await asyncio.create_subprocess_exec(
-        "git", "log", "-1", "--pretty=%ci",
+        "git", "-c", "safe.directory=*", "log", "-1", "--pretty=%ci",
         cwd=repo, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
     )
     stdout, _ = await proc.communicate()

@@ -12,7 +12,7 @@ def _run_git(args):
     for git_bin in ["/usr/bin/git", "/usr/local/bin/git", "/snap/bin/git", "git"]:
         try:
             return subprocess.check_output(
-                [git_bin] + args,
+                [git_bin, "-c", "safe.directory=*"] + args,
                 cwd=_REPO, stderr=subprocess.DEVNULL, timeout=5, env=_ENV
             ).decode().strip()
         except Exception:
