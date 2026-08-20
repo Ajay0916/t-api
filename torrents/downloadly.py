@@ -1,3 +1,4 @@
+import os
 """downloadly.ir — WordPress course site with dl.downloadly.ir direct links.
 
 Search page lists posts; each post page is fetched (concurrency-limited)
