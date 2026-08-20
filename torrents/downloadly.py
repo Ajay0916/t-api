@@ -151,7 +151,7 @@ class Downloadly:
             page = None
             # Try FlareSolverr first
             try:
-                page = await self._fetch(url, timeout=12, session_id=session_id)
+                page = await self._fetch(url, timeout=12)
             except Exception:
                 pass
             # Fallback: direct aiohttp fetch
