@@ -10,10 +10,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from helper.search_cache import TTLCache
-from helper.logging_setup import get_logger
 from helper.session import close_flare_session_async, get_connector
-
-LOGGER = get_logger("tapi.rutracker.debug")
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _MAGNET_CACHE = TTLCache(max_size=2048, ttl=21600, name="rutracker_magnet")
@@ -366,7 +363,6 @@ async def fetch_dl_torrent(url):
     when no cookie is configured); its cookies are cached for the next
     download. Returns (torrent_bytes, upstream_filename) or None.
     """
-    LOGGER.info("[TEMP-RT] start url=%s plain_cookies=%d manual_cookie=%s userpass=%s", url, len(_plain_cookies), bool(_RUTRACKER_COOKIE), bool(_RUTRACKER_USER and _RUTRACKER_PASS))
     # Stage A - plain fetch with manual login and/or last FlareSolverr cookies
     plain_cookies = _merge_cookie_list(_auth_cookies())
     if plain_cookies:
@@ -394,7 +390,6 @@ async def fetch_dl_torrent(url):
                 "dl.php plain", res.status, ctype,
                 "bytes", len(body), "head", body[:20],
             )
-            LOGGER.info("[TEMP-RT] plain status=%s ctype=%s bytes=%d head=%r", res.status, ctype, len(body), body[:30])
             if body[:1] == b"d":
                 return body, up_name
             _invalidate_cf_cookies()
@@ -449,7 +444,6 @@ async def fetch_dl_torrent(url):
             status = solution.get("status")
             headers = solution.get("headers") or {}
             ctype = str(headers.get("content-type") or "").lower()
-            LOGGER.info("[TEMP-RT] flare attempt=%s session=%s cookies=%d flare_status=%s msg=%r http=%s ctype=%s raw_bytes=%d head=%r", attempt, payload.get("session"), len(cookies), data.get("status"), str(data.get("message") or "")[:100], status, ctype, len(raw), raw[:40])
             _rt_debug(
                 "dl.php flare attempt", attempt,
                 "flare_status", data.get("status"),

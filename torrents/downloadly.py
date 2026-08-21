@@ -90,19 +90,16 @@ class Downloadly:
     async def _fetch(self, url, timeout=15):
         # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
-        _LOGGER.info("[TEMP-DL] primary url=%s bytes=%d wrong=%s challenge=%s", url, len(html or ""), _is_wrong_post_response(url, html), _is_cf_challenge(html or ""))
         if html and len(html) > 500 and not _is_unusable_post_response(url, html):
             return html
         # 2. Plain curl on mirror domain
         mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
         html = await fetch_plain(mirror, timeout=timeout)
-        _LOGGER.info("[TEMP-DL] mirror url=%s bytes=%d wrong=%s challenge=%s", url, len(html or ""), _is_wrong_post_response(url, html), _is_cf_challenge(html or ""))
         if html and len(html) > 500 and not _is_unusable_post_response(url, html):
             return html
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
             html = await self._fetch_flare(url, timeout=max(timeout, 60))
-        _LOGGER.info("[TEMP-DL] flare-session url=%s bytes=%d wrong=%s", url, len(html or ""), _is_wrong_post_response(url, html))
         if html and _is_wrong_post_response(url, html):
             # A persistent browser context can cache WordPress's homepage for
             # a post. Destroy it and try once with a clean context.
@@ -111,13 +108,11 @@ class Downloadly:
                 html = await self._fetch_flare(
                     url, timeout=max(timeout, 60), use_session=False
                 )
-            _LOGGER.info("[TEMP-DL] flare-clean url=%s bytes=%d wrong=%s", url, len(html or ""), _is_wrong_post_response(url, html))
             if html and _is_wrong_post_response(url, html):
                 # Browser attempts often refresh WordPress's object cache; a
                 # final direct fetch then receives the real post immediately.
                 await asyncio.sleep(1)
                 html = await fetch_plain(url, timeout=max(timeout, 30))
-                _LOGGER.info("[TEMP-DL] final-primary url=%s bytes=%d wrong=%s", url, len(html or ""), _is_wrong_post_response(url, html))
                 if not html or _is_unusable_post_response(url, html):
                     return None
         return html
@@ -304,7 +299,6 @@ class Downloadly:
         if not html or len(html) < 1000 or _is_cf_challenge(html):
             return []
         parts = _parse_parts(html)
-        _LOGGER.info("[TEMP-DL] resolved url=%s parts=%d first=%s", post_url, len(parts), (parts[0].get("url") if parts else ""))
         return parts
 
     async def trending(self, category, page, limit):
