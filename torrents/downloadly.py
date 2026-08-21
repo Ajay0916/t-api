@@ -153,11 +153,17 @@ class Downloadly:
         try:
             async with aiohttp.ClientSession(headers=headers) as s:
                 async with s.post(ajax_url, data=form, timeout=aiohttp.ClientTimeout(total=15)) as res:
-                    if res.status != 200:
-                        return None
-                    return await res.text()
+                    if res.status == 200:
+                        text = await res.text()
+                        if "w-grid-item" in text:
+                            return text
         except Exception:
-            return None
+            pass
+        # Fallback: FlareSolverr on initial page URL with pagination
+        page_url = "{}/?s={}&paged={}".format(
+            self.BASE_URL, quote(query), (offset // 10) + 1
+        )
+        return await self._fetch_flare(page_url, 15)
 
     async def search(self, query, page, limit):
         start_time = time.time()
