@@ -166,22 +166,8 @@ class _RuTranslator:
             blocked = ("MYMEMORY WARNING", "QUERY LENGTH")
             if any(mark in out.upper() for mark in blocked):
                 ok = False
-            LOGGER.info(
-                "[TEMP-RU-TRANSLATE] provider=%s status=%d ms=%d ok=%s len=%d",
-                name,
-                res.status,
-                round((time.perf_counter() - started) * 1000),
-                ok,
-                len(out),
-            )
             return out if ok else None
         except Exception as exc:
-            LOGGER.info(
-                "[TEMP-RU-TRANSLATE] provider=%s error=%s ms=%d",
-                name,
-                type(exc).__name__,
-                round((time.perf_counter() - started) * 1000),
-            )
             return None
 
     async def run(self, results):
@@ -229,7 +215,7 @@ class _RuTranslator:
                     timeout=10.0,
                 )
             except asyncio.TimeoutError:
-                LOGGER.info("[TEMP-RU-TRANSLATE] batch timeout items=%d", len(results))
+                pass
 
         for item in results:
             title = item.get("name") or ""
@@ -239,13 +225,6 @@ class _RuTranslator:
             cat = item.get("category") or ""
             if _CYRILLIC_RE.search(cat):
                 item["category"] = _transliterate(cat)
-        LOGGER.info(
-            "[TEMP-RU-TRANSLATE] done items=%d titles_translated=%d fallback=%d ms=%d",
-            len(results),
-            success,
-            fallback,
-            round((time.perf_counter() - started) * 1000),
-        )
         return results
 
     async def _translate(self, session, title):
