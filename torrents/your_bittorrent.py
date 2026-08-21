@@ -13,10 +13,7 @@ from constants.base_url import YOURBITTORRENT
 
 HOSTS = [YOURBITTORRENT, "https://yourbittorrent2.com"]
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
-from helper.logging_setup import get_logger
 from helper.trackers import build_magnet
-
-LOGGER = get_logger("tapi.yourbittorrent")
 
 
 def extract_info_hash(raw):
@@ -63,34 +60,6 @@ class YourBittorrent:
         self.BASE_URL = YOURBITTORRENT
         self.LIMIT = None
 
-    async def _direct_html(self, session, url):
-        """Temporary diagnostic wrapper for YBT host responses."""
-        try:
-            async with session.get(
-                url,
-                headers=HEADER_AIO,
-                timeout=AIO_TIMEOUT,
-            ) as res:
-                html = await res.text(encoding="ISO-8859-1", errors="replace")
-            title_match = re.search(r"<title>(.*?)</title>", html[:5000], re.I | re.S)
-            LOGGER.info(
-                "[TEMP-YBT] direct http=%s bytes=%s cards=%s cf=%s title=%r url=%s",
-                res.status,
-                len(html),
-                html.count("yb-gcard"),
-                "cf-chl" in html.lower(),
-                title_match.group(1)[:60].replace("\n", " ") if title_match else "",
-                url[:100],
-            )
-            return html if res.status < 400 else None
-        except Exception as exc:
-            LOGGER.info(
-                "[TEMP-YBT] direct failed type=%s url=%s",
-                type(exc).__name__,
-                url[:100],
-            )
-            return None
-
     async def _jina_html(self, session, url):
         """Last-resort reader fetch that returns the original HTML."""
         target = "https://r.jina.ai/" + url
@@ -105,21 +74,10 @@ class YourBittorrent:
                 timeout=aiohttp.ClientTimeout(total=45),
             ) as res:
                 if res.status >= 400:
-                    LOGGER.info(
-                        "[TEMP-YBT] jina http=%s url=%s", res.status, url[:100]
-                    )
                     return None
                 html = await res.text(encoding="utf-8", errors="replace")
-            LOGGER.info(
-                "[TEMP-YBT] jina ok bytes=%s url=%s", len(html), url[:100]
-            )
             return html if html.lstrip().lower().startswith("<!doctype html") else None
-        except Exception as exc:
-            LOGGER.info(
-                "[TEMP-YBT] jina failed type=%s url=%s",
-                type(exc).__name__,
-                url[:100],
-            )
+        except Exception:
             return None
 
     @decorator_asyncio_fix
@@ -197,11 +155,6 @@ class YourBittorrent:
                 my_dict = {"data": []}
 
                 cards = soup.select("a.yb-gcard, div.yb-gcard")
-                LOGGER.info(
-                    "[TEMP-YBT] parser raw_cards=%s index=%s",
-                    len(cards),
-                    idx,
-                )
                 for card in cards[idx:]:
                     link = (
                         card
@@ -234,11 +187,6 @@ class YourBittorrent:
                     )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
-                LOGGER.info(
-                    "[TEMP-YBT] parser results=%s urls=%s",
-                    len(my_dict["data"]),
-                    len(list_of_urls),
-                )
                 try:
                     ul = soup.find("ul", class_="pagination")
                     pages = []
@@ -295,8 +243,7 @@ class YourBittorrent:
         start = HOSTS.index(self.BASE_URL) if self.BASE_URL in HOSTS else 0
         for i in range(len(HOSTS)):
             host = HOSTS[(start + i) % len(HOSTS)]
-            html = await self._direct_html(session, host + path)
-            htmls = [html] if html else []
+            htmls = await Scraper().get_all_results(session, host + path)
             if htmls and htmls[0]:
                 self.BASE_URL = host
                 return htmls
