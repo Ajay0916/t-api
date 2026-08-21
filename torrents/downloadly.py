@@ -113,7 +113,13 @@ class Downloadly:
                 )
             _LOGGER.info("[TEMP-DL] flare-clean url=%s bytes=%d wrong=%s", url, len(html or ""), _is_wrong_post_response(url, html))
             if html and _is_wrong_post_response(url, html):
-                return None
+                # Browser attempts often refresh WordPress's object cache; a
+                # final direct fetch then receives the real post immediately.
+                await asyncio.sleep(1)
+                html = await fetch_plain(url, timeout=max(timeout, 30))
+                _LOGGER.info("[TEMP-DL] final-primary url=%s bytes=%d wrong=%s", url, len(html or ""), _is_wrong_post_response(url, html))
+                if not html or _is_unusable_post_response(url, html):
+                    return None
         return html
 
     async def _fetch_flare(self, url, timeout=15, use_session=True):
