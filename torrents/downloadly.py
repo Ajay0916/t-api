@@ -61,22 +61,18 @@ class Downloadly:
         self.LIMIT = None
 
     async def _fetch(self, url, timeout=15):
-        started = time.perf_counter()
         # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
         if html and len(html) > 500:
-            _LOGGER.info("[TEMP-TIMING] downloadly fetch method=primary duration=%.2f bytes=%d", time.perf_counter()-started, len(html))
             return html
         # 2. Plain curl on mirror domain
         mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
         html = await fetch_plain(mirror, timeout=timeout)
         if html and len(html) > 500:
-            _LOGGER.info("[TEMP-TIMING] downloadly fetch method=mirror duration=%.2f bytes=%d", time.perf_counter()-started, len(html))
             return html
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
             html = await self._fetch_flare(url, timeout=max(timeout, 28))
-        _LOGGER.info("[TEMP-TIMING] downloadly fetch method=flare duration=%.2f bytes=%s", time.perf_counter()-started, len(html or ""))
         return html
 
     async def _fetch_flare(self, url, timeout=15):
@@ -198,7 +194,6 @@ class Downloadly:
             if len(all_results) >= want:
                 break
             chunk = page_numbers[chunk_start:chunk_start + 3]
-            started = time.perf_counter()
             pages = await asyncio.gather(*[
                 self._fetch(
                     "{}/?s={}".format(self.BASE_URL, quote(query)) + ("&paged={}".format(n) if n > 1 else ""),
@@ -206,7 +201,6 @@ class Downloadly:
                 )
                 for n in chunk
             ])
-            _LOGGER.info("[TEMP-TIMING] downloadly batch pages=%s duration=%.2f sizes=%s", chunk, time.perf_counter()-started, [len(x or "") for x in pages])
             got_new = False
             for html in pages:
                 if not html:

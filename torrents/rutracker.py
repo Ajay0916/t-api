@@ -9,12 +9,10 @@ from urllib.parse import quote, quote_plus, unquote, urlencode, urlsplit
 import aiohttp
 from bs4 import BeautifulSoup
 
-from helper.logging_setup import get_logger
 from helper.search_cache import TTLCache
 from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
-LOGGER = get_logger("tapi.rutracker")
 _MAGNET_CACHE = TTLCache(max_size=2048, ttl=21600, name="rutracker_magnet")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_BASE = "https://rutracker.org"
@@ -635,11 +633,9 @@ class RuTracker:
         return results
 
     async def _magnet(self, tid, sem):
-        started = time.perf_counter()
         url = "{}/forum/viewtopic.php?t={}".format(self.BASE_URL, tid)
         cached = _MAGNET_CACHE.get(tid)
         if cached:
-            LOGGER.info("[TEMP-TIMING] rutracker magnet cache tid=%s duration=%.2f", tid, time.perf_counter()-started)
             return cached
         async with sem:
             try:
@@ -664,7 +660,6 @@ class RuTracker:
             a = soup.select_one('a[href*="magnet:?xt=urn:btih:"]')
             _rt_debug("magnet", tid, "anchor", bool(a))
             if not a:
-                LOGGER.info("[TEMP-TIMING] rutracker magnet missing tid=%s duration=%.2f", tid, time.perf_counter()-started)
                 return None
             href = a.get("href") or ""
             m = re.search(r"btih:([a-fA-F0-9]{40})", href)
@@ -672,12 +667,10 @@ class RuTracker:
                 return None
             extra = {"hash": m.group(1).upper(), "magnet": href}
             _MAGNET_CACHE.set(tid, extra)
-            LOGGER.info("[TEMP-TIMING] rutracker magnet ok tid=%s duration=%.2f", tid, time.perf_counter()-started)
             return extra
 
     async def search(self, query, page, limit):
         start_time = time.time()
-        perf_start = time.perf_counter()
         self.LIMIT = limit or None
         try:
             page = max(int(page or 1) - 1, 0)
@@ -706,7 +699,6 @@ class RuTracker:
             # Login page/captcha came back → auth failed (bad creds/blocked).
             return None
         raw = self._parse_rows(html)
-        LOGGER.info("[TEMP-TIMING] rutracker search duration=%.2f rows=%d", time.perf_counter()-perf_start, len(raw))
         if not raw and not self._is_login_page(html):
             counter = re.search(r"Результатов поиска:\s*(\d+)", html)
             if counter and int(counter.group(1)) > 0:
@@ -740,7 +732,6 @@ class RuTracker:
             elapsed = time.time() - start_time
             enrich_budget = max(8.0, min(22.0, 38.0 - elapsed))
             done, pending = await asyncio.wait(tasks, timeout=enrich_budget)
-            LOGGER.info("[TEMP-TIMING] rutracker enrich budget=%.2f total=%d done=%d duration=%.2f", enrich_budget, enrich_n, len(done), time.perf_counter()-perf_start)
             _rt_debug("enrich", enrich_n, "budget", round(enrich_budget, 1), "done", len(done))
             for t in pending:
                 t.cancel()
