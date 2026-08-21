@@ -13,7 +13,10 @@ from constants.base_url import YOURBITTORRENT
 
 HOSTS = [YOURBITTORRENT, "https://yourbittorrent2.com"]
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
+from helper.logging_setup import get_logger
 from helper.trackers import build_magnet
+
+LOGGER = get_logger("tapi.yourbittorrent")
 
 
 def extract_info_hash(raw):
@@ -69,16 +72,23 @@ class YourBittorrent:
                 timeout=AIO_TIMEOUT,
             ) as res:
                 html = await res.text(encoding="ISO-8859-1", errors="replace")
-            print(
-                f"[TEMP-YBT] direct http={res.status} bytes={len(html)} "
-                f"cards={html.count('yb-gcard')} cf={'cf-chl' in html.lower()} "
-                f"title={(re.search(r'<title>(.*?)</title>', html[:5000], re.I|re.S).group(1)[:60].replace(chr(10),' ') if re.search(r'<title>(.*?)</title>', html[:5000], re.I|re.S) else '')!r} "
-                f"url={url[:100]}",
-                flush=True,
+            title_match = re.search(r"<title>(.*?)</title>", html[:5000], re.I | re.S)
+            LOGGER.info(
+                "[TEMP-YBT] direct http=%s bytes=%s cards=%s cf=%s title=%r url=%s",
+                res.status,
+                len(html),
+                html.count("yb-gcard"),
+                "cf-chl" in html.lower(),
+                title_match.group(1)[:60].replace("\n", " ") if title_match else "",
+                url[:100],
             )
             return html if res.status < 400 else None
         except Exception as exc:
-            print(f"[TEMP-YBT] direct failed type={type(exc).__name__} url={url[:100]}", flush=True)
+            LOGGER.info(
+                "[TEMP-YBT] direct failed type=%s url=%s",
+                type(exc).__name__,
+                url[:100],
+            )
             return None
 
     async def _jina_html(self, session, url):
@@ -95,16 +105,21 @@ class YourBittorrent:
                 timeout=aiohttp.ClientTimeout(total=45),
             ) as res:
                 if res.status >= 400:
-                    print(f"[TEMP-YBT] jina http={res.status} url={url[:100]}", flush=True)
+                    LOGGER.info(
+                        "[TEMP-YBT] jina http=%s url=%s", res.status, url[:100]
+                    )
                     return None
                 html = await res.text(encoding="utf-8", errors="replace")
-            print(
-                f"[TEMP-YBT] jina ok bytes={len(html)} url={url[:100]}",
-                flush=True,
+            LOGGER.info(
+                "[TEMP-YBT] jina ok bytes=%s url=%s", len(html), url[:100]
             )
-            return html.lstrip().lower().startswith("<!doctype html") and html or None
+            return html if html.lstrip().lower().startswith("<!doctype html") else None
         except Exception as exc:
-            print(f"[TEMP-YBT] jina failed type={type(exc).__name__} url={url[:100]}", flush=True)
+            LOGGER.info(
+                "[TEMP-YBT] jina failed type=%s url=%s",
+                type(exc).__name__,
+                url[:100],
+            )
             return None
 
     @decorator_asyncio_fix
