@@ -174,6 +174,7 @@ async def proxy_torrent(
             if attempt + 1 < attempts:
                 await asyncio.sleep(0.8)
                 continue
+            LOGGER.info("[TEMP-PROXY] upstream status=%d url=%s final=%s ct=%s", res.status, url, res.url, res.headers.get("Content-Type"))
             return JSONResponse(
                 status_code=502, content={"error": "Upstream error."}
             )
