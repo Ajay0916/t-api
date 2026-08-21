@@ -161,8 +161,8 @@ class Downloadly:
             return None
 
         # Extract AJAX config from initial page
-        post_id_m = re.search(r'"post_id"\?":\?"?(\d+)', html)
-        layout_m = re.search(r'"items_layout"\?":\?"?(\d+)', html)
+        post_id_m = re.search(r'post_id&quot;:(\d+)', html)
+        layout_m = re.search(r'items_layout&quot;:&quot;(\d+)', html)
         post_id = post_id_m.group(1) if post_id_m else "786373"
         layout = layout_m.group(1) if layout_m else "786344"
 
