@@ -303,7 +303,9 @@ class Downloadly:
         html = await self._fetch(post_url, timeout=20)
         if not html or len(html) < 1000 or _is_cf_challenge(html):
             return []
-        return _parse_parts(html)
+        parts = _parse_parts(html)
+        _LOGGER.info("[TEMP-DL] resolved url=%s parts=%d first=%s", post_url, len(parts), (parts[0].get("url") if parts else ""))
+        return parts
 
     async def trending(self, category, page, limit):
         return None
