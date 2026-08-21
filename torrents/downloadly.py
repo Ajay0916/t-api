@@ -145,9 +145,10 @@ class Downloadly:
                 break
             if pageno == 1:
                 url = "{}/?s={}".format(self.BASE_URL, quote(query))
+                html = await self._fetch(url)
             else:
                 url = "{}/?s={}&paged={}".format(self.BASE_URL, quote(query), pageno)
-            html = await self._fetch(url)
+                html = await self._fetch_flare(url, timeout=15)
             if not html:
                 break
             more = self._parse_grid(html, seen)
