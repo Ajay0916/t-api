@@ -87,7 +87,11 @@ class Downloadly:
 
     async def _post_page(self, url, obj, sem):
         async with sem:
-            page = await self._fetch(url)
+            # Try mirror domain with plain curl first (fast)
+            mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
+            page = await fetch_plain(mirror, timeout=10)
+            if not page or len(page) < 500:
+                page = await self._fetch(url)
             if not page:
                 return
             parts = _parse_parts(page)
