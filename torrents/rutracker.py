@@ -562,6 +562,12 @@ class RuTracker:
         # Keep cookies/UA from every successful solve: the next dl.php
         # download then skips the browser round-trip (see fetch_dl_torrent).
         _cache_solution(solution)
+        guest = re.search(r"IS_GUEST:\s*!!'(\d)'", html)
+        LOGGER.info(
+            "[TEMP-RT-AUTH] page url=%s bytes=%d guest=%s",
+            str(payload.get("url") or "")[:120], len(html),
+            guest.group(1) if guest else "?",
+        )
         return html
 
     async def _fetch_html(self, url, timeout):
