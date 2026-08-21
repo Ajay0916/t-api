@@ -9,11 +9,13 @@ from urllib.parse import quote, quote_plus, unquote, urlencode, urlsplit
 import aiohttp
 from bs4 import BeautifulSoup
 
+from helper.logging_setup import get_logger
 from helper.search_cache import TTLCache
 from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _MAGNET_CACHE = TTLCache(max_size=2048, ttl=21600, name="rutracker_magnet")
+LOGGER = get_logger("tapi.rutracker")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_BASE = "https://rutracker.org"
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
@@ -389,6 +391,8 @@ async def fetch_dl_torrent(url):
             _rt_debug("dl.php plain failed:", repr(e))
 
     # Stage B - FlareSolverr browser fallback
+    cookie_names = sorted(_cookie_dict())
+    LOGGER.info("[TEMP-RT-AUTH] dl=%s cookie_names=%s count=%d", url, cookie_names, len(cookie_names))
     for attempt in (1, 2):
         cookies = _flare_cookie_list(_auth_cookies())
         if cookies:
@@ -447,6 +451,12 @@ async def fetch_dl_torrent(url):
                 continue
             _cache_solution(solution)
             raw = solution.get("response") or ""
+            guest = re.search(r"IS_GUEST:\s*!!'(\d)'", raw)
+            LOGGER.info(
+                "[TEMP-RT-AUTH] flare attempt=%d http=%s ct=%s bytes=%d guest=%s title=%s",
+                attempt, status, ctype, len(raw), guest.group(1) if guest else "?",
+                re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S).group(1)[:80].replace("\n", " ") if re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S) else "",
+            )
             low = raw[:400].lower()
             if (
                 "just a moment" in low
