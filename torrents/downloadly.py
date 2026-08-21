@@ -144,7 +144,7 @@ class Downloadly:
         seen = set()
         all_results = []
         want = limit if limit else 300
-        max_pages = 6
+        max_pages = 2
 
         for pageno in range(1, max_pages + 1):
             if len(all_results) >= want:
