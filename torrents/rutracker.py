@@ -367,8 +367,9 @@ async def fetch_dl_torrent(url):
     download. Returns (torrent_bytes, upstream_filename) or None.
     """
     LOGGER.info("[TEMP-RT] start url=%s plain_cookies=%d manual_cookie=%s userpass=%s", url, len(_plain_cookies), bool(_RUTRACKER_COOKIE), bool(_RUTRACKER_USER and _RUTRACKER_PASS))
-    # Stage A - plain fetch with cookies from the last FlareSolverr solve
-    if _plain_cookies:
+    # Stage A - plain fetch with manual login and/or last FlareSolverr cookies
+    plain_cookies = _merge_cookie_list(_auth_cookies())
+    if plain_cookies:
         headers = {
             "User-Agent": _plain_ua or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
             "Referer": url,
@@ -381,7 +382,7 @@ async def fetch_dl_torrent(url):
             ) as s:
                 async with s.get(
                     url,
-                    cookies=_merge_cookie_list(_plain_cookies),
+                    cookies=plain_cookies,
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=30),
                     allow_redirects=True,
