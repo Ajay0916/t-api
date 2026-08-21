@@ -11,8 +11,10 @@ import os
 import aiohttp
 
 from constants.base_url import DOWNLOADLY
+from helper.logging_setup import get_logger
 from helper.plain_curl import fetch_plain, _is_cf_challenge
 
+_LOGGER = get_logger("tapi.downloadly")
 _MIRROR_URL = "https://downloadlynet.ir"
 _FLARE_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 
@@ -49,6 +51,9 @@ def _parse_parts(html):
 
 class Downloadly:
     _name = "Downloadly"
+    _flare_session = "downloadly_persistent"
+    _flare_session_ready = False
+    _flare_session_lock = asyncio.Lock()
 
     def __init__(self):
         self.BASE_URL = DOWNLOADLY
@@ -65,38 +70,78 @@ class Downloadly:
         if html and len(html) > 500:
             return html
         # 3. FlareSolverr fallback
-        return await self._fetch_flare(url, timeout)
+        return await self._fetch_flare(url, timeout=max(timeout, 28))
 
     async def _fetch_flare(self, url, timeout=15):
-        try:
-            payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
-            async with aiohttp.ClientSession() as s:
-                async with s.post(
-                    f"{_FLARE_URL}/v1", json=payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout + 10),
+        for attempt in range(2):
+            try:
+                await self._ensure_flare_session()
+                payload = {
+                    "cmd": "request.get",
+                    "url": url,
+                    "session": self._flare_session,
+                    "maxTimeout": timeout * 1000,
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{_FLARE_URL}/v1", json=payload,
+                        timeout=aiohttp.ClientTimeout(total=timeout + 10),
+                    ) as res:
+                        data = await res.json(content_type=None)
+                solution = data.get("solution") or {}
+                if solution.get("status") == 200:
+                    html = solution.get("response") or ""
+                    if len(html) > 500:
+                        return html
+                message = str(data.get("message") or "").lower()
+                if "session" in message and attempt == 0:
+                    await self._reset_flare_session()
+                    continue
+            except Exception as exc:
+                _LOGGER.warning("Downloadly FlareSolverr failed for %s: %s", url, exc)
+        return None
+
+    async def _ensure_flare_session(self):
+        async with self._flare_session_lock:
+            if self._flare_session_ready:
+                return
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{_FLARE_URL}/v1",
+                    json={"cmd": "sessions.create", "session": self._flare_session},
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as res:
                     data = await res.json(content_type=None)
-            sol = data.get("solution") or {}
-            if sol.get("status") == 200:
-                html = sol.get("response") or ""
-                if len(html) > 500:
-                    return html
-        except Exception:
-            pass
-        return None
+            message = str(data.get("message") or "").lower()
+            if data.get("status") == "ok" or "already exists" in message:
+                self._flare_session_ready = True
+
+    async def _reset_flare_session(self):
+        async with self._flare_session_lock:
+            self._flare_session_ready = False
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{_FLARE_URL}/v1",
+                        json={"cmd": "sessions.destroy", "session": self._flare_session},
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    ) as res:
+                        await res.json(content_type=None)
+            except Exception:
+                pass
 
     async def _post_page(self, url, obj, sem):
         async with sem:
-            # Try plain curl on original URL first
-            page = await fetch_plain(url, timeout=10)
-            if page and (_is_cf_challenge(page) or len(page) < 1000):
-                page = None
-            if not page:
-                # Try FlareSolverr directly (plain curl blocked on main site)
-                page = await self._fetch_flare(url, timeout=15)
+            # One persistent browser context avoids repeated Cloudflare challenges.
+            page = await self._fetch_flare(url, timeout=15)
             if not page or len(page) < 1000 or _is_cf_challenge(page):
+                _LOGGER.info(
+                    "Downloadly post rejected url=%s len=%s challenge=%s",
+                    url, len(page or ""), _is_cf_challenge(page or ""),
+                )
                 return
             parts = _parse_parts(page)
+            _LOGGER.info("Downloadly post parsed url=%s parts=%s", url, len(parts))
             if not parts:
                 obj["torrent"] = url
                 obj["download"] = url
@@ -127,7 +172,7 @@ class Downloadly:
             a = h2.find("a", href=True) if h2 else None
             if not a:
                 continue
-            href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
+            href = a["href"]
             if href in seen or any(s in href for s in _SKIP_SLUGS):
                 continue
             name = a.get_text(" ", strip=True)
@@ -166,13 +211,24 @@ class Downloadly:
             return {"data": [], "current_page": page, "total_pages": 1,
                     "time": time.time() - start_time, "total": 0}
 
-        for o in all_results:
-            o["torrent"] = o["url"]
-            o["download"] = o["url"]
+        # Post pages intermittently serve the homepage to datacenter IPs.
+        # Return the reliable search listing immediately; the bot links the
+        # primary post page, which works from the user's browser.
+        for item in all_results:
+            item["torrent"] = item["url"]
+            item["download"] = item["url"]
+
         total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
         return {"data": all_results[:limit] if limit else all_results,
                 "current_page": page, "total_pages": total_pages,
                 "time": time.time() - start_time, "total": len(all_results)}
+
+    async def resolve_parts(self, post_url):
+        """Fetch download links from a post page via FlareSolverr."""
+        html = await self._fetch_flare(post_url, timeout=20)
+        if not html or len(html) < 1000 or _is_cf_challenge(html):
+            return []
+        return _parse_parts(html)
 
     async def trending(self, category, page, limit):
         return None
