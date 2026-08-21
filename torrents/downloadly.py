@@ -113,7 +113,7 @@ class Downloadly:
 
     @staticmethod
     def _parse_grid(html, seen, limit=None):
-        """Parse w-grid-item divs from any page (initial or AJAX)."""
+        """Parse w-grid-item divs from any page."""
         soup = BeautifulSoup(html, "html.parser")
         results = []
         for div in soup.find_all("div", class_=lambda c: c and "w-grid-item" in c):
@@ -133,83 +133,41 @@ class Downloadly:
                 break
         return results
 
-    async def _fetch_ajax(self, query, offset, post_id="786373", layout="786344"):
-        """Fetch next page of results via WordPress AJAX grid."""
-        ajax_url = "{}/wp-admin/admin-ajax.php".format(self.BASE_URL)
-        form = {
-            "action": "us_ajax_grid",
-            "template_vars[query_args][s]": query,
-            "template_vars[query_args][post_type][]": "post",
-            "template_vars[query_args][post_status][]": "publish",
-            "template_vars[items_offset]": str(offset),
-            "template_vars[items_layout]": layout,
-            "template_vars[post_id]": post_id,
-        }
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "{}/?s={}".format(self.BASE_URL, query),
-            "Origin": self.BASE_URL,
-        }
-        try:
-            async with aiohttp.ClientSession(headers=headers) as s:
-                async with s.post(ajax_url, data=form, timeout=aiohttp.ClientTimeout(total=15)) as res:
-                    if res.status == 200:
-                        text = await res.text()
-                        if "w-grid-item" in text:
-                            return text
-        except Exception:
-            pass
-        # Fallback: FlareSolverr on initial page URL with pagination
-        page_url = "{}/?s={}&paged={}".format(
-            self.BASE_URL, quote(query), (offset // 10) + 1
-        )
-        return await self._fetch_flare(page_url, 15)
-
     async def search(self, query, page, limit):
         start_time = time.time()
-        url = "{}/?s={}".format(self.BASE_URL, quote(query))
-        html = await self._fetch(url)
-        if not html:
-            return None
-
-        # Extract AJAX config from initial page
-        post_id_m = re.search(r'post_id&quot;:(\d+)', html)
-        layout_m = re.search(r'items_layout&quot;:&quot;(\d+)', html)
-        post_id = post_id_m.group(1) if post_id_m else "786373"
-        layout = layout_m.group(1) if layout_m else "786344"
-
         seen = set()
-        results = self._parse_grid(html, seen)
-
-        # Fetch AJAX pages 2-6 for more results (when limit is high or 0)
+        all_results = []
         want = limit if limit else 300
-        if want > len(results):
-            offset = len(results) + 1
-            for _ajax_page in range(5):
-                if len(results) >= want:
-                    break
-                ajax_html = await self._fetch_ajax(query, offset, post_id, layout)
-                if not ajax_html:
-                    break
-                more = self._parse_grid(ajax_html, seen)
-                if not more:
-                    break
-                results.extend(more)
-                offset += len(more)
+        max_pages = 6
 
-        if not results:
+        for pageno in range(1, max_pages + 1):
+            if len(all_results) >= want:
+                break
+            if pageno == 1:
+                url = "{}/?s={}".format(self.BASE_URL, quote(query))
+            else:
+                url = "{}/?s={}&paged={}".format(self.BASE_URL, quote(query), pageno)
+            html = await self._fetch(url)
+            if not html:
+                break
+            more = self._parse_grid(html, seen)
+            if not more:
+                break
+            all_results.extend(more)
+
+        if not all_results:
             return {"data": [], "current_page": page, "total_pages": 1,
                     "time": time.time() - start_time, "total": 0}
 
         sem = asyncio.Semaphore(3)
         await asyncio.gather(
-            *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in results]
+            *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in all_results]
         )
-        results = [o for o in results if o.get("torrent")]
-        total_pages = min(6, max(1, (len(results) + 9) // 10))
-        return {"data": results[:limit] if limit else results,
+        all_results = [o for o in all_results if o.get("torrent")]
+        total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
+        return {"data": all_results[:limit] if limit else all_results,
                 "current_page": page, "total_pages": total_pages,
-                "time": time.time() - start_time, "total": len(results)}
+                "time": time.time() - start_time, "total": len(all_results)}
 
     async def trending(self, category, page, limit):
         return None
