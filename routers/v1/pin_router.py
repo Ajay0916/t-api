@@ -8,8 +8,7 @@ import os
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from helper.dependencies import authenticate_request
 from helper.logging_setup import get_logger
@@ -23,18 +22,6 @@ ATTEMPT_WINDOW = 60.0
 LOCK_SECONDS = 60.0
 _attempts: dict[str, deque[float]] = defaultdict(deque)
 _attempt_lock = asyncio.Lock()
-
-
-class PinChangeRequest(BaseModel):
-    current_pin: str
-    new_pin: str
-    confirm_new_pin: str
-
-
-class PinResetRequest(BaseModel):
-    reset_pin: str
-    new_pin: str
-    confirm_new_pin: str
 
 
 async def _check_rate_limit(key: str) -> None:
@@ -83,14 +70,19 @@ def _validate_new_pin(new_pin: str, confirm_pin: str, forbidden_pin: str | None 
 
 
 @router.post("/change", dependencies=[Depends(authenticate_request)])
-async def change_pin(request: Request, payload: PinChangeRequest):
+async def change_pin(
+    request: Request,
+    current_pin: str = Header(..., alias="X-Current-PIN", min_length=2, max_length=128),
+    new_pin: str = Header(..., alias="X-New-PIN", min_length=2, max_length=128),
+    confirm_new_pin: str = Header(..., alias="X-Confirm-New-PIN", min_length=2, max_length=128),
+):
     client_ip = request.client.host if request.client else "unknown"
     rate_key = f"change:{client_ip}"
     await _check_rate_limit(rate_key)
 
-    current_pin = payload.current_pin.strip()
-    new_pin = payload.new_pin.strip()
-    confirm_pin = payload.confirm_new_pin.strip()
+    current_pin = current_pin.strip()
+    new_pin = new_pin.strip()
+    confirm_pin = confirm_new_pin.strip()
 
     if not verify_current_pin(current_pin):
         await _record_attempt(rate_key, success=False)
@@ -107,7 +99,12 @@ async def change_pin(request: Request, payload: PinChangeRequest):
 
 
 @router.post("/reset")
-async def reset_pin(request: Request, payload: PinResetRequest):
+async def reset_pin(
+    request: Request,
+    reset_pin: str = Header(..., alias="X-Reset-PIN", min_length=2, max_length=128),
+    new_pin: str = Header(..., alias="X-New-PIN", min_length=2, max_length=128),
+    confirm_new_pin: str = Header(..., alias="X-Confirm-New-PIN", min_length=2, max_length=128),
+):
     master_pin = os.getenv("TAPI_MASTER_PIN", "")
     if not master_pin:
         raise HTTPException(
@@ -119,7 +116,7 @@ async def reset_pin(request: Request, payload: PinResetRequest):
     rate_key = f"reset:{client_ip}"
     await _check_rate_limit(rate_key)
 
-    supplied_master = payload.reset_pin.strip()
+    supplied_master = reset_pin.strip()
     if not hmac.compare_digest(supplied_master, master_pin):
         await _record_attempt(rate_key, success=False)
         raise HTTPException(
@@ -127,8 +124,8 @@ async def reset_pin(request: Request, payload: PinResetRequest):
             detail="Reset PIN is incorrect.",
         )
 
-    new_pin = payload.new_pin.strip()
-    confirm_pin = payload.confirm_new_pin.strip()
+    new_pin = new_pin.strip()
+    confirm_pin = confirm_new_pin.strip()
     validated_pin = _validate_new_pin(new_pin, confirm_pin, master_pin)
     set_active_pin(validated_pin)
     await _record_attempt(rate_key, success=True)

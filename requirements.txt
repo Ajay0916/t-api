@@ -7,4 +7,3 @@ mangum
 requests
 uvicorn[standard]
 curl_cffi>=0.16
-

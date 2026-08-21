@@ -204,18 +204,18 @@ After the first rotation, the active PIN is stored as a salted hash in `pin_stat
 ```http
 POST /api/v1/pin/change
 X-API-Pin: CURRENT_PIN
-Content-Type: application/json
-
-{"current_pin":"CURRENT_PIN","new_pin":"NEW_PIN","confirm_new_pin":"NEW_PIN"}
+X-Current-PIN: CURRENT_PIN
+X-New-PIN: NEW_PIN
+X-Confirm-New-PIN: NEW_PIN
 ```
 
 If the active PIN is forgotten, set a permanent `TAPI_MASTER_PIN` environment variable and call:
 
 ```http
 POST /api/v1/pin/reset
-Content-Type: application/json
-
-{"reset_pin":"MASTER_PIN","new_pin":"NEW_PIN","confirm_new_pin":"NEW_PIN"}
+X-Reset-PIN: MASTER_PIN
+X-New-PIN: NEW_PIN
+X-Confirm-New-PIN: NEW_PIN
 ```
 
 The master PIN is reusable for recovery but cannot be used for normal API access. PINs are never logged.
