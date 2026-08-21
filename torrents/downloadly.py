@@ -15,7 +15,6 @@ from helper.logging_setup import get_logger
 from helper.plain_curl import fetch_plain, _is_cf_challenge
 
 _LOGGER = get_logger("tapi.downloadly")
-_MIRROR_URL = "https://downloadlynet.ir"
 _FLARE_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 
 _SKIP_SLUGS = (
@@ -64,12 +63,7 @@ class Downloadly:
         html = await fetch_plain(url, timeout=timeout)
         if html and len(html) > 500:
             return html
-        # 2. Plain curl on mirror domain
-        mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
-        html = await fetch_plain(mirror, timeout=timeout)
-        if html and len(html) > 500:
-            return html
-        # 3. FlareSolverr fallback
+        # Primary domain only; mirror post URLs refuse connections.
         return await self._fetch_flare(url, timeout)
 
     async def _fetch_flare(self, url, timeout=15):
@@ -177,7 +171,7 @@ class Downloadly:
             a = h2.find("a", href=True) if h2 else None
             if not a:
                 continue
-            href = a["href"]
+            href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
             if href in seen or any(s in href for s in _SKIP_SLUGS):
                 continue
             name = a.get_text(" ", strip=True)
