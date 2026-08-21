@@ -60,6 +60,27 @@ class YourBittorrent:
         self.BASE_URL = YOURBITTORRENT
         self.LIMIT = None
 
+    async def _direct_html(self, session, url):
+        """Temporary diagnostic wrapper for YBT host responses."""
+        try:
+            async with session.get(
+                url,
+                headers=HEADER_AIO,
+                timeout=AIO_TIMEOUT,
+            ) as res:
+                html = await res.text(encoding="ISO-8859-1", errors="replace")
+            print(
+                f"[TEMP-YBT] direct http={res.status} bytes={len(html)} "
+                f"cards={html.count('yb-gcard')} cf={'cf-chl' in html.lower()} "
+                f"title={(re.search(r'<title>(.*?)</title>', html[:5000], re.I|re.S).group(1)[:60].replace(chr(10),' ') if re.search(r'<title>(.*?)</title>', html[:5000], re.I|re.S) else '')!r} "
+                f"url={url[:100]}",
+                flush=True,
+            )
+            return html if res.status < 400 else None
+        except Exception as exc:
+            print(f"[TEMP-YBT] direct failed type={type(exc).__name__} url={url[:100]}", flush=True)
+            return None
+
     async def _jina_html(self, session, url):
         """Last-resort reader fetch that returns the original HTML."""
         target = "https://r.jina.ai/" + url
@@ -241,7 +262,8 @@ class YourBittorrent:
         start = HOSTS.index(self.BASE_URL) if self.BASE_URL in HOSTS else 0
         for i in range(len(HOSTS)):
             host = HOSTS[(start + i) % len(HOSTS)]
-            htmls = await Scraper().get_all_results(session, host + path)
+            html = await self._direct_html(session, host + path)
+            htmls = [html] if html else []
             if htmls and htmls[0]:
                 self.BASE_URL = host
                 return htmls
