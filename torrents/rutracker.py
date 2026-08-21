@@ -9,11 +9,13 @@ from urllib.parse import quote, quote_plus, unquote, urlencode, urlsplit
 import aiohttp
 from bs4 import BeautifulSoup
 
+from helper.logging_setup import get_logger
 from helper.search_cache import TTLCache
 from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _MAGNET_CACHE = TTLCache(max_size=2048, ttl=21600, name="rutracker_magnet")
+LOGGER = get_logger("tapi.rutracker")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_BASE = "https://rutracker.org"
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
@@ -141,29 +143,72 @@ def _map_category(cat):
 
 
 class _RuTranslator:
-    """RU -> EN via MyMemory's free endpoint (no key), cached in memory.
-    Translates titles and categories; falls back to Latin transliteration on
-    any failure so results are always at least readable."""
-    _URL = "https://api.mymemory.translated.net/get"
+    """RU -> EN with a fast provider and MyMemory fallback."""
+    _GOOGLE_URL = (
+        "https://translate.googleapis.com/translate_a/single"
+        "?client=gtx&sl=ru&tl=en&dt=t&q={0}"
+    )
+    _MYMEMORY_URL = "https://api.mymemory.translated.net/get?q={0}&langpair=ru|en"
 
     def __init__(self):
         self._sem = asyncio.Semaphore(5)
 
+    async def _provider(self, session, name, url, parser, title):
+        started = time.perf_counter()
+        try:
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as res:
+                data = await res.json(content_type=None)
+                out = str(parser(data) or "").strip()
+            ok = bool(out and out.lower() != title.lower())
+            blocked = ("MYMEMORY WARNING", "QUERY LENGTH")
+            if any(mark in out.upper() for mark in blocked):
+                ok = False
+            LOGGER.info(
+                "[TEMP-RU-TRANSLATE] provider=%s status=%d ms=%d ok=%s len=%d",
+                name,
+                res.status,
+                round((time.perf_counter() - started) * 1000),
+                ok,
+                len(out),
+            )
+            return out if ok else None
+        except Exception as exc:
+            LOGGER.info(
+                "[TEMP-RU-TRANSLATE] provider=%s error=%s ms=%d",
+                name,
+                type(exc).__name__,
+                round((time.perf_counter() - started) * 1000),
+            )
+            return None
+
     async def run(self, results):
         if not results:
             return results
+        started = time.perf_counter()
+        success = 0
+        fallback = 0
+
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
         ) as session:
+
             async def one(item):
+                nonlocal success, fallback
                 async with self._sem:
                     title = item.get("name") or ""
-                    if title in _TRANS_CACHE and "MYMEMORY WARNING" not in _TRANS_CACHE[title].upper():
+                    if title in _TRANS_CACHE:
                         item["name"] = _TRANS_CACHE[title]
                     elif _CYRILLIC_RE.search(title):
                         translated = await self._translate(session, title)
-                        item["name"] = translated
-                        _TRANS_CACHE[title] = translated
+                        if translated:
+                            item["name"] = translated
+                            _TRANS_CACHE[title] = translated
+                            success += 1
+                        else:
+                            fallback += 1
                     cat = item.get("category") or ""
                     if cat in _TRANS_CACHE:
                         item["category"] = _TRANS_CACHE[cat]
@@ -174,8 +219,9 @@ class _RuTranslator:
                             _TRANS_CACHE[cat] = mapped
                         else:
                             translated = await self._translate(session, cat)
-                            item["category"] = translated
-                            _TRANS_CACHE[cat] = translated
+                            if translated:
+                                item["category"] = translated
+                                _TRANS_CACHE[cat] = translated
 
             try:
                 await asyncio.wait_for(
@@ -183,32 +229,48 @@ class _RuTranslator:
                     timeout=10.0,
                 )
             except asyncio.TimeoutError:
-                pass
-        # Anything still Cyrillic (timed out / quota) -> transliterate now.
+                LOGGER.info("[TEMP-RU-TRANSLATE] batch timeout items=%d", len(results))
+
         for item in results:
             title = item.get("name") or ""
             if _CYRILLIC_RE.search(title):
                 item["name"] = _transliterate(title)
+                fallback += 1
             cat = item.get("category") or ""
             if _CYRILLIC_RE.search(cat):
                 item["category"] = _transliterate(cat)
+        LOGGER.info(
+            "[TEMP-RU-TRANSLATE] done items=%d titles_translated=%d fallback=%d ms=%d",
+            len(results),
+            success,
+            fallback,
+            round((time.perf_counter() - started) * 1000),
+        )
         return results
 
     async def _translate(self, session, title):
-        try:
-            url = "{0}?q={1}&langpair=ru|en".format(self._URL, quote(title[:480]))
-            async with session.get(
-                url, timeout=aiohttp.ClientTimeout(total=6)
-            ) as res:
-                data = await res.json(content_type=None)
-            out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
-            out = str(out).strip()
-            blocked = ("MYMEMORY WARNING", "QUERY LENGTH")
-            if out and out.lower() != title.lower() and not any(mark in out.upper() for mark in blocked):
-                return out
-        except Exception:
-            pass
-        return _transliterate(title)
+        google_url = self._GOOGLE_URL.format(quote(title[:480]))
+        google = await self._provider(
+            session,
+            "google",
+            google_url,
+            lambda data: "".join(
+                part[0]
+                for part in (data[0] if isinstance(data, list) and data and isinstance(data[0], list) else [])
+                if isinstance(part, list) and part and isinstance(part[0], str)
+            ),
+            title,
+        )
+        if google:
+            return google
+        mymemory = await self._provider(
+            session,
+            "mymemory",
+            self._MYMEMORY_URL.format(quote(title[:480])),
+            lambda data: ((data or {}).get("responseData") or {}).get("translatedText") or "",
+            title,
+        )
+        return mymemory or None
 
 
 _SESSION = "rutracker-tapi"
