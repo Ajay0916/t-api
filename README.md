@@ -220,6 +220,8 @@ X-Confirm-New-PIN: NEW_PIN
 
 The master PIN is reusable for recovery but cannot be used for normal API access. PINs are never logged.
 
+Swagger UI exposes these values as separate header inputs rather than a request body. The rotated PIN persists as an untracked local state file, so ordinary `/restart` deployments do not revert it.
+
 > ⚠️ **Client warning:** After changing the active PIN, update Vj-wz `API_PIN` and restart the bot, otherwise search will return 403.
 
 ---
