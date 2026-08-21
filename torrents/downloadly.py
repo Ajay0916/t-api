@@ -166,7 +166,8 @@ class Downloadly:
             return {"data": [], "current_page": page, "total_pages": 1,
                     "time": time.time() - start_time, "total": 0}
 
-        sem = asyncio.Semaphore(5)
+        sem = asyncio.Semaphore(1)
+        all_results = all_results[:3]
         await asyncio.gather(
             *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in all_results]
         )
