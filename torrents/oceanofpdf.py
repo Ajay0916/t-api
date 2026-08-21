@@ -7,19 +7,25 @@ import aiohttp
 from urllib.parse import quote
 
 from constants.base_url import OCEANOFPDF
+from helper.logging_setup import get_logger
+from helper.search_cache import TTLCache
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
 from helper.session import get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _flare_lock = asyncio.Lock()
+LOGGER = get_logger("tapi.oceanofpdf")
 
 
 class OceanofPDF:
     _name = "OceanofPDF"
+    _download_cache = TTLCache(max_size=1024, ttl=21600, name="oceanofpdf_download")
 
     def __init__(self):
         self.BASE_URL = OCEANOFPDF
         self.LIMIT = None
+        self._cookies = {}
+        self._ua = ""
 
     @decorator_asyncio_fix
     async def _flaresolverr(self, payload, timeout):
@@ -64,8 +70,29 @@ class OceanofPDF:
         if not sol:
             return None, None, None
         html = sol.get("response") or ""
-        ua = sol.get("userAgent") or ""
-        return html, {}, ua
+        self._ua = sol.get("userAgent") or self._ua
+        self._cookies = {
+            c.get("name"): c.get("value")
+            for c in (sol.get("cookies") or [])
+            if c.get("name") and c.get("value")
+        } or self._cookies
+        LOGGER.info("[TEMP-TIMING] oceanofpdf search-flare ok bytes=%d cookies=%d", len(html), len(self._cookies))
+        return html, self._cookies, self._ua
+
+    @staticmethod
+    def _is_challenge(html):
+        low = (html or "")[:2000].lower()
+        return not html or "just a moment" in low or "cf-chl" in low or "attention required" in low
+
+    def _browser_headers(self, referer=None):
+        headers = {
+            "User-Agent": self._ua or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        if referer:
+            headers["Referer"] = referer
+        return headers
 
     @staticmethod
     def _parser(html):
@@ -86,13 +113,42 @@ class OceanofPDF:
         return out
 
     @decorator_asyncio_fix
-    async def _book_info(self, obj, sem):
+    async def _book_info(self, obj, sem, http):
+        started = time.perf_counter()
+        cached = self._download_cache.get(obj["url"])
+        if cached:
+            if cached.get("size"):
+                obj["size"] = cached["size"]
+            obj["torrent"] = cached["torrent"]
+            obj["download"] = cached["torrent"]
+            LOGGER.info("[TEMP-TIMING] oceanofpdf book cache duration=%.2f", time.perf_counter()-started)
+            return
         async with sem:
             try:
-                sol = await self._flare_get(obj["url"], timeout_sec=30)
-                if not sol:
-                    return
-                html = sol.get("response") or ""
+                stage = "plain-get"
+                try:
+                    async with http.get(obj["url"], headers=self._browser_headers(self.BASE_URL), timeout=aiohttp.ClientTimeout(total=20)) as res:
+                        html = await res.text(errors="replace")
+                        if res.status == 200 and not self._is_challenge(html):
+                            self._cookies.update({c.key: c.value for c in http.cookie_jar})
+                        else:
+                            html = ""
+                except Exception as exc:
+                    LOGGER.info("[TEMP-TIMING] oceanofpdf plain-get error=%s", exc)
+                    html = ""
+                if not html:
+                    stage = "flare-get"
+                    sol = await self._flare_get(obj["url"], timeout_sec=30)
+                    if not sol:
+                        return
+                    html = sol.get("response") or ""
+                    self._ua = sol.get("userAgent") or self._ua
+                    self._cookies = {
+                        c.get("name"): c.get("value")
+                        for c in (sol.get("cookies") or [])
+                        if c.get("name") and c.get("value")
+                    } or self._cookies
+                size_started = time.perf_counter()
                 m = re.search(r"File Size[\s\S]{0,120}?([\d.,]+\s*(?:MB|GB|KB))\b", html, re.I)
                 if m:
                     obj["size"] = m.group(1).replace(" ", "")
@@ -110,22 +166,46 @@ class OceanofPDF:
                         html,
                     )
                     if not fm:
+                        LOGGER.info("[TEMP-TIMING] oceanofpdf book no-form stage=%s duration=%.2f", stage, time.perf_counter()-started)
                         return
                     fname, fid = fm.groups()
-                post_sol = await self._flare_post(
-                    self.BASE_URL + "/Fetching_Resource.php",
-                    f"id={fid}&filename={fname}",
-                    timeout_sec=30,
-                )
-                if not post_sol:
-                    return
-                body = post_sol.get("response") or ""
+
+                body = ""
+                stage = "plain-post"
+                try:
+                    async with http.post(
+                        self.BASE_URL + "/Fetching_Resource.php",
+                        data={"id": fid, "filename": fname},
+                        headers={**self._browser_headers(obj["url"]), "Content-Type": "application/x-www-form-urlencoded"},
+                        timeout=aiohttp.ClientTimeout(total=20),
+                    ) as res:
+                        if res.status == 200:
+                            body = await res.text(errors="replace")
+                except Exception as exc:
+                    LOGGER.info("[TEMP-TIMING] oceanofpdf plain-post error=%s", exc)
+                if self._is_challenge(body) or "url=" not in body.lower():
+                    stage = "flare-post"
+                    post_sol = await self._flare_post(
+                        self.BASE_URL + "/Fetching_Resource.php",
+                        f"id={fid}&filename={fname}",
+                        timeout_sec=30,
+                    )
+                    if not post_sol:
+                        return
+                    body = post_sol.get("response") or ""
+                    self._ua = post_sol.get("userAgent") or self._ua
+                    self._cookies = {
+                        c.get("name"): c.get("value")
+                        for c in (post_sol.get("cookies") or [])
+                        if c.get("name") and c.get("value")
+                    } or self._cookies
                 m = re.search(
                     r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*>',
                     body,
                     re.I,
                 )
                 if not m:
+                    LOGGER.info("[TEMP-TIMING] oceanofpdf book no-refresh stage=%s duration=%.2f", stage, time.perf_counter()-started)
                     return
                 u = re.search(r"url=([^\"'\s>]+)", m.group(0), re.I)
                 if not u:
@@ -133,8 +213,10 @@ class OceanofPDF:
                 dl_url = u.group(1).replace("&amp;", "&")
                 obj["torrent"] = dl_url
                 obj["download"] = dl_url
-            except Exception:
-                return
+                self._download_cache.set(obj["url"], {"size": obj.get("size"), "torrent": dl_url})
+                LOGGER.info("[TEMP-TIMING] oceanofpdf book ok stage=%s duration=%.2f", stage, time.perf_counter()-started)
+            except Exception as exc:
+                LOGGER.info("[TEMP-TIMING] oceanofpdf book error duration=%.2f error=%s", time.perf_counter()-started, exc)
 
     async def search(self, query, page, limit):
         start_time = time.time()
@@ -146,12 +228,20 @@ class OceanofPDF:
         if not data:
             return None
         data = data[:limit]
-        sem = asyncio.Semaphore(2)
-        tasks = [
-            asyncio.create_task(self._book_info(obj, sem))
-            for obj in data
-        ]
-        await asyncio.gather(*tasks)
+        sem = asyncio.Semaphore(4)
+        enrich_started = time.perf_counter()
+        async with aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=10, force_close=True, ssl=False),
+            cookies=self._cookies,
+            connector_owner=True,
+            trust_env=True,
+        ) as http:
+            tasks = [
+                asyncio.create_task(self._book_info(obj, sem, http))
+                for obj in data
+            ]
+            await asyncio.gather(*tasks)
+        LOGGER.info("[TEMP-TIMING] oceanofpdf enrich duration=%.2f rows=%d kept=%d", time.perf_counter()-enrich_started, len(data), sum(bool(d.get("torrent")) for d in data))
         data = [d for d in data if d.get("torrent")]
         if not data:
             return None
@@ -168,3 +258,6 @@ class OceanofPDF:
 
     async def recent(self, category, page, limit):
         return None
+
+
+OceanofPDF._download_cache.load()

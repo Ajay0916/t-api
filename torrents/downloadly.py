@@ -54,23 +54,30 @@ class Downloadly:
     _flare_session = "downloadly_persistent"
     _flare_session_ready = False
     _flare_session_lock = asyncio.Lock()
+    _flare_request_lock = asyncio.Lock()
 
     def __init__(self):
         self.BASE_URL = DOWNLOADLY
         self.LIMIT = None
 
     async def _fetch(self, url, timeout=15):
+        started = time.perf_counter()
         # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
         if html and len(html) > 500:
+            _LOGGER.info("[TEMP-TIMING] downloadly fetch method=primary duration=%.2f bytes=%d", time.perf_counter()-started, len(html))
             return html
         # 2. Plain curl on mirror domain
         mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
         html = await fetch_plain(mirror, timeout=timeout)
         if html and len(html) > 500:
+            _LOGGER.info("[TEMP-TIMING] downloadly fetch method=mirror duration=%.2f bytes=%d", time.perf_counter()-started, len(html))
             return html
-        # 3. FlareSolverr fallback
-        return await self._fetch_flare(url, timeout=max(timeout, 28))
+        # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
+        async with self._flare_request_lock:
+            html = await self._fetch_flare(url, timeout=max(timeout, 28))
+        _LOGGER.info("[TEMP-TIMING] downloadly fetch method=flare duration=%.2f bytes=%s", time.perf_counter()-started, len(html or ""))
+        return html
 
     async def _fetch_flare(self, url, timeout=15):
         for attempt in range(2):
@@ -133,7 +140,7 @@ class Downloadly:
     async def _post_page(self, url, obj, sem):
         async with sem:
             # One persistent browser context avoids repeated Cloudflare challenges.
-            page = await self._fetch_flare(url, timeout=15)
+            page = await self._fetch(url, timeout=15)
             if not page or len(page) < 1000 or _is_cf_challenge(page):
                 return
             parts = _parse_parts(page)
@@ -184,23 +191,32 @@ class Downloadly:
         seen = set()
         all_results = []
         want = limit if limit else 300
-        max_pages = 2
+        max_pages = 1 if want <= 15 else 6
+        page_numbers = list(range(1, max_pages + 1))
 
-        for pageno in range(1, max_pages + 1):
+        for chunk_start in range(0, len(page_numbers), 3):
             if len(all_results) >= want:
                 break
-            if pageno == 1:
-                url = "{}/?s={}".format(self.BASE_URL, quote(query))
-                html = await self._fetch(url)
-            else:
-                url = "{}/?s={}&paged={}".format(self.BASE_URL, quote(query), pageno)
-                html = await self._fetch_flare(url, timeout=15)
-            if not html:
+            chunk = page_numbers[chunk_start:chunk_start + 3]
+            started = time.perf_counter()
+            pages = await asyncio.gather(*[
+                self._fetch(
+                    "{}/?s={}".format(self.BASE_URL, quote(query)) + ("&paged={}".format(n) if n > 1 else ""),
+                    timeout=15,
+                )
+                for n in chunk
+            ])
+            _LOGGER.info("[TEMP-TIMING] downloadly batch pages=%s duration=%.2f sizes=%s", chunk, time.perf_counter()-started, [len(x or "") for x in pages])
+            got_new = False
+            for html in pages:
+                if not html:
+                    continue
+                more = self._parse_grid(html, seen)
+                if more:
+                    got_new = True
+                all_results.extend(more)
+            if not got_new:
                 break
-            more = self._parse_grid(html, seen)
-            if not more:
-                break
-            all_results.extend(more)
 
         if not all_results:
             return {"data": [], "current_page": page, "total_pages": 1,
@@ -220,7 +236,7 @@ class Downloadly:
 
     async def resolve_parts(self, post_url):
         """Fetch download links from a post page via FlareSolverr."""
-        html = await self._fetch_flare(post_url, timeout=20)
+        html = await self._fetch(post_url, timeout=20)
         if not html or len(html) < 1000 or _is_cf_challenge(html):
             return []
         return _parse_parts(html)

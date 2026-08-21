@@ -9,11 +9,16 @@ from bs4 import BeautifulSoup
 from constants.base_url import DOWNARCHIVE
 from constants.headers import HEADER_AIO, AIO_TIMEOUT
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.logging_setup import get_logger
+from helper.search_cache import TTLCache
 from helper.session import get_connector
+
+LOGGER = get_logger("tapi.downarchive")
 
 
 class DownArchive:
     _name = "Downarchive"
+    _detail_cache = TTLCache(max_size=1024, ttl=21600, name="downarchive_detail")
 
     def __init__(self):
         self.BASE_URL = DOWNARCHIVE
@@ -39,6 +44,7 @@ class DownArchive:
 
     async def _page_info(self, session, url, sem):
         async with sem:
+            started = time.perf_counter()
             try:
                 html = await self._get_page(session, url)
                 if not html:
@@ -56,17 +62,37 @@ class DownArchive:
                     if re.search(r"(nitroflare\.com/view/|uploadgig\.com/file/download/|rapidgator\.net/file/)", href):
                         link = href
                         break
+                if size or link:
+                    self._detail_cache.set(url, {"size": size, "link": link})
+                    LOGGER.info("[TEMP-TIMING] downarchive detail ok duration=%.2f size=%s link=%s", time.perf_counter()-started, bool(size), bool(link))
+                else:
+                    LOGGER.info("[TEMP-TIMING] downarchive detail empty duration=%.2f", time.perf_counter()-started)
                 return size, link
-            except Exception:
+            except Exception as exc:
+                LOGGER.info("[TEMP-TIMING] downarchive detail error duration=%.2f error=%s", time.perf_counter()-started, exc)
                 return None, None
 
     async def _enrich(self, session, results):
+        started = time.perf_counter()
         tasks = []
-        sem = asyncio.Semaphore(4)
+        pending_objs = []
+        sem = asyncio.Semaphore(10)
+        hits = 0
         for obj in results["data"]:
-            tasks.append(asyncio.create_task(self._page_info(session, obj["url"], sem)))
+            cached = self._detail_cache.get(obj["url"])
+            if cached:
+                hits += 1
+                if cached.get("size"):
+                    obj["size"] = cached["size"]
+                if cached.get("link"):
+                    obj["torrent"] = cached["link"]
+                    obj["download"] = cached["link"]
+            else:
+                pending_objs.append(obj)
+                tasks.append(asyncio.create_task(self._page_info(session, obj["url"], sem)))
+        LOGGER.info("[TEMP-TIMING] downarchive enrich-start rows=%d cache-hits=%d misses=%d", len(results["data"]), hits, len(pending_objs))
         infos = await asyncio.gather(*tasks)
-        for obj, (size, link) in zip(results["data"], infos):
+        for obj, (size, link) in zip(pending_objs, infos):
             if size:
                 obj["size"] = size
             if link:
@@ -120,7 +146,9 @@ class DownArchive:
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
         ) as session:
+            fetch_started = time.perf_counter()
             html = await self._get_page(session, url)
+            LOGGER.info("[TEMP-TIMING] downarchive listing duration=%.2f bytes=%s", time.perf_counter()-fetch_started, len(html or ""))
             results = self._parser(html) if html else None
             if results is None or not results["data"]:
                 return None
@@ -131,3 +159,6 @@ class DownArchive:
             results["current_page"] = page
             results["total_pages"] = page
             return results
+
+
+DownArchive._detail_cache.load()
