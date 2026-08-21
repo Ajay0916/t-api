@@ -45,6 +45,15 @@ def _is_wrong_post_response(url, html):
     return bool(_HOME_CANONICAL_RE.search(head) or _HOME_TITLE_RE.search(head))
 
 
+def _is_unusable_post_response(url, html):
+    low = (html or "")[:5000].lower()
+    return (
+        _is_wrong_post_response(url, html)
+        or _is_cf_challenge(html)
+        or "bot verification" in low
+    )
+
+
 def _parse_parts(html):
     """Extract download links + Persian labels from a post page."""
     soup = BeautifulSoup(html, "html.parser")
@@ -81,12 +90,12 @@ class Downloadly:
     async def _fetch(self, url, timeout=15):
         # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
-        if html and len(html) > 500 and not _is_wrong_post_response(url, html):
+        if html and len(html) > 500 and not _is_unusable_post_response(url, html):
             return html
         # 2. Plain curl on mirror domain
         mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
         html = await fetch_plain(mirror, timeout=timeout)
-        if html and len(html) > 500 and not _is_wrong_post_response(url, html):
+        if html and len(html) > 500 and not _is_unusable_post_response(url, html):
             return html
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
