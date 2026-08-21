@@ -136,14 +136,15 @@ class Downloadly:
     async def _fetch_ajax(self, query, offset, post_id="786373", layout="786344"):
         """Fetch next page of results via WordPress AJAX grid."""
         ajax_url = "{}/wp-admin/admin-ajax.php".format(self.BASE_URL)
-        form = aiohttp.FormData()
-        form.add_field("action", "us_ajax_grid")
-        form.add_field("template_vars[query_args][s]", query)
-        form.add_field("template_vars[query_args][post_type][]", "post")
-        form.add_field("template_vars[query_args][post_status][]", "publish")
-        form.add_field("template_vars[items_offset]", str(offset))
-        form.add_field("template_vars[items_layout]", layout)
-        form.add_field("template_vars[post_id]", post_id)
+        form = {
+            "action": "us_ajax_grid",
+            "template_vars[query_args][s]": query,
+            "template_vars[query_args][post_type][]": "post",
+            "template_vars[query_args][post_status][]": "publish",
+            "template_vars[items_offset]": str(offset),
+            "template_vars[items_layout]": layout,
+            "template_vars[post_id]": post_id,
+        }
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Referer": "{}/?s={}".format(self.BASE_URL, query),
