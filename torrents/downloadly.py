@@ -89,6 +89,11 @@ class Downloadly:
                     ) as res:
                         data = await res.json(content_type=None)
                 solution = data.get("solution") or {}
+                _LOGGER.info(
+                    "Downloadly flare url=%s status=%s len=%s message=%s",
+                    url, solution.get("status"), len(solution.get("response") or ""),
+                    data.get("message"),
+                )
                 if solution.get("status") == 200:
                     html = solution.get("response") or ""
                     if len(html) > 500:
@@ -135,8 +140,13 @@ class Downloadly:
             # One persistent browser context avoids repeated Cloudflare challenges.
             page = await self._fetch_flare(url, timeout=15)
             if not page or len(page) < 1000 or _is_cf_challenge(page):
+                _LOGGER.info(
+                    "Downloadly post rejected url=%s len=%s challenge=%s",
+                    url, len(page or ""), _is_cf_challenge(page or ""),
+                )
                 return
             parts = _parse_parts(page)
+            _LOGGER.info("Downloadly post parsed url=%s parts=%s", url, len(parts))
             if not parts:
                 obj["torrent"] = url
                 obj["download"] = url
@@ -211,7 +221,9 @@ class Downloadly:
         await asyncio.gather(
             *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in all_results]
         )
+        listed = len(all_results)
         all_results = [o for o in all_results if o.get("torrents")]
+        _LOGGER.info("Downloadly post results listed=%s resolved=%s", listed, len(all_results))
         total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
         return {"data": all_results[:limit] if limit else all_results,
                 "current_page": page, "total_pages": total_pages,
