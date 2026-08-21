@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import os
 import re
 import time
@@ -357,6 +358,23 @@ def _flare_auth_cookies():
     return list(merged.values())
 
 
+def _safe_cookie_objects(items):
+    """Cookie metadata/fingerprints only; never log cookie values."""
+    out = []
+    for item in items or []:
+        value = str(item.get("value") or "")
+        out.append({
+            "name": item.get("name"),
+            "len": len(value),
+            "fp": hashlib.sha256(value.encode()).hexdigest()[:6] if value else "",
+            "domain": item.get("domain"),
+            "path": item.get("path"),
+            "secure": item.get("secure"),
+            "httpOnly": item.get("httpOnly"),
+        })
+    return out
+
+
 def _dl_filename(headers):
     """Content-Disposition filename: RFC 5987 (filename*=UTF-8'') first,
     plain filename= second."""
@@ -464,6 +482,12 @@ async def fetch_dl_torrent(url):
             status = solution.get("status")
             headers = solution.get("headers") or {}
             ctype = str(headers.get("content-type") or "").lower()
+            LOGGER.info(
+                "[TEMP-RT-AUTH] sent_cookies=%s received_cookies=%s solution_url=%s",
+                _safe_cookie_objects(cookies),
+                _safe_cookie_objects(solution.get("cookies")),
+                str(solution.get("url") or "")[:100],
+            )
             _rt_debug(
                 "dl.php flare attempt", attempt,
                 "flare_status", data.get("status"),
@@ -481,6 +505,14 @@ async def fetch_dl_torrent(url):
                 "[TEMP-RT-AUTH] flare attempt=%d http=%s ct=%s bytes=%d guest=%s title=%s",
                 attempt, status, ctype, len(raw), guest.group(1) if guest else "?",
                 re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S).group(1)[:80].replace("\n", " ") if re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S) else "",
+            )
+            low_raw = raw[:20000].lower() if raw.lstrip().startswith("<") else ""
+            LOGGER.info(
+                "[TEMP-RT-AUTH] markers logout=%s profile=%s login_form=%s captcha=%s",
+                "login.php?logout=1" in low_raw,
+                "profile.php?mode=viewprofile" in low_raw,
+                "enter_your_name_and_password".lower() in low_raw or "введите ваше имя и пароль" in low_raw,
+                "код подтверждения" in low_raw,
             )
             low = raw[:400].lower()
             if (
