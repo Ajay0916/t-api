@@ -196,12 +196,25 @@ class YourBittorrent:
                 list_of_urls = []
                 my_dict = {"data": []}
 
-                for card in soup.select("a.yb-gcard")[idx:]:
+                cards = soup.select("a.yb-gcard, div.yb-gcard")
+                LOGGER.info(
+                    "[TEMP-YBT] parser raw_cards=%s index=%s",
+                    len(cards),
+                    idx,
+                )
+                for card in cards[idx:]:
+                    link = (
+                        card
+                        if card.name == "a"
+                        else card.select_one("a.yb-gcard-link, a[href]")
+                    )
+                    if not link or not link.get("href"):
+                        continue
                     name_el = card.select_one(".yb-gcard-name")
                     if not name_el:
                         continue
                     name = name_el.get_text(" ", strip=True)
-                    url = self.BASE_URL + card["href"]
+                    url = self.BASE_URL + link["href"]
                     list_of_urls.append(url)
                     meta = card.select_one(".yb-gcard-meta")
                     size = meta.select_one(".z").get_text(strip=True) if meta and meta.select_one(".z") else None
@@ -221,6 +234,11 @@ class YourBittorrent:
                     )
                     if len(my_dict["data"]) == self.LIMIT:
                         break
+                LOGGER.info(
+                    "[TEMP-YBT] parser results=%s urls=%s",
+                    len(my_dict["data"]),
+                    len(list_of_urls),
+                )
                 try:
                     ul = soup.find("ul", class_="pagination")
                     pages = []
