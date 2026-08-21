@@ -31,7 +31,7 @@ def _parse_parts(html):
     parts = []
     seen = set()
     for a in soup.find_all("a", href=True):
-        href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
+        href = a["href"]
         if not _DL_RE.match(href) or "/Sample/" in href or href in seen:
             continue
         seen.add(href)
@@ -87,12 +87,17 @@ class Downloadly:
 
     async def _post_page(self, url, obj, sem):
         async with sem:
-            # Try mirror domain with plain curl first (fast)
-            mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
-            page = await fetch_plain(mirror, timeout=10)
+            # Try plain curl on original URL first (works for downloadlynet.ir)
+            page = await fetch_plain(url, timeout=10)
             if not page or len(page) < 500:
-                page = await self._fetch(url)
-            if not page:
+                # Try mirror if original is downloadly.ir
+                if "downloadly.ir" in url:
+                    mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
+                    page = await fetch_plain(mirror, timeout=10)
+                else:
+                    # Already mirror, try FlareSolverr
+                    page = await self._fetch_flare(url)
+            if not page or len(page) < 500:
                 return
             parts = _parse_parts(page)
             if not parts:
@@ -125,7 +130,7 @@ class Downloadly:
             a = h2.find("a", href=True) if h2 else None
             if not a:
                 continue
-            href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
+            href = a["href"]
             if href in seen or any(s in href for s in _SKIP_SLUGS):
                 continue
             name = a.get_text(" ", strip=True)
