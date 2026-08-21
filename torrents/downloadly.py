@@ -144,8 +144,13 @@ class Downloadly:
         form.add_field("template_vars[items_offset]", str(offset))
         form.add_field("template_vars[items_layout]", layout)
         form.add_field("template_vars[post_id]", post_id)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "{}/?s={}".format(self.BASE_URL, query),
+            "Origin": self.BASE_URL,
+        }
         try:
-            async with aiohttp.ClientSession() as s:
+            async with aiohttp.ClientSession(headers=headers) as s:
                 async with s.post(ajax_url, data=form, timeout=aiohttp.ClientTimeout(total=15)) as res:
                     if res.status != 200:
                         return None
