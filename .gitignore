@@ -18,3 +18,6 @@ nohup.out
 cache_data/
 rutracker_cookie.txt
 log.txt
+
+# runtime secret state
+pin_state.json

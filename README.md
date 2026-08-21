@@ -48,7 +48,7 @@
 - **Site status endpoint** — `/api/v1/status` shows every site's health: blocked state, cooldown remaining, fail count, last error, combo availability & per-site limit.
 - **GZip responses** — API responses are gzip-compressed automatically (big combo payloads reach WZML faster).
 - **API key auth** — optional `PYTORRENT_API_KEY` via `x-api-key` header. ⚠️ WZML-X doesn't send headers, so **don't enable the key if WZML-X uses this API** (keep it unset for public/WZML use).
-- **API PIN (optional)** — `API_PIN` (env) accepted via `X-API-Pin` header ya `?pin=` query, lekin kabhi enforce nahi hota — bina PIN ke bhi public access chalta hai. `/health` aur home page hamesha public; short-token `/api/v1/torrent_file/<token>` aur `/api/v1/magnet/<token>` links bhi public (shared bot links).
+- **PIN rotation & recovery** — active PIN can be changed through `/api/v1/pin/change`; a separate reusable `TAPI_MASTER_PIN` supports emergency reset through `/api/v1/pin/reset`. The rotated PIN persists as a hashed local runtime file across restarts.
 - **Cache survives restarts** — search/combo/RSS caches persist to `cache_data/` and reload on boot, so the first query after a VPS deploy isn't slow again.
 - **1337x `.torrent` links** — infohash-based .torrent links now also added for 1337x results.
 - **Search pagination** — parsers fetch multiple pages till the limit is reached.
@@ -197,9 +197,30 @@ curl "http://localhost:8009/api/v1/all/search?query=atomic%20habit&limit=5&categ
 
 ## 🔐 Authentication
 
-Set `PYTORRENT_API_KEY` env var, then send requests with header `x-api-key: <your-key>`.
+Set `PYTORRENT_API_KEY` or `API_PIN`, then authenticate with `X-API-Key`, `X-API-Pin`, or `?key=`.
 
-> ⚠️ **WZML-X warning:** WZML-X calls the API directly without headers. If you use this API with WZML-X, keep the key unset or WZML search will fail with 403.
+After the first rotation, the active PIN is stored as a salted hash in `pin_state.json` and overrides the initial environment value.
+
+```http
+POST /api/v1/pin/change
+X-API-Pin: CURRENT_PIN
+Content-Type: application/json
+
+{"current_pin":"CURRENT_PIN","new_pin":"NEW_PIN","confirm_new_pin":"NEW_PIN"}
+```
+
+If the active PIN is forgotten, set a permanent `TAPI_MASTER_PIN` environment variable and call:
+
+```http
+POST /api/v1/pin/reset
+Content-Type: application/json
+
+{"reset_pin":"MASTER_PIN","new_pin":"NEW_PIN","confirm_new_pin":"NEW_PIN"}
+```
+
+The master PIN is reusable for recovery but cannot be used for normal API access. PINs are never logged.
+
+> ⚠️ **Client warning:** After changing the active PIN, update Vj-wz `API_PIN` and restart the bot, otherwise search will return 403.
 
 ---
 

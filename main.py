@@ -17,6 +17,7 @@ from routers.v1.torrent_file_router import router as torrent_file_router
 from routers.v1.magnet_router import router as magnet_router
 from routers.v1.test_router import router as test_router
 from routers.v1.log_router import router as log_router
+from routers.v1.pin_router import router as pin_router
 from helper.is_site_available import all_sites
 from helper.uptime import getUptime
 from helper.session import sweep_flare_sessions_async
@@ -118,6 +119,7 @@ app.include_router(test_router, prefix="/api/v1/test", dependencies=[Depends(aut
 app.include_router(torrent_file_router, prefix="/api/v1/torrent_file")
 app.include_router(magnet_router, prefix="/api/v1/magnet")
 app.include_router(log_router, prefix="/api/v1/log", dependencies=[Depends(authenticate_request)])
+app.include_router(pin_router, prefix="/api/v1/pin")
 app.include_router(home_router, prefix="")
 
 
