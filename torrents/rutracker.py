@@ -375,6 +375,40 @@ def _safe_cookie_objects(items):
     return out
 
 
+async def _fetch_cached_torrent(url):
+    """Recover a topic torrent from its enriched magnet info-hash."""
+    tid_m = re.search(r"[?&]t=(\\d+)", str(url))
+    if not tid_m:
+        return None
+    extra = _MAGNET_CACHE.get(tid_m.group(1))
+    info_hash = (extra or {}).get("hash") or ""
+    if not re.fullmatch(r"[A-F0-9]{40}", info_hash):
+        return None
+
+    target = "https://itorrents.org/torrent/{}.torrent".format(info_hash)
+    try:
+        async with aiohttp.ClientSession(
+            connector=get_connector(), connector_owner=False, trust_env=True
+        ) as session:
+            async with session.get(
+                target,
+                headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"},
+                timeout=aiohttp.ClientTimeout(total=20),
+                allow_redirects=True,
+            ) as res:
+                body = await res.read()
+                up_name = _dl_filename(res.headers)
+        LOGGER.info(
+            "[TEMP-RT-CACHE] hash=%s status=%d bytes=%d valid=%s",
+            info_hash[:8], res.status, len(body), body.startswith(b"d"),
+        )
+        if res.status == 200 and body.startswith(b"d"):
+            return body, up_name or (info_hash + ".torrent")
+    except Exception as exc:
+        _rt_debug("cached torrent failed:", repr(exc))
+    return None
+
+
 def _dl_filename(headers):
     """Content-Disposition filename: RFC 5987 (filename*=UTF-8'') first,
     plain filename= second."""
@@ -401,6 +435,10 @@ async def fetch_dl_torrent(url):
     when no cookie is configured); its cookies are cached for the next
     download. Returns (torrent_bytes, upstream_filename) or None.
     """
+    cached = await _fetch_cached_torrent(url)
+    if cached:
+        return cached
+
     # Stage A - plain fetch with cookies from the last FlareSolverr solve
     if _plain_cookies:
         headers = {
