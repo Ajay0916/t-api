@@ -92,9 +92,9 @@ class Downloadly:
                 return
             parts = _parse_parts(page)
             if not parts:
+                obj["torrent"] = url
+                obj["download"] = url
                 return
-            obj["torrent"] = parts[0]["url"]
-            obj["download"] = parts[0]["url"]
             h1 = BeautifulSoup(page, "html.parser").select_one("h1")
             if h1:
                 name = h1.get_text(" ", strip=True)
@@ -164,7 +164,7 @@ class Downloadly:
         await asyncio.gather(
             *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in all_results]
         )
-        all_results = [o for o in all_results if o.get("torrent")]
+        all_results = [o for o in all_results if o.get("torrent")]  # keep all (fallback set above)
         total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
         return {"data": all_results[:limit] if limit else all_results,
                 "current_page": page, "total_pages": total_pages,
