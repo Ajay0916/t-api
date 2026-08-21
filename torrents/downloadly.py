@@ -31,7 +31,7 @@ def _parse_parts(html):
     parts = []
     seen = set()
     for a in soup.find_all("a", href=True):
-        href = a["href"]
+        href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
         if not _DL_RE.match(href) or "/Sample/" in href or href in seen:
             continue
         seen.add(href)
