@@ -7,8 +7,14 @@ from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
+import os
+import aiohttp
+
 from constants.base_url import DOWNLOADLY
 from helper.plain_curl import fetch_plain
+
+_MIRROR_URL = "https://downloadlynet.ir"
+_FLARE_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 
 _SKIP_SLUGS = (
     "category", "tag", "page", "feed", "wp-",
@@ -49,10 +55,35 @@ class Downloadly:
         self.LIMIT = None
 
     async def _fetch(self, url, timeout=15):
+        # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
         if html and len(html) > 500:
             return html
-        return await fetch_plain(url, timeout=timeout, family=6)
+        # 2. Plain curl on mirror domain
+        mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
+        html = await fetch_plain(mirror, timeout=timeout)
+        if html and len(html) > 500:
+            return html
+        # 3. FlareSolverr fallback
+        return await self._fetch_flare(url, timeout)
+
+    async def _fetch_flare(self, url, timeout=15):
+        try:
+            payload = {"cmd": "request.get", "url": url, "maxTimeout": timeout * 1000}
+            async with aiohttp.ClientSession() as s:
+                async with s.post(
+                    f"{_FLARE_URL}/v1", json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout + 10),
+                ) as res:
+                    data = await res.json(content_type=None)
+            sol = data.get("solution") or {}
+            if sol.get("status") == 200:
+                html = sol.get("response") or ""
+                if len(html) > 500:
+                    return html
+        except Exception:
+            pass
+        return None
 
     async def _post_page(self, url, obj, sem):
         async with sem:
