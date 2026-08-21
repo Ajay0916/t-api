@@ -1,3 +1,4 @@
+import asyncio
 import re
 from helper.logging_setup import get_logger
 LOGGER = get_logger("tapi.torrent")
@@ -39,6 +40,17 @@ def _upstream_filename(cd):
     if m:
         return m.group(1).strip().strip('"')
     return ""
+
+
+def _proxy_headers(url):
+    """Archive rejects the shared fence-key cookie on redirected file requests."""
+    low = str(url).lower()
+    if "archive.org/" in low or "anayjat15.workers.dev/" in low:
+        return {
+            "User-Agent": HEADER_AIO["User-Agent"],
+            "Accept": "*/*",
+        }
+    return HEADER_AIO
 
 
 def _media_type(filename):
@@ -129,37 +141,56 @@ async def proxy_torrent(
         except Exception:
             pass
 
-    try:
-        session = aiohttp.ClientSession(
-            connector=get_connector(), connector_owner=False, trust_env=True
-        )
-        res = await session.get(
-            url, headers=HEADER_AIO, timeout=TIMEOUT, allow_redirects=True
-        )
-    except Exception:
+    session = None
+    res = None
+    head = b""
+    retry_bitsearch = bool(re.match(r"^https?://bitsearch\.(?:eu|to)/download/torrent/", url, re.I))
+    attempts = 2 if retry_bitsearch else 1
+
+    for attempt in range(attempts):
         try:
-            await session.close()
+            session = aiohttp.ClientSession(
+                connector=get_connector(), connector_owner=False, trust_env=True
+            )
+            res = await session.get(
+                url,
+                headers=_proxy_headers(url),
+                timeout=TIMEOUT,
+                allow_redirects=True,
+            )
         except Exception:
-            pass
-        return JSONResponse(
-            status_code=502, content={"error": "Failed to fetch file."}
-        )
-    if res.status >= 400:
+            if session:
+                await session.close()
+            if attempt + 1 < attempts:
+                await asyncio.sleep(0.8)
+                continue
+            return JSONResponse(
+                status_code=502, content={"error": "Failed to fetch file."}
+            )
+
+        if res.status >= 400:
+            await res.release()
+            await session.close()
+            if attempt + 1 < attempts:
+                await asyncio.sleep(0.8)
+                continue
+            return JSONResponse(
+                status_code=502, content={"error": "Upstream error."}
+            )
+
+        try:
+            head = await res.content.read(512)
+        except Exception:
+            head = b""
+
+        if head and not head.lstrip().startswith(b"<"):
+            break
+
         await res.release()
         await session.close()
-        return JSONResponse(
-            status_code=502, content={"error": "Upstream error."}
-        )
-    # Peek at the start of the body: upstream error pages are HTML and must
-    # be rejected, but real files of any kind (torrent/pdf/epub/zip) pass.
-    try:
-        head = await res.content.read(512)
-    except Exception:
-        head = b""
-    if not head or head.lstrip().startswith(b"<"):
-        await res.release()
-        await session.close()
-        return JSONResponse(status_code=502, content={"error": "Invalid file."})
+        if attempt + 1 >= attempts:
+            return JSONResponse(status_code=502, content={"error": "Invalid file."})
+        await asyncio.sleep(0.8)
 
     up_name = _upstream_filename(res.headers.get("Content-Disposition") or "")
     filename = name or up_name or _safe_filename(url)

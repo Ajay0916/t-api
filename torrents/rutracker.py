@@ -287,6 +287,13 @@ _plain_cookies = {}
 _plain_ua = ""
 
 
+def _invalidate_cf_cookies():
+    """Drop only Cloudflare proof cookies; retain RuTracker login cookies."""
+    for name in list(_plain_cookies):
+        if name.startswith(("cf_", "__cf")):
+            _plain_cookies.pop(name, None)
+
+
 def _cache_solution(solution):
     global _plain_cookies, _plain_ua
     cookies = {
@@ -384,19 +391,20 @@ async def fetch_dl_torrent(url):
             )
             if body[:1] == b"d":
                 return body, up_name
-            _rt_debug("dl.php plain not a torrent -> flare fallback")
+            _invalidate_cf_cookies()
+            _rt_debug("dl.php plain not a torrent -> cleared CF cookies -> flare fallback")
         except Exception as e:
             _rt_debug("dl.php plain failed:", repr(e))
 
     # Stage B - FlareSolverr browser fallback
     for attempt in (1, 2):
-        cookies = _flare_cookie_list(_auth_cookies())
+        cookies = _flare_cookie_list(_cookie_dict() if attempt else _auth_cookies())
         if cookies:
             payload = {
                 "cmd": "request.get",
                 "session": _get_sid(),
                 "url": url,
-                "maxTimeout": 30000,
+                "maxTimeout": 35000 if attempt == 0 else 60000,
                 "cookies": cookies,
             }
         elif _RUTRACKER_USER and _RUTRACKER_PASS:
@@ -428,7 +436,7 @@ async def fetch_dl_torrent(url):
                     async with session.post(
                         f"{FLARESOLVERR_URL}/v1",
                         json=payload,
-                        timeout=aiohttp.ClientTimeout(total=45),
+                        timeout=aiohttp.ClientTimeout(total=75),
                     ) as res:
                         data = await res.json(content_type=None)
             solution = data.get("solution") or {}
@@ -442,10 +450,10 @@ async def fetch_dl_torrent(url):
                 "http", status, "ct", ctype,
             )
             if data.get("status") != "ok" or status != 200:
-                _rt_debug("dl.php flare error -> rotate")
+                _invalidate_cf_cookies()
                 _rotate_sid()
+                _rt_debug("dl.php flare error -> cleared CF cookies -> rotate")
                 continue
-            _cache_solution(solution)
             raw = solution.get("response") or ""
             low = raw[:400].lower()
             if (
@@ -453,8 +461,9 @@ async def fetch_dl_torrent(url):
                 or "cf-chl" in low
                 or "<!doctype html" in low
             ):
-                _rt_debug("dl.php challenge page -> rotate")
+                _invalidate_cf_cookies()
                 _rotate_sid()
+                _rt_debug("dl.php challenge page -> cleared CF cookies -> rotate")
                 continue
             body = raw.encode("utf-8", "replace")
             # FlareSolverr base64-encodes binary bodies; bencode dicts start
@@ -467,11 +476,11 @@ async def fetch_dl_torrent(url):
                 pass
             if not body.startswith(b"d"):
                 _rt_debug("dl.php not a torrent (head:", body[:50], ") -> rotate")
-                if _plain_cookies:
-                    _plain_cookies.clear()
-                    _rt_debug("dl.php stale solve cookies cleared")
+                _invalidate_cf_cookies()
+                _rt_debug("dl.php stale solve CF cookies cleared")
                 _rotate_sid()
                 continue
+            _cache_solution(solution)
             return body, _dl_filename(headers)
         except Exception as e:
             _rt_debug("dl.php flare exception:", repr(e))

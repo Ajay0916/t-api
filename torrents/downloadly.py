@@ -3,7 +3,7 @@ Fresh implementation using fetch_plain (system curl), no proxy/mirror."""
 import asyncio
 import re
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from bs4 import BeautifulSoup
 
@@ -24,7 +24,25 @@ _SKIP_SLUGS = (
 )
 
 _DL_RE = re.compile(r"https?://dl\d*\.downloadly\.ir/")
+_NUMERIC_POST_RE = re.compile(
+    r"^https?://downloadly(?:net)?\.ir/\d{4}/\d{1,2}/\d+/\d{1,2}/([^/]+)(?:/\d+)?/?$",
+    re.I,
+)
+_HOME_MARKS = (
+    '<link rel="canonical" href="https://downloadly.ir/"',
+    '<title>downloadly &#8211; free software download</title>',
+    '<title>downloadly – free software download</title>',
+)
 _PART_RE = re.compile(r"([\d.]+)\s*(?:گیگابایت|GB)", re.I)
+
+
+def _is_wrong_post_response(url, html):
+    """WordPress sometimes answers a post URL with the cached homepage."""
+    path = urlsplit(url).path.rstrip("/")
+    if not html or len(html) < 500 or path in ("", "/"):
+        return False
+    low = html[:100000].lower()
+    return any(mark in low for mark in _HOME_MARKS)
 
 
 def _parse_parts(html):
@@ -63,12 +81,12 @@ class Downloadly:
     async def _fetch(self, url, timeout=15):
         # 1. Plain curl on primary domain
         html = await fetch_plain(url, timeout=timeout)
-        if html and len(html) > 500:
+        if html and len(html) > 500 and not _is_wrong_post_response(url, html):
             return html
         # 2. Plain curl on mirror domain
         mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
         html = await fetch_plain(mirror, timeout=timeout)
-        if html and len(html) > 500:
+        if html and len(html) > 500 and not _is_wrong_post_response(url, html):
             return html
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
@@ -161,6 +179,26 @@ class Downloadly:
                 ]
 
     @staticmethod
+    def _canonical_post_href(href, card):
+        """Translate the legacy numeric listing URL to its real category URL."""
+        match = _NUMERIC_POST_RE.match(href)
+        if not match:
+            return href
+        slug = match.group(1)
+        candidates = []
+        for a in card.find_all("a", href=True):
+            candidate = a["href"].replace("downloadlynet.ir", "downloadly.ir")
+            if (
+                slug.lower() in candidate.lower()
+                and not _NUMERIC_POST_RE.match(candidate)
+                and any(part in candidate for part in ("/elearning/", "/download/software/", "/software/", "/mobile/"))
+            ):
+                candidates.append(candidate.split("#", 1)[0].rstrip("/") + "/")
+        if candidates:
+            return max(candidates, key=lambda item: item.count("/"))
+        return "https://downloadly.ir/elearning/video-tutorials/{}/".format(slug)
+
+    @staticmethod
     def _parse_grid(html, seen, limit=None):
         """Parse w-grid-item divs from any page."""
         soup = BeautifulSoup(html, "html.parser")
@@ -171,6 +209,7 @@ class Downloadly:
             if not a:
                 continue
             href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
+            href = Downloadly._canonical_post_href(href, div)
             if href in seen or any(s in href for s in _SKIP_SLUGS):
                 continue
             name = a.get_text(" ", strip=True)
