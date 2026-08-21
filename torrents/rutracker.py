@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import hashlib
 import os
 import re
 import time
@@ -10,13 +9,11 @@ from urllib.parse import quote, quote_plus, unquote, urlencode, urlsplit
 import aiohttp
 from bs4 import BeautifulSoup
 
-from helper.logging_setup import get_logger
 from helper.search_cache import TTLCache
 from helper.session import close_flare_session_async, get_connector
 
 FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
 _MAGNET_CACHE = TTLCache(max_size=2048, ttl=21600, name="rutracker_magnet")
-LOGGER = get_logger("tapi.rutracker")
 FLARESOLVERR_ENRICH = (os.getenv("FLARESOLVERR_ENRICH") or "1").strip().lower() not in ("0", "false", "no")
 _RUTRACKER_BASE = "https://rutracker.org"
 _RUTRACKER_USER = os.getenv("RUTRACKER_USERNAME", "").strip()
@@ -358,23 +355,6 @@ def _flare_auth_cookies():
     return list(merged.values())
 
 
-def _safe_cookie_objects(items):
-    """Cookie metadata/fingerprints only; never log cookie values."""
-    out = []
-    for item in items or []:
-        value = str(item.get("value") or "")
-        out.append({
-            "name": item.get("name"),
-            "len": len(value),
-            "fp": hashlib.sha256(value.encode()).hexdigest()[:6] if value else "",
-            "domain": item.get("domain"),
-            "path": item.get("path"),
-            "secure": item.get("secure"),
-            "httpOnly": item.get("httpOnly"),
-        })
-    return out
-
-
 async def _fetch_cached_torrent(url):
     """Recover a topic torrent from its enriched magnet info-hash."""
     tid_m = re.search(r"[?&]t=(\d+)", str(url))
@@ -398,10 +378,6 @@ async def _fetch_cached_torrent(url):
             ) as res:
                 body = await res.read()
                 up_name = _dl_filename(res.headers)
-        LOGGER.info(
-            "[TEMP-RT-CACHE] hash=%s status=%d bytes=%d valid=%s",
-            info_hash[:8], res.status, len(body), body.startswith(b"d"),
-        )
         if res.status == 200 and body.startswith(b"d"):
             return body, up_name or (info_hash + ".torrent")
     except Exception as exc:
@@ -472,8 +448,6 @@ async def fetch_dl_torrent(url):
             _rt_debug("dl.php plain failed:", repr(e))
 
     # Stage B - FlareSolverr browser fallback
-    cookie_names = sorted(_cookie_dict())
-    LOGGER.info("[TEMP-RT-AUTH] dl=%s cookie_names=%s count=%d", url, cookie_names, len(cookie_names))
     for attempt in (1, 2):
         cookies = _flare_auth_cookies()
         if cookies:
@@ -520,12 +494,6 @@ async def fetch_dl_torrent(url):
             status = solution.get("status")
             headers = solution.get("headers") or {}
             ctype = str(headers.get("content-type") or "").lower()
-            LOGGER.info(
-                "[TEMP-RT-AUTH] sent_cookies=%s received_cookies=%s solution_url=%s",
-                _safe_cookie_objects(cookies),
-                _safe_cookie_objects(solution.get("cookies")),
-                str(solution.get("url") or "")[:100],
-            )
             _rt_debug(
                 "dl.php flare attempt", attempt,
                 "flare_status", data.get("status"),
@@ -538,20 +506,6 @@ async def fetch_dl_torrent(url):
                 continue
             _cache_solution(solution)
             raw = solution.get("response") or ""
-            guest = re.search(r"IS_GUEST:\s*!!'(\d)'", raw)
-            LOGGER.info(
-                "[TEMP-RT-AUTH] flare attempt=%d http=%s ct=%s bytes=%d guest=%s title=%s",
-                attempt, status, ctype, len(raw), guest.group(1) if guest else "?",
-                re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S).group(1)[:80].replace("\n", " ") if re.search(r"<title>(.*?)</title>", raw[:5000], re.I | re.S) else "",
-            )
-            low_raw = raw[:20000].lower() if raw.lstrip().startswith("<") else ""
-            LOGGER.info(
-                "[TEMP-RT-AUTH] markers logout=%s profile=%s login_form=%s captcha=%s",
-                "login.php?logout=1" in low_raw,
-                "profile.php?mode=viewprofile" in low_raw,
-                "enter_your_name_and_password".lower() in low_raw or "введите ваше имя и пароль" in low_raw,
-                "код подтверждения" in low_raw,
-            )
             low = raw[:400].lower()
             if (
                 "just a moment" in low
@@ -657,12 +611,6 @@ class RuTracker:
         # Keep cookies/UA from every successful solve: the next dl.php
         # download then skips the browser round-trip (see fetch_dl_torrent).
         _cache_solution(solution)
-        guest = re.search(r"IS_GUEST:\s*!!'(\d)'", html)
-        LOGGER.info(
-            "[TEMP-RT-AUTH] page url=%s bytes=%d guest=%s",
-            str(payload.get("url") or "")[:120], len(html),
-            guest.group(1) if guest else "?",
-        )
         return html
 
     async def _fetch_html(self, url, timeout):
