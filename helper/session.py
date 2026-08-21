@@ -75,8 +75,9 @@ async def sweep_flare_sessions(flare_url="http://127.0.0.1:8191"):
                 timeout=aiohttp.ClientTimeout(total=8),
             ) as res:
                 data = await res.json(content_type=None)
+        reserved = {"downloadly_persistent"}
         for sid in data.get("sessions") or []:
-            if isinstance(sid, str) and sid:
+            if isinstance(sid, str) and sid and sid not in reserved:
                 await close_flare_session(sid, flare_url)
     except Exception:
         pass

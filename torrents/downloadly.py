@@ -64,7 +64,7 @@ class Downloadly:
         if html and len(html) > 500:
             return html
         # Primary domain only; mirror post URLs refuse connections.
-        return await self._fetch_flare(url, timeout)
+        return await self._fetch_flare(url, timeout=max(timeout, 28))
 
     async def _fetch_flare(self, url, timeout=15):
         for attempt in range(2):
