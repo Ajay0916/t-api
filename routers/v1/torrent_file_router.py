@@ -42,6 +42,33 @@ def _upstream_filename(cd):
     return ""
 
 
+async def _resolve_archive_url(url):
+    """Use Archive's metadata node; /download redirects can hit broken nodes."""
+    m = re.match(r"^https?://archive\.org/download/([^/]+)/(.+)$", str(url), re.I)
+    if not m:
+        return url
+    identifier, path = m.groups()
+    try:
+        async with aiohttp.ClientSession(
+            connector=get_connector(), connector_owner=False, trust_env=True
+        ) as session:
+            async with session.get(
+                "https://archive.org/metadata/" + quote(identifier),
+                headers=_proxy_headers("https://archive.org/"),
+                timeout=aiohttp.ClientTimeout(total=25),
+            ) as res:
+                if res.status != 200:
+                    return url
+                metadata = await res.json(content_type=None)
+        server = (metadata.get("server") or "").strip("/")
+        directory = (metadata.get("dir") or "").strip("/")
+        if not server or not directory:
+            return url
+        return "https://{}/{}/{}".format(server, directory, quote(path))
+    except Exception:
+        return url
+
+
 def _proxy_headers(url):
     """Archive rejects the shared fence-key cookie on redirected file requests."""
     low = str(url).lower()
@@ -126,6 +153,9 @@ async def proxy_torrent(
             headers={"Content-Disposition": disposition},
         )
 
+    if re.match(r"^https?://archive\.org/download/", url, re.I):
+        url = await _resolve_archive_url(url)
+
     # Downloadly post URLs: resolve actual dl*.downloadly.ir file link first
     _is_dl_post = (
         ("downloadly.ir/" in url.lower() or "downloadlynet.ir/" in url.lower())
@@ -174,7 +204,6 @@ async def proxy_torrent(
             if attempt + 1 < attempts:
                 await asyncio.sleep(0.8)
                 continue
-            LOGGER.info("[TEMP-PROXY] upstream status=%d url=%s final=%s ct=%s", res.status, url, res.url, res.headers.get("Content-Type"))
             return JSONResponse(
                 status_code=502, content={"error": "Upstream error."}
             )
