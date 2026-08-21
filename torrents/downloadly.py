@@ -11,7 +11,7 @@ import os
 import aiohttp
 
 from constants.base_url import DOWNLOADLY
-from helper.plain_curl import fetch_plain
+from helper.plain_curl import fetch_plain, _is_cf_challenge
 
 _MIRROR_URL = "https://downloadlynet.ir"
 _FLARE_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rstrip("/")
@@ -87,17 +87,14 @@ class Downloadly:
 
     async def _post_page(self, url, obj, sem):
         async with sem:
-            # Try plain curl on original URL first (works for downloadlynet.ir)
+            # Try plain curl on original URL first
             page = await fetch_plain(url, timeout=10)
-            if not page or len(page) < 500:
-                # Try mirror if original is downloadly.ir
-                if "downloadly.ir" in url:
-                    mirror = url.replace("downloadly.ir", "downloadlynet.ir", 1)
-                    page = await fetch_plain(mirror, timeout=10)
-                else:
-                    # Already mirror, try FlareSolverr
-                    page = await self._fetch_flare(url)
-            if not page or len(page) < 500:
+            if page and (_is_cf_challenge(page) or len(page) < 1000):
+                page = None
+            if not page:
+                # Try FlareSolverr directly (plain curl blocked on main site)
+                page = await self._fetch_flare(url, timeout=15)
+            if not page or len(page) < 1000 or _is_cf_challenge(page):
                 return
             parts = _parse_parts(page)
             if not parts:
