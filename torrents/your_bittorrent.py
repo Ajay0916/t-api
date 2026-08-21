@@ -60,14 +60,50 @@ class YourBittorrent:
         self.BASE_URL = YOURBITTORRENT
         self.LIMIT = None
 
+    async def _jina_html(self, session, url):
+        """Last-resort reader fetch that returns the original HTML."""
+        target = "https://r.jina.ai/" + url
+        try:
+            async with session.get(
+                target,
+                headers={
+                    "User-Agent": HEADER_AIO["User-Agent"],
+                    "Accept": "text/html,*/*",
+                    "X-Return-Format": "html",
+                },
+                timeout=aiohttp.ClientTimeout(total=45),
+            ) as res:
+                if res.status >= 400:
+                    print(f"[TEMP-YBT] jina http={res.status} url={url[:100]}", flush=True)
+                    return None
+                html = await res.text(encoding="utf-8", errors="replace")
+            print(
+                f"[TEMP-YBT] jina ok bytes={len(html)} url={url[:100]}",
+                flush=True,
+            )
+            return html.lstrip().lower().startswith("<!doctype html") and html or None
+        except Exception as exc:
+            print(f"[TEMP-YBT] jina failed type={type(exc).__name__} url={url[:100]}", flush=True)
+            return None
+
     @decorator_asyncio_fix
     async def _individual_scrap(self, session, url, obj, sem):
         async with sem:
             try:
-                async with session.get(
-                    url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
-                ) as res:
-                    html = await res.text(encoding="ISO-8859-1")
+                try:
+                    async with session.get(
+                        url, headers=HEADER_AIO, timeout=AIO_TIMEOUT
+                    ) as res:
+                        if res.status >= 400:
+                            html = None
+                        else:
+                            html = await res.text(encoding="ISO-8859-1")
+                except Exception:
+                    html = None
+                if not html:
+                    html = await self._jina_html(session, url)
+                if not html:
+                    return None
                 soup = BeautifulSoup(html, "html.parser")
                 try:
                     torrent_a = soup.find(
@@ -209,6 +245,9 @@ class YourBittorrent:
             if htmls and htmls[0]:
                 self.BASE_URL = host
                 return htmls
+        html = await self._jina_html(session, url)
+        if html:
+            return [html]
         return None
 
     async def parser_result(self, start_time, url, session, idx=1):
