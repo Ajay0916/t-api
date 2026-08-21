@@ -153,8 +153,7 @@ class _RuTranslator:
     def __init__(self):
         self._sem = asyncio.Semaphore(5)
 
-    async def _provider(self, session, name, url, parser, title):
-        started = time.perf_counter()
+    async def _provider(self, session, url, parser, title):
         try:
             async with session.get(
                 url,
@@ -167,22 +166,17 @@ class _RuTranslator:
             if any(mark in out.upper() for mark in blocked):
                 ok = False
             return out if ok else None
-        except Exception as exc:
+        except Exception:
             return None
 
     async def run(self, results):
         if not results:
             return results
-        started = time.perf_counter()
-        success = 0
-        fallback = 0
-
         async with aiohttp.ClientSession(
             connector=get_connector(), connector_owner=False, trust_env=True
         ) as session:
 
             async def one(item):
-                nonlocal success, fallback
                 async with self._sem:
                     title = item.get("name") or ""
                     if title in _TRANS_CACHE:
@@ -192,9 +186,6 @@ class _RuTranslator:
                         if translated:
                             item["name"] = translated
                             _TRANS_CACHE[title] = translated
-                            success += 1
-                        else:
-                            fallback += 1
                     cat = item.get("category") or ""
                     if cat in _TRANS_CACHE:
                         item["category"] = _TRANS_CACHE[cat]
@@ -221,7 +212,6 @@ class _RuTranslator:
             title = item.get("name") or ""
             if _CYRILLIC_RE.search(title):
                 item["name"] = _transliterate(title)
-                fallback += 1
             cat = item.get("category") or ""
             if _CYRILLIC_RE.search(cat):
                 item["category"] = _transliterate(cat)
@@ -231,7 +221,6 @@ class _RuTranslator:
         google_url = self._GOOGLE_URL.format(quote(title[:480]))
         google = await self._provider(
             session,
-            "google",
             google_url,
             lambda data: "".join(
                 part[0]
@@ -244,7 +233,6 @@ class _RuTranslator:
             return google
         mymemory = await self._provider(
             session,
-            "mymemory",
             self._MYMEMORY_URL.format(quote(title[:480])),
             lambda data: ((data or {}).get("responseData") or {}).get("translatedText") or "",
             title,
