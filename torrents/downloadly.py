@@ -121,7 +121,7 @@ class Downloadly:
             a = h2.find("a", href=True) if h2 else None
             if not a:
                 continue
-            href = a["href"]
+            href = a["href"].replace("downloadlynet.ir", "downloadly.ir")
             if href in seen or any(s in href for s in _SKIP_SLUGS):
                 continue
             name = a.get_text(" ", strip=True)
