@@ -91,6 +91,14 @@ class Downloadly:
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
             html = await self._fetch_flare(url, timeout=max(timeout, 28))
+        if html and _is_wrong_post_response(url, html):
+            # A persistent browser context can cache WordPress's homepage for
+            # a post. Destroy it and try once with a clean context.
+            await self._reset_flare_session()
+            async with self._flare_request_lock:
+                html = await self._fetch_flare(url, timeout=max(timeout, 28))
+            if html and _is_wrong_post_response(url, html):
+                return None
         return html
 
     async def _fetch_flare(self, url, timeout=15):
