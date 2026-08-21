@@ -149,11 +149,9 @@ class Downloadly:
             else:
                 url = "{}/?s={}&paged={}".format(self.BASE_URL, quote(query), pageno)
                 html = await self._fetch_flare(url, timeout=15)
-            print(f"[DL] page={pageno} url={url[:60]} html={'YES' if html else 'NONE'} len={len(html) if html else 0}")
             if not html:
                 break
             more = self._parse_grid(html, seen)
-            print(f"[DL] page={pageno} parsed={len(more)} new_items")
             if not more:
                 break
             all_results.extend(more)
