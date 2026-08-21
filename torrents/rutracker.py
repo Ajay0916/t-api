@@ -366,6 +366,7 @@ async def fetch_dl_torrent(url):
     when no cookie is configured); its cookies are cached for the next
     download. Returns (torrent_bytes, upstream_filename) or None.
     """
+    LOGGER.info("[TEMP-RT] start url=%s plain_cookies=%d manual_cookie=%s userpass=%s", url, len(_plain_cookies), bool(_RUTRACKER_COOKIE), bool(_RUTRACKER_USER and _RUTRACKER_PASS))
     # Stage A - plain fetch with cookies from the last FlareSolverr solve
     if _plain_cookies:
         headers = {
