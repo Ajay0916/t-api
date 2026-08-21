@@ -115,7 +115,11 @@ async def proxy_torrent(
         )
 
     # Downloadly post URLs: resolve actual dl*.downloadly.ir file link first
-    if "downloadly.ir/" in url.lower() and "dl" not in url.split("//")[1].split(".")[0]:
+    _is_dl_post = (
+        ("downloadly.ir/" in url.lower() or "downloadlynet.ir/" in url.lower())
+        and not re.match(r"https?://dl\d*\.", url)
+    )
+    if _is_dl_post:
         try:
             parts = await Downloadly().resolve_parts(url)
             if parts:
