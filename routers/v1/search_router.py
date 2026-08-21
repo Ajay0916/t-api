@@ -151,13 +151,7 @@ async def search_for_torrents(
     include = (include or "").strip().lower()
     min_size = (min_size or "").strip().lower()
     max_size = (max_size or "").strip().lower()
-    all_sites = check_if_site_available(site)
-    if not all_sites:
-        return error_handler(
-            status_code=status.HTTP_404_NOT_FOUND,
-            json_message={"error": "Selected Site Not Available"},
-        )
-    # Special case: _restart triggers t-API restart
+    # Special case: _restart triggers t-API restart (before site check)
     if site == "_restart":
         import subprocess as _sp, threading, time as _time
         repo = os.path.dirname(os.path.abspath(__file__)).replace("/routers/v1", "")
@@ -182,6 +176,13 @@ async def search_for_torrents(
         import threading
         threading.Thread(target=_bg, daemon=True).start()
         return {"data": [{"name": "✅ t-API Restarting...", "url": "#", "category": "System"}], "current_page": 1, "total_pages": 1, "time": 0.1, "total": 1}
+
+    all_sites = check_if_site_available(site)
+    if not all_sites:
+        return error_handler(
+            status_code=status.HTTP_404_NOT_FOUND,
+            json_message={"error": "Selected Site Not Available"},
+        )
 
     if site_health.is_manually_blocked(site):
         return error_handler(
