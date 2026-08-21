@@ -377,7 +377,7 @@ def _safe_cookie_objects(items):
 
 async def _fetch_cached_torrent(url):
     """Recover a topic torrent from its enriched magnet info-hash."""
-    tid_m = re.search(r"[?&]t=(\\d+)", str(url))
+    tid_m = re.search(r"[?&]t=(\d+)", str(url))
     if not tid_m:
         return None
     extra = _MAGNET_CACHE.get(tid_m.group(1))
