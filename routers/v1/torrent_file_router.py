@@ -11,6 +11,7 @@ from constants.headers import HEADER_AIO
 from helper.session import get_connector
 from helper.short_links import lookup
 from torrents.rutracker import fetch_dl_torrent
+from torrents.downloadly import Downloadly
 
 router = APIRouter(tags=["Torrent File Proxy"])
 
@@ -112,6 +113,17 @@ async def proxy_torrent(
             media_type="application/x-bittorrent",
             headers={"Content-Disposition": disposition},
         )
+
+    # Downloadly post URLs: resolve actual dl*.downloadly.ir file link first
+    if "downloadly.ir/" in url.lower() and "dl" not in url.split("//")[1].split(".")[0]:
+        try:
+            parts = await Downloadly().resolve_parts(url)
+            if parts:
+                url = parts[0]["url"]
+                if not name:
+                    name = parts[0].get("label", "") or "downloadly_download"
+        except Exception:
+            pass
 
     try:
         session = aiohttp.ClientSession(

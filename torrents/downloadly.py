@@ -174,6 +174,13 @@ class Downloadly:
                 "current_page": page, "total_pages": total_pages,
                 "time": time.time() - start_time, "total": len(all_results)}
 
+    async def resolve_parts(self, post_url):
+        """Fetch download links from a post page via FlareSolverr."""
+        html = await self._fetch_flare(post_url, timeout=20)
+        if not html or len(html) < 1000 or _is_cf_challenge(html):
+            return []
+        return _parse_parts(html)
+
     async def trending(self, category, page, limit):
         return None
 
