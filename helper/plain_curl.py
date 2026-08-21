@@ -6,7 +6,6 @@ CHROME_UA = (
 )
 
 CF_CHALLENGE_MARKERS = (
-    "data-cf-beacon",
     "cf-chl",
     "challenge-platform",
     "cf-browser-verification",
