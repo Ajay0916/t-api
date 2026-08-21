@@ -28,11 +28,11 @@ _NUMERIC_POST_RE = re.compile(
     r"^https?://downloadly(?:net)?\.ir/\d{4}/\d{1,2}/\d+/\d{1,2}/([^/]+)(?:/\d+)?/?$",
     re.I,
 )
-_HOME_MARKS = (
-    '<link rel="canonical" href="https://downloadly.ir/"',
-    '<title>downloadly &#8211; free software download</title>',
-    '<title>downloadly – free software download</title>',
+_HOME_CANONICAL_RE = re.compile(
+    r'<link[^>]+rel=["\']canonical["\'][^>]+href=["\']https://downloadly(?:net)?\.ir/?["\']',
+    re.I,
 )
+_HOME_TITLE_RE = re.compile(r'<title[^>]*>\s*Downloadly\s*[–-]\s*Free Software Download', re.I)
 _PART_RE = re.compile(r"([\d.]+)\s*(?:گیگابایت|GB)", re.I)
 
 
@@ -41,8 +41,8 @@ def _is_wrong_post_response(url, html):
     path = urlsplit(url).path.rstrip("/")
     if not html or len(html) < 500 or path in ("", "/"):
         return False
-    low = html[:100000].lower()
-    return any(mark in low for mark in _HOME_MARKS)
+    head = html[:100000]
+    return bool(_HOME_CANONICAL_RE.search(head) or _HOME_TITLE_RE.search(head))
 
 
 def _parse_parts(html):
