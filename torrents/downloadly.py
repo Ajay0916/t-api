@@ -96,21 +96,25 @@ class Downloadly:
             # a post. Destroy it and try once with a clean context.
             await self._reset_flare_session()
             async with self._flare_request_lock:
-                html = await self._fetch_flare(url, timeout=max(timeout, 28))
+                html = await self._fetch_flare(
+                    url, timeout=max(timeout, 28), use_session=False
+                )
             if html and _is_wrong_post_response(url, html):
                 return None
         return html
 
-    async def _fetch_flare(self, url, timeout=15):
+    async def _fetch_flare(self, url, timeout=15, use_session=True):
         for attempt in range(2):
             try:
-                await self._ensure_flare_session()
+                if use_session:
+                    await self._ensure_flare_session()
                 payload = {
                     "cmd": "request.get",
                     "url": url,
-                    "session": self._flare_session,
                     "maxTimeout": timeout * 1000,
                 }
+                if use_session:
+                    payload["session"] = self._flare_session
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         f"{_FLARE_URL}/v1", json=payload,
