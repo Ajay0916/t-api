@@ -135,13 +135,8 @@ class Downloadly:
             # One persistent browser context avoids repeated Cloudflare challenges.
             page = await self._fetch_flare(url, timeout=15)
             if not page or len(page) < 1000 or _is_cf_challenge(page):
-                _LOGGER.info(
-                    "Downloadly post rejected url=%s len=%s challenge=%s",
-                    url, len(page or ""), _is_cf_challenge(page or ""),
-                )
                 return
             parts = _parse_parts(page)
-            _LOGGER.info("Downloadly post parsed url=%s parts=%s", url, len(parts))
             if not parts:
                 obj["torrent"] = url
                 obj["download"] = url
