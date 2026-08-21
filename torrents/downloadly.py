@@ -166,11 +166,9 @@ class Downloadly:
             return {"data": [], "current_page": page, "total_pages": 1,
                     "time": time.time() - start_time, "total": 0}
 
-        sem = asyncio.Semaphore(3)
-        await asyncio.gather(
-            *[asyncio.create_task(self._post_page(o["url"], o, sem)) for o in all_results]
-        )
-        all_results = [o for o in all_results if o.get("torrents")]
+        for o in all_results:
+            o["torrent"] = o["url"]
+            o["download"] = o["url"]
         total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
         return {"data": all_results[:limit] if limit else all_results,
                 "current_page": page, "total_pages": total_pages,
