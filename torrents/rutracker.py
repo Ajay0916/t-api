@@ -160,7 +160,7 @@ class _RuTranslator:
             async def one(item):
                 async with self._sem:
                     title = item.get("name") or ""
-                    if title in _TRANS_CACHE:
+                    if title in _TRANS_CACHE and "MYMEMORY WARNING" not in _TRANS_CACHE[title].upper():
                         item["name"] = _TRANS_CACHE[title]
                     elif _CYRILLIC_RE.search(title):
                         translated = await self._translate(session, title)
@@ -205,7 +205,8 @@ class _RuTranslator:
                 data = await res.json(content_type=None)
             out = ((data or {}).get("responseData") or {}).get("translatedText") or ""
             out = str(out).strip()
-            if out and out.lower() != title.lower() and "QUERY LENGTH" not in out.upper():
+            blocked = ("MYMEMORY WARNING", "QUERY LENGTH")
+            if out and out.lower() != title.lower() and not any(mark in out.upper() for mark in blocked):
                 return out
         except Exception:
             pass
@@ -676,6 +677,7 @@ class RuTracker:
 
     async def search(self, query, page, limit):
         start_time = time.time()
+        perf_start = time.perf_counter()
         self.LIMIT = limit or None
         try:
             page = max(int(page or 1) - 1, 0)
@@ -704,7 +706,7 @@ class RuTracker:
             # Login page/captcha came back → auth failed (bad creds/blocked).
             return None
         raw = self._parse_rows(html)
-        LOGGER.info("[TEMP-TIMING] rutracker search duration=%.2f rows=%d", time.perf_counter()-start_time, len(raw))
+        LOGGER.info("[TEMP-TIMING] rutracker search duration=%.2f rows=%d", time.perf_counter()-perf_start, len(raw))
         if not raw and not self._is_login_page(html):
             counter = re.search(r"Результатов поиска:\s*(\d+)", html)
             if counter and int(counter.group(1)) > 0:
@@ -738,7 +740,7 @@ class RuTracker:
             elapsed = time.time() - start_time
             enrich_budget = max(8.0, min(22.0, 38.0 - elapsed))
             done, pending = await asyncio.wait(tasks, timeout=enrich_budget)
-            LOGGER.info("[TEMP-TIMING] rutracker enrich budget=%.2f total=%d done=%d duration=%.2f", enrich_budget, enrich_n, len(done), time.perf_counter()-start_time)
+            LOGGER.info("[TEMP-TIMING] rutracker enrich budget=%.2f total=%d done=%d duration=%.2f", enrich_budget, enrich_n, len(done), time.perf_counter()-perf_start)
             _rt_debug("enrich", enrich_n, "budget", round(enrich_budget, 1), "done", len(done))
             for t in pending:
                 t.cancel()

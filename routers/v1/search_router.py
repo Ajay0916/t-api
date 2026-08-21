@@ -76,13 +76,17 @@ async def _search_paginated(website, query, start_page, end_page, per_page, want
         return await _search_with_retry(website, query, start_page, per_page, deadline)
 
     started = time.monotonic()
+    started_wall = time.time()
     expires_at = started + deadline
     site_name = getattr(website, "_name", website.__name__ if isinstance(website, type) else str(website))
     rows, seen, total_pages = [], set(), 1
     resp = None
     for p in range(start_page, end_page + 1):
         try:
-            remaining = max(1.0, expires_at - time.monotonic())
+            # A page that has already started gets a short grace floor. This
+            # prevents the last partial batch from losing every row while still
+            # keeping the overall multi-page deadline meaningful.
+            remaining = max(min(35.0, deadline), expires_at - time.monotonic(), 1.0)
             page_started = time.monotonic()
             LOGGER.info("[TEMP-TIMING] page-start site=%s page=%s remaining=%.2f", site_name, p, remaining)
             resp = await _search_with_retry(website, query, p, per_page, remaining)
@@ -121,7 +125,7 @@ async def _search_paginated(website, query, start_page, end_page, per_page, want
         "current_page": start_page,
         "total_pages": total_pages,
         "total": len(rows),
-        "time": time.time() - (time.monotonic() - started),
+        "time": time.time() - started_wall,
     }
 
 
