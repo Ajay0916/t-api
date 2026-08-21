@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from helper.dependencies import authenticate_request
 from helper.logging_setup import get_logger
-from helper.pin_manager import set_active_pin, state_exists, verify_active_pin
+from helper.pin_manager import set_active_pin, verify_current_pin
 
 router = APIRouter(tags=["PIN"])
 LOGGER = get_logger("tapi.pin")
@@ -92,7 +92,7 @@ async def change_pin(request: Request, payload: PinChangeRequest):
     new_pin = payload.new_pin.strip()
     confirm_pin = payload.confirm_new_pin.strip()
 
-    if not state_exists() or not verify_active_pin(current_pin):
+    if not verify_current_pin(current_pin):
         await _record_attempt(rate_key, success=False)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

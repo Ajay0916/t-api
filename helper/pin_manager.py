@@ -77,6 +77,15 @@ def verify_active_pin(pin: str) -> bool:
     return valid
 
 
+def verify_current_pin(pin: str) -> bool:
+    """Verify the rotated PIN, falling back to the bootstrap environment PIN."""
+    if state_exists():
+        return verify_active_pin(pin)
+
+    initial_pin = os.environ.get("PYTORRENT_API_KEY") or os.environ.get("API_PIN") or ""
+    return bool(pin and initial_pin and hmac.compare_digest(pin, initial_pin))
+
+
 def set_active_pin(pin: str) -> None:
     global _cached_active_pin
 
