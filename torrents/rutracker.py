@@ -287,17 +287,30 @@ def _rt_debug(*args):
 # datacenter IP directly instead of forcing a ~15s browser solve per file.
 _plain_cookies = {}
 _plain_ua = ""
+_plain_cookie_objects = []
 
 
 def _cache_solution(solution):
-    global _plain_cookies, _plain_ua
+    global _plain_cookies, _plain_ua, _plain_cookie_objects
+    cookie_objects = []
     cookies = {
         c.get("name"): c.get("value")
         for c in (solution.get("cookies") or [])
         if c.get("name") and c.get("value")
     }
+    for item in solution.get("cookies") or []:
+        name = (item.get("name") or "").strip()
+        value = (item.get("value") or "").strip()
+        if not name or not value:
+            continue
+        entry = {"name": name, "value": value}
+        for key in ("domain", "path", "secure", "httpOnly"):
+            if key in item:
+                entry[key] = item[key]
+        cookie_objects.append(entry)
     if cookies:
         _plain_cookies = cookies
+        _plain_cookie_objects = cookie_objects
     if solution.get("userAgent"):
         _plain_ua = solution.get("userAgent")
 
@@ -323,13 +336,25 @@ def _merge_cookie_list(cookies):
     return merged
 
 
-def _flare_cookie_list(cookies):
-    """Plain {name: value} -> FlareSolverr [{"name": .., "value": ..}]."""
-    return [
-        {"name": k, "value": v}
-        for k, v in (cookies or {}).items()
-        if k and v
-    ]
+def _flare_auth_cookies():
+    """FlareSolverr cookie objects with configured auth metadata applied."""
+    merged = {}
+    for item in _plain_cookie_objects:
+        name = (item.get("name") or "").strip()
+        value = (item.get("value") or "").strip()
+        if name and value:
+            merged[name] = dict(item)
+
+    for name, value in _cookie_dict().items():
+        merged[name] = {
+            "name": name,
+            "value": value,
+            "domain": ".rutracker.org",
+            "path": "/forum/",
+            "secure": name == "bb_session",
+            "httpOnly": True,
+        }
+    return list(merged.values())
 
 
 def _dl_filename(headers):
@@ -394,7 +419,7 @@ async def fetch_dl_torrent(url):
     cookie_names = sorted(_cookie_dict())
     LOGGER.info("[TEMP-RT-AUTH] dl=%s cookie_names=%s count=%d", url, cookie_names, len(cookie_names))
     for attempt in (1, 2):
-        cookies = _flare_cookie_list(_auth_cookies())
+        cookies = _flare_auth_cookies()
         if cookies:
             payload = {
                 "cmd": "request.get",
@@ -577,7 +602,7 @@ class RuTracker:
             "maxTimeout": 55000,
             "session": _get_sid(),
         }
-        cookies = _flare_cookie_list(_auth_cookies())
+        cookies = _flare_auth_cookies()
         if cookies:
             # Reuse a warm session across flows (challenge solves are slow,
             # ~10-15s each, and the API deadline is 28s). Explicit cookies
