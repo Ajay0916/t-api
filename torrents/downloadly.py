@@ -284,12 +284,21 @@ class Downloadly:
             return {"data": [], "current_page": page, "total_pages": 1,
                     "time": time.time() - start_time, "total": 0}
 
-        # Post pages intermittently serve the homepage to datacenter IPs.
-        # Return the reliable search listing immediately; the bot links the
-        # primary post page, which works from the user's browser.
+        # Fetch post pages concurrently to extract real download links.
+        sem = asyncio.Semaphore(3)
+        tasks = [self._post_page(item["url"], item, sem) for item in all_results]
+        await asyncio.gather(*tasks)
+
         for item in all_results:
-            item["torrent"] = item["url"]
-            item["download"] = item["url"]
+            item.setdefault("torrent", item["url"])
+            item.setdefault("download", item["url"])
+            if item.get("torrents"):
+                parts = [
+                    {"label": t.get("quality", ""), "size": t.get("size", ""),
+                     "url": t.get("torrent", "")}
+                    for t in item["torrents"]
+                ]
+                item["parts"] = parts
 
         total_pages = min(max_pages, max(1, (len(all_results) + 9) // 10))
         return {"data": all_results[:limit] if limit else all_results,
