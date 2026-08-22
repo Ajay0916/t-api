@@ -99,7 +99,9 @@ class Downloadly:
             return html
         # 3. FlareSolverr fallback; the persistent context must not receive overlapping requests.
         async with self._flare_request_lock:
+            _LOGGER.info("[DL-DEBUG] trying flaresolverr for %s", url[-40:])
             html = await self._fetch_flare(url, timeout=max(timeout, 60))
+            _LOGGER.info("[DL-DEBUG] flaresolverr result len=%s", len(html) if html else 0)
         if html and _is_wrong_post_response(url, html):
             # A persistent browser context can cache WordPress's homepage for
             # a post. Destroy it and try once with a clean context.
@@ -181,6 +183,7 @@ class Downloadly:
         async with sem:
             # One persistent browser context avoids repeated Cloudflare challenges.
             page = await self._fetch(url, timeout=15)
+            _LOGGER.info("[DL-DEBUG] post_page %s -> len=%s", url[-40:], len(page) if page else 0)
             if not page or len(page) < 1000 or _is_cf_challenge(page):
                 return
             parts = _parse_parts(page)
