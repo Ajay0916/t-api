@@ -31,30 +31,38 @@ FLARESOLVERR_URL = (os.getenv("FLARESOLVERR_URL") or "http://127.0.0.1:8191").rs
 
 
 async def _test_plain(url, timeout=12):
-    """Plain HTTP fetch via curl — no browser."""
+    """Plain HTTP fetch via curl — no browser. Reports real HTTP status."""
     t0 = time.time()
-    html = await fetch_plain(url, timeout=timeout)
+    proc = await asyncio.create_subprocess_exec(
+        "curl", "-sL", "-4", "-A",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "-w", "\n%{http_code}", "--max-time", str(timeout), url,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await proc.communicate()
     elapsed = round(time.time() - t0, 2)
-    if not html:
-        return {
-            "method": "plain",
-            "status": "TIMEOUT/ERROR",
-            "http_code": 0,
-            "size": 0,
-            "cf_challenge": False,
-            "elapsed": elapsed,
-        }
-    # Detect CF challenge
+    if proc.returncode != 0 or not out:
+        return {"method": "plain", "status": "TIMEOUT/ERROR", "http_code": 0,
+                "size": 0, "cf_challenge": False, "elapsed": elapsed}
+    body, _, code_str = out.rpartition(b"\n")
+    try:
+        http_code = int(code_str)
+    except ValueError:
+        http_code = 0
+    if http_code == 0:
+        return {"method": "plain", "status": "TIMEOUT/ERROR", "http_code": 0,
+                "size": 0, "cf_challenge": False, "elapsed": elapsed}
+    html = body.decode("utf-8", errors="replace")
     cf = _is_cf_challenge(html)
-    return {
-        "method": "plain",
-        "status": "OK" if not cf else "CF_BLOCKED",
-        "http_code": 200,
-        "size": len(html),
-        "cf_challenge": cf,
-        "elapsed": elapsed,
-        "preview": html[:150].replace("\n", " ").strip(),
-    }
+    status = "OK" if (http_code == 200 and not cf) else (
+        "CF_BLOCKED" if cf else f"HTTP_{http_code}"
+    )
+    reachable = 200 <= http_code < 500
+    return {"method": "plain", "status": status, "http_code": http_code,
+            "reachable": reachable, "size": len(html), "cf_challenge": cf,
+            "elapsed": elapsed}
 
 
 async def _test_flare(url, timeout=35):
