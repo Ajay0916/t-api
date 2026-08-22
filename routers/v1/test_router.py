@@ -202,6 +202,7 @@ async def test_all_sites(
     query: Optional[str] = Query("python", description="Search query"),
     limit: Optional[int] = Query(1, description="Result limit per site"),
     flare: Optional[int] = Query(0, description="Also test FlareSolverr on each"),
+    skip_search: Optional[int] = Query(0, description="Skip live search test"),
 ):
     """Test all registered sites concurrently — returns summary of each."""
     import asyncio
@@ -215,13 +216,19 @@ async def test_all_sites(
             entry["plain"] = await _test_plain(base_url, timeout=10)
         else:
             entry["plain"] = {"status": "NO_URL", "elapsed": 0}
-        tasks = [_test_search(key, query, limit)]
+        tasks = []
+        if not skip_search:
+            tasks.append(_test_search(key, query, limit))
+        else:
+            tasks.append(asyncio.sleep(0))
         if flare and base_url:
             tasks.append(_test_flare(base_url, timeout=25))
         done = await asyncio.gather(*tasks, return_exceptions=True)
-        entry["search_test"] = done[0] if not isinstance(done[0], Exception) else {"error": str(done[0])}
-        if flare and len(done) > 1:
-            entry["flaresolverr"] = done[1] if not isinstance(done[1], Exception) else {"error": str(done[1])}
+        if not skip_search:
+            entry["search_test"] = done[0] if not isinstance(done[0], Exception) else {"error": str(done[0])}
+        if flare and len(done) > (0 if skip_search else 1):
+            idx = 1 if not skip_search else 0
+            entry["flaresolverr"] = done[idx] if not isinstance(done[idx], Exception) else {"error": str(done[idx])}
         return entry
 
     tasks = [test_one(key, info) for key, info in all_sites.items()]
