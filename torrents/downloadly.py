@@ -101,8 +101,11 @@ class Downloadly:
         async with self._flare_request_lock:
             _LOGGER.info("[DL-DEBUG] trying flaresolverr for %s", url[-40:])
             html = await self._fetch_flare(url, timeout=max(timeout, 60))
-            _LOGGER.info("[DL-DEBUG] flaresolverr result len=%s", len(html) if html else 0)
+            _LOGGER.info("[DL-DEBUG] flaresolverr result len=%s wrong_post=%s",
+                         len(html) if html else 0,
+                         _is_wrong_post_response(url, html) if html else "N/A")
         if html and _is_wrong_post_response(url, html):
+            _LOGGER.info("[DL-DEBUG] wrong post detected, retrying clean session")
             # A persistent browser context can cache WordPress's homepage for
             # a post. Destroy it and try once with a clean context.
             await self._reset_flare_session()
