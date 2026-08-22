@@ -231,7 +231,11 @@ async def test_all_sites(
             entry["flaresolverr"] = done[idx] if not isinstance(done[idx], Exception) else {"error": str(done[idx])}
         return entry
 
-    tasks = [test_one(key, info) for key, info in all_sites.items()]
+    enabled_sites = {
+        k: v for k, v in all_sites.items()
+        if v.get("enabled", True) is not False
+    }
+    tasks = [test_one(key, info) for key, info in enabled_sites.items()]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     results = [
         r if not isinstance(r, Exception) else {"site": "unknown", "error": str(r)}
