@@ -52,8 +52,30 @@ async def _test_plain(url, timeout=12):
     except ValueError:
         http_code = 0
     if http_code == 0:
+        proc = await asyncio.create_subprocess_exec(
+            "curl", "-sL", "-6", "-A",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "-w", "\n%{http_code}", "--max-time", str(timeout), url,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+        elapsed = round(time.time() - t0, 2)
+        if proc.returncode == 0 and out:
+            body, _, code_str = out.rpartition(b"\n")
+            try:
+                http_code = int(code_str)
+            except ValueError:
+                http_code = 0
+            if http_code > 0:
+                html = body.decode("utf-8", errors="replace")
+                cf = _is_cf_challenge(html)
+                return {"method": "plain", "status": "OK" if not cf else "CF_BLOCKED",
+                        "http_code": http_code, "reachable": 200 <= http_code < 500,
+                        "size": len(html), "cf_challenge": cf, "elapsed": elapsed}
         return {"method": "plain", "status": "TIMEOUT/ERROR", "http_code": 0,
-                "size": 0, "cf_challenge": False, "elapsed": elapsed}
+                "reachable": False, "size": 0, "cf_challenge": False, "elapsed": elapsed}
     html = body.decode("utf-8", errors="replace")
     cf = _is_cf_challenge(html)
     status = "OK" if (http_code == 200 and not cf) else (
