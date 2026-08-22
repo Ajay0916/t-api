@@ -7,9 +7,11 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
 from curl_cffi.const import CurlOpt
 from helper.asyncioPoliciesFix import decorator_asyncio_fix
+from helper.logging_setup import get_logger
 from constants.base_url import MAGNETDL
 
 HOSTS = [MAGNETDL]
+LOGGER = get_logger("tapi.magnetdl")
 from helper.trackers import build_magnet, build_torrent_url
 from helper.plain_curl import fetch_jina, fetch_plain
 
@@ -24,16 +26,25 @@ class Magnetdl:
     async def _fetch(self, session, url):
         # curl_cffi with Chrome impersonation bypasses most anti-bot measures
         # and is the fastest path. Plain curl and jina are fallbacks.
+        LOGGER.info("[TEMP-MAGNETDL] fetch url=%s", url)
         try:
             r = await session.get(url, timeout=10)
+            LOGGER.info(
+                "[TEMP-MAGNETDL] cffi status=%s bytes=%d",
+                r.status_code,
+                len(r.text or ""),
+            )
             if r.status_code < 400 and r.text and len(r.text) > 500:
                 return r.text
-        except Exception:
-            pass
+        except Exception as exc:
+            LOGGER.info("[TEMP-MAGNETDL] cffi error=%s", type(exc).__name__)
         html = await fetch_plain(url, timeout=10)
+        LOGGER.info("[TEMP-MAGNETDL] plain bytes=%d", len(html or ""))
         if html:
             return html
-        return await fetch_jina(url, timeout=12)
+        html = await fetch_jina(url, timeout=12)
+        LOGGER.info("[TEMP-MAGNETDL] jina bytes=%d", len(html or ""))
+        return html
 
     def _parser(self, htmls):
         try:
@@ -127,7 +138,7 @@ class Magnetdl:
                 results["current_page"] = page
                 while len(results["data"]) < self.LIMIT:
                     page += 1
-                    url = self.BASE_URL + "/search/?q={}&page={}".format(
+                    url = self.BASE_URL + "/search.php?q={}&page={}".format(
                         quote(query), page
                     )
                     html = await self._fetch(session, url)
@@ -155,7 +166,7 @@ class Magnetdl:
         ) as session:
             start_time = time.time()
             self.LIMIT = limit
-            url = self.BASE_URL + "/search/?q={}&page={}".format(
+            url = self.BASE_URL + "/search.php?q={}&page={}".format(
                 quote(query), page
             )
             result = await self.parser_result(
@@ -168,7 +179,7 @@ class Magnetdl:
                     continue
                 try:
                     self.BASE_URL = host
-                    url = self.BASE_URL + "/search/?q={}&page={}".format(
+                    url = self.BASE_URL + "/search.php?q={}&page={}".format(
                         quote(query), page
                     )
                     result = await self.parser_result(
