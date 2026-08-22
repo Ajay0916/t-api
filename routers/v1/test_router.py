@@ -203,30 +203,33 @@ async def test_all_sites(
     limit: Optional[int] = Query(1, description="Result limit per site"),
     flare: Optional[int] = Query(0, description="Also test FlareSolverr on each"),
 ):
-    """Test all registered sites — returns summary of each."""
-    LOGGER.info(f"Test all: {len(all_sites)} sites, query={query}")
-    results = []
-    version_info = get_version_info()
-    for key, info in all_sites.items():
+    """Test all registered sites concurrently — returns summary of each."""
+    import asyncio
+    LOGGER.info(f"Test all: {len(all_sites)} sites (concurrent), query={query}")
+
+    async def test_one(key, info):
         obj = info["website"]()
         base_url = getattr(obj, "BASE_URL", None)
         entry = {"site": key, "name": info["website"]._name, "url": base_url}
-
-        # Plain test
         if base_url:
-            entry["plain"] = await _test_plain(base_url, timeout=8)
+            entry["plain"] = await _test_plain(base_url, timeout=10)
         else:
             entry["plain"] = {"status": "NO_URL", "elapsed": 0}
-
-        # Search test
-        search_result = await _test_search(key, query, limit)
-        entry["search_test"] = search_result
-
-        # Flare test
+        tasks = [_test_search(key, query, limit)]
         if flare and base_url:
-            entry["flaresolverr"] = await _test_flare(base_url, timeout=25)
+            tasks.append(_test_flare(base_url, timeout=25))
+        done = await asyncio.gather(*tasks, return_exceptions=True)
+        entry["search_test"] = done[0] if not isinstance(done[0], Exception) else {"error": str(done[0])}
+        if flare and len(done) > 1:
+            entry["flaresolverr"] = done[1] if not isinstance(done[1], Exception) else {"error": str(done[1])}
+        return entry
 
-        results.append(entry)
+    tasks = [test_one(key, info) for key, info in all_sites.items()]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = [
+        r if not isinstance(r, Exception) else {"site": "unknown", "error": str(r)}
+        for r in results
+    ]
 
     resp = get_version_info()
     resp.update({
